@@ -1,0 +1,16 @@
+node_modules/
+.next/
+.next-*/
+.next.cache-*/
+*.tsbuildinfo
+out/
+dist/
+target/
+.idea/
+.vscode/
+*.iml
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store

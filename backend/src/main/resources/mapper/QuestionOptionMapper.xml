@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiquestion.repository.QuestionOptionRepository">
+  <resultMap id="QuestionOptionMap" type="com.aiquestion.domain.QuestionOption">
+    <id property="id" column="id"/>
+    <result property="questionId" column="question_id"/>
+    <result property="optionKey" column="option_key"/>
+    <result property="optionText" column="option_text"/>
+    <result property="correct" column="is_correct"/>
+    <result property="sortNo" column="sort_no"/>
+  </resultMap>
+  <select id="findByQuestionId" resultMap="QuestionOptionMap">SELECT id,question_id,option_key,option_text,is_correct,sort_no FROM question_option WHERE question_id=#{questionId} ORDER BY sort_no ASC,id ASC</select>
+  <insert id="insert" useGeneratedKeys="true" keyProperty="id">INSERT INTO question_option(question_id,option_key,option_text,is_correct,sort_no) VALUES(#{questionId},#{optionKey},#{optionText},#{correct},#{sortNo})</insert>
+  <delete id="deleteByQuestionId">DELETE FROM question_option WHERE question_id=#{questionId}</delete>
+</mapper>

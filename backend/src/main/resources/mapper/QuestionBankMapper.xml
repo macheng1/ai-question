@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiquestion.repository.QuestionBankRepository">
+  <sql id="pageWhere">
+    <if test="keyword != null and keyword != ''">WHERE (name LIKE CONCAT('%', #{keyword}, '%') OR category LIKE CONCAT('%', #{keyword}, '%'))</if>
+  </sql>
+  <select id="findPage" parameterType="com.aiquestion.common.PageQuery" resultType="com.aiquestion.domain.QuestionBank">
+    SELECT id, name, question_count, category, source, published FROM question_bank
+    <include refid="pageWhere"/> ORDER BY created_at DESC, id DESC LIMIT #{pageSize} OFFSET #{offset}
+  </select>
+  <select id="count" parameterType="com.aiquestion.common.PageQuery" resultType="long">
+    SELECT COUNT(*) FROM question_bank <include refid="pageWhere"/>
+  </select>
+  <select id="findOwnedPage" resultType="com.aiquestion.domain.QuestionBank">
+    SELECT id, name, question_count, category, source, published, created_by FROM question_bank
+    WHERE created_by = #{userId}
+    <if test="query.keyword != null and query.keyword != ''">AND (name LIKE CONCAT('%', #{query.keyword}, '%') OR category LIKE CONCAT('%', #{query.keyword}, '%'))</if>
+    ORDER BY created_at DESC, id DESC LIMIT #{query.pageSize} OFFSET #{query.offset}
+  </select>
+  <select id="countOwned" resultType="long">
+    SELECT COUNT(*) FROM question_bank WHERE created_by = #{userId}
+    <if test="query.keyword != null and query.keyword != ''">AND (name LIKE CONCAT('%', #{query.keyword}, '%') OR category LIKE CONCAT('%', #{query.keyword}, '%'))</if>
+  </select>
+  <select id="findPublished" parameterType="com.aiquestion.common.PageQuery" resultType="com.aiquestion.domain.QuestionBank">
+    SELECT id, name, question_count, category, source, published
+    FROM question_bank
+    WHERE published = TRUE
+    <if test="keyword != null and keyword != ''">AND (name LIKE CONCAT('%', #{keyword}, '%') OR category LIKE CONCAT('%', #{keyword}, '%'))</if>
+    ORDER BY created_at DESC, id DESC
+    LIMIT #{pageSize} OFFSET #{offset}
+  </select>
+  <select id="countPublished" parameterType="com.aiquestion.common.PageQuery" resultType="long">
+    SELECT COUNT(*) FROM question_bank WHERE published = TRUE
+    <if test="keyword != null and keyword != ''">AND (name LIKE CONCAT('%', #{keyword}, '%') OR category LIKE CONCAT('%', #{keyword}, '%'))</if>
+  </select>
+  <select id="findById" parameterType="long" resultType="com.aiquestion.domain.QuestionBank">
+    SELECT id, name, question_count, category, source, published
+    FROM question_bank
+    WHERE id = #{id}
+  </select>
+  <select id="findOwnedById" resultType="com.aiquestion.domain.QuestionBank">
+    SELECT id, name, question_count, category, source, published, created_by FROM question_bank
+    WHERE id = #{id} AND created_by = #{userId}
+  </select>
+  <select id="findPublishedById" parameterType="long" resultType="com.aiquestion.domain.QuestionBank">
+    SELECT id, name, question_count, category, source, published
+    FROM question_bank
+    WHERE id = #{id} AND published = TRUE
+  </select>
+  <insert id="insert" parameterType="com.aiquestion.domain.QuestionBank" useGeneratedKeys="true" keyProperty="id">
+    INSERT INTO question_bank(name, question_count, category, source, published, created_by, created_at, updated_at)
+    VALUES(#{name}, 0, #{category}, #{source}, #{published}, #{createdBy}, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))
+  </insert>
+  <update id="updateOwned">
+    UPDATE question_bank SET name=#{bank.name}, category=#{bank.category}, source=#{bank.source}, published=#{bank.published}, updated_at=CURRENT_TIMESTAMP(3)
+    WHERE id=#{bank.id} AND created_by=#{userId}
+  </update>
+  <update id="incrementQuestionCount">UPDATE question_bank SET question_count = question_count + 1, updated_at = CURRENT_TIMESTAMP(3) WHERE id = #{id}</update>
+  <update id="decrementQuestionCount">UPDATE question_bank SET question_count = GREATEST(question_count - 1, 0), updated_at = CURRENT_TIMESTAMP(3) WHERE id = #{id}</update>
+  <delete id="deleteOwned">DELETE FROM question_bank WHERE id=#{id} AND created_by=#{userId}</delete>
+</mapper>

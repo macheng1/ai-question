@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiquestion.repository.QuestionBankCategoryRepository">
+  <select id="findAll" resultType="com.aiquestion.domain.QuestionBankCategory">
+    SELECT id,name,parent_id,description,sort_no FROM question_bank_category ORDER BY sort_no ASC,id ASC
+  </select>
+  <select id="findOwned" resultType="com.aiquestion.domain.QuestionBankCategory">
+    SELECT id,name,parent_id,description,sort_no,created_by FROM question_bank_category WHERE created_by=#{userId} ORDER BY sort_no ASC,id ASC
+  </select>
+  <select id="findPublicRoots" resultType="com.aiquestion.domain.QuestionBankCategory">
+    SELECT DISTINCT c.id,c.name,c.parent_id,c.description,c.sort_no
+    FROM question_bank_category c
+    INNER JOIN question_bank b ON b.category = c.name AND b.published = TRUE
+    WHERE c.parent_id IS NULL
+    ORDER BY c.sort_no ASC,c.id ASC
+  </select>
+  <select id="findById" parameterType="long" resultType="com.aiquestion.domain.QuestionBankCategory">
+    SELECT id,name,parent_id,description,sort_no FROM question_bank_category WHERE id=#{id}
+  </select>
+  <select id="findOwnedById" resultType="com.aiquestion.domain.QuestionBankCategory">
+    SELECT id,name,parent_id,description,sort_no,created_by FROM question_bank_category WHERE id=#{id} AND created_by=#{userId}
+  </select>
+  <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+    INSERT INTO question_bank_category(name,parent_id,description,sort_no,created_by,created_at,updated_at) VALUES(#{name},#{parentId},#{description},#{sortNo},#{createdBy},CURRENT_TIMESTAMP(3),CURRENT_TIMESTAMP(3))
+  </insert>
+  <update id="update">UPDATE question_bank_category SET name=#{name},parent_id=#{parentId},description=#{description},sort_no=#{sortNo},updated_at=CURRENT_TIMESTAMP(3) WHERE id=#{id} AND created_by=#{createdBy}</update>
+  <delete id="deleteById">DELETE FROM question_bank_category WHERE id=#{id} AND created_by=#{createdBy}</delete>
+</mapper>

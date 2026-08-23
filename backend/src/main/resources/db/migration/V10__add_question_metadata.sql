@@ -1,0 +1,3 @@
+ALTER TABLE question_item
+  ADD COLUMN tags VARCHAR(500) NULL AFTER analysis,
+  ADD COLUMN source VARCHAR(255) NULL AFTER tags;

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiquestion.repository.TestPaperQuestionRepository">
+  <select id="findQuestions" resultType="com.aiquestion.domain.QuestionItem">SELECT q.id,q.bank_id,q.question_type,q.stem,q.answer_text,q.analysis,q.tags,q.source,q.difficulty,pq.score,q.sort_no,q.status FROM test_paper_question pq JOIN question_item q ON q.id=pq.question_id WHERE pq.paper_id=#{paperId} ORDER BY pq.sort_no ASC,pq.id ASC</select>
+  <select id="count" resultType="int">SELECT COUNT(*) FROM test_paper_question WHERE paper_id=#{paperId}</select>
+  <select id="sumScore" resultType="java.math.BigDecimal">SELECT COALESCE(SUM(score),0) FROM test_paper_question WHERE paper_id=#{paperId}</select>
+  <insert id="insert">INSERT INTO test_paper_question(paper_id,question_id,score,sort_no) VALUES(#{paperId},#{questionId},#{score},#{sortNo})</insert>
+  <delete id="delete">DELETE FROM test_paper_question WHERE paper_id=#{paperId} AND question_id=#{questionId}</delete>
+  <update id="updateScore">UPDATE test_paper_question SET score=#{score} WHERE paper_id=#{paperId} AND question_id=#{questionId}</update>
+</mapper>

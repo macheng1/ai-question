@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiquestion.repository.QuestionItemRepository">
+  <sql id="whereClause"><where><if test="bankId != null">bank_id=#{bankId}</if><if test="query.keyword != null and query.keyword != ''">AND stem LIKE CONCAT('%',#{query.keyword},'%')</if></where></sql>
+  <select id="findPage" resultType="com.aiquestion.domain.QuestionItem">SELECT id,bank_id,question_type,stem,answer_text,analysis,tags,source,difficulty,score,sort_no,status FROM question_item <include refid="whereClause"/> ORDER BY id DESC LIMIT #{query.pageSize} OFFSET #{query.offset}</select>
+  <select id="count" resultType="long">SELECT COUNT(*) FROM question_item <include refid="whereClause"/></select>
+  <select id="findPublishedPage" resultType="com.aiquestion.domain.QuestionItem">
+    SELECT q.id,q.bank_id,q.question_type,q.stem,q.answer_text,q.analysis,q.tags,q.source,q.difficulty,q.score,q.sort_no,q.status
+    FROM question_item q JOIN question_bank b ON b.id=q.bank_id
+    <where>
+      q.bank_id=#{bankId} AND b.published=TRUE AND q.status='ENABLED'
+      <if test="query.keyword != null and query.keyword != ''">AND q.stem LIKE CONCAT('%',#{query.keyword},'%')</if>
+    </where>
+    ORDER BY q.sort_no ASC,q.id ASC LIMIT #{query.pageSize} OFFSET #{query.offset}
+  </select>
+  <select id="countPublished" resultType="long">
+    SELECT COUNT(*) FROM question_item q JOIN question_bank b ON b.id=q.bank_id
+    <where>
+      q.bank_id=#{bankId} AND b.published=TRUE AND q.status='ENABLED'
+      <if test="query.keyword != null and query.keyword != ''">AND q.stem LIKE CONCAT('%',#{query.keyword},'%')</if>
+    </where>
+  </select>
+  <select id="findById" parameterType="long" resultType="com.aiquestion.domain.QuestionItem">SELECT id,bank_id,question_type,stem,answer_text,analysis,tags,source,difficulty,score,sort_no,status FROM question_item WHERE id=#{id}</select>
+  <insert id="insert" useGeneratedKeys="true" keyProperty="id">INSERT INTO question_item(bank_id,question_type,stem,answer_text,analysis,tags,source,difficulty,score,status,created_at,updated_at) VALUES(#{bankId},#{questionType},#{stem},#{answerText},#{analysis},#{tags},#{source},#{difficulty},#{score},#{status},CURRENT_TIMESTAMP(3),CURRENT_TIMESTAMP(3))</insert>
+  <update id="update">UPDATE question_item SET question_type=#{questionType},stem=#{stem},answer_text=#{answerText},analysis=#{analysis},tags=#{tags},source=#{source},difficulty=#{difficulty},score=#{score},updated_at=CURRENT_TIMESTAMP(3) WHERE id=#{id}</update>
+  <delete id="deleteById">DELETE FROM question_item WHERE id=#{id}</delete>
+  <select id="countByBankIdAndStem" resultType="long">SELECT COUNT(*) FROM question_item WHERE bank_id=#{bankId} AND stem=#{stem}</select>
+</mapper>

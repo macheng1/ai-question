@@ -1,0 +1,239 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import "@douyinfe/semi-ui/react19-adapter";
+import {
+  Button,
+  Input as SemiInput,
+  Modal,
+  Select,
+  TextArea as SemiTextArea,
+  Toast,
+} from "@douyinfe/semi-ui";
+import { PageShell } from "@/components/layout/PageShell";
+import { ProfileSidebar } from "@/components/layout/ProfileSidebar";
+import {
+  createBankCategory,
+  deleteBankCategory,
+  getBankCategories,
+  updateBankCategory,
+  type Category,
+} from "@/features/banks/management-api";
+
+const Input = Object.assign(SemiInput, { TextArea: SemiTextArea });
+
+type FormState = {
+  name: string;
+  parentId: number | null;
+  description: string;
+  sortNo: string;
+};
+const emptyForm: FormState = {
+  name: "",
+  parentId: null,
+  description: "",
+  sortNo: "0",
+};
+
+export default function CategoriesPage() {
+  const [categories, setCategories] = useState<Category[]>([]),
+    [form, setForm] = useState<FormState>(emptyForm),
+    [editingId, setEditingId] = useState<number | null>(null),
+    [open, setOpen] = useState(false),
+    [loading, setLoading] = useState(false);
+  const load = () =>
+    getBankCategories()
+      .then(setCategories)
+      .catch((e) =>
+        Toast.error(e instanceof Error ? e.message : "分类加载失败"),
+      );
+  useEffect(() => {
+    load();
+  }, []);
+  const roots = useMemo(
+    () => categories.filter((item) => !item.parentId),
+    [categories],
+  );
+  const childrenOf = (id: number) =>
+    categories.filter((item) => item.parentId === id);
+  const openCreate = (parentId: number | null = null) => {
+    setEditingId(null);
+    setForm({ ...emptyForm, parentId });
+    setOpen(true);
+  };
+  const openEdit = (item: Category) => {
+    setEditingId(item.id);
+    setForm({
+      name: item.name,
+      parentId: item.parentId ?? null,
+      description: item.description || "",
+      sortNo: String(item.sortNo ?? 0),
+    });
+    setOpen(true);
+  };
+  const close = () => {
+    setOpen(false);
+    setEditingId(null);
+    setForm(emptyForm);
+  };
+  const save = async () => {
+    if (!form.name.trim()) {
+      Toast.error("请输入分类名称");
+      return;
+    }
+    setLoading(true);
+    try {
+      const payload = {
+        name: form.name.trim(),
+        parentId: form.parentId,
+        description: form.description.trim(),
+        sortNo: Number(form.sortNo) || 0,
+      };
+      if (editingId) await updateBankCategory(editingId, payload);
+      else await createBankCategory(payload);
+      Toast.success(
+        editingId
+          ? "分类修改成功"
+          : form.parentId
+            ? "子分类创建成功"
+            : "分类创建成功",
+      );
+      close();
+      load();
+    } catch (e) {
+      Toast.error(e instanceof Error ? e.message : "保存失败");
+    } finally {
+      setLoading(false);
+    }
+  };
+  const remove = (id: number) => {
+    Modal.confirm({
+      title: "删除分类",
+      content: "删除分类会同时删除子分类，确定继续吗？",
+      onOk: async () => {
+        try {
+          await deleteBankCategory(id);
+          Toast.success("分类已删除");
+          load();
+        } catch (e) {
+          Toast.error(e instanceof Error ? e.message : "删除失败");
+        }
+      },
+    });
+  };
+  const row = (item: Category, child = false) => (
+    <div
+      key={item.id}
+      className="grid grid-cols-[1.2fr_1fr_80px_220px] gap-3 border-t border-slate-100 px-5 py-4 text-sm text-slate-600"
+    >
+      <span className={child ? "pl-6" : "font-medium"}>
+        {child ? "└ " : ""}
+        {item.name}
+      </span>
+      <span>{item.description || "-"}</span>
+      <span>{item.sortNo ?? 0}</span>
+      <span className="flex flex-wrap gap-3">
+        <button onClick={() => openCreate(item.id)} className="text-blue-500">
+          添加子分类
+        </button>
+        <button onClick={() => openEdit(item)} className="text-slate-500">
+          编辑
+        </button>
+        <button onClick={() => remove(item.id)} className="text-red-500">
+          删除
+        </button>
+      </span>
+    </div>
+  );
+  return (
+    <PageShell>
+      <main className="mx-auto flex min-h-[720px] w-[92%] max-w-[1160px] flex-col gap-6 py-10 sm:py-14 md:flex-row">
+        <ProfileSidebar />
+        <section className="min-w-0 flex-1">
+          <Link
+            href="/profile/banks"
+            className="text-sm font-semibold text-blue-600 no-underline"
+          >
+            ← 返回题库管理
+          </Link>
+          <div className="mt-5 flex items-center justify-between gap-3">
+            <h1 className="text-2xl font-bold text-slate-800">
+              题库管理 - 分类管理
+            </h1>
+            <Button theme="solid" type="warning" onClick={() => openCreate()}>
+              + 新建根分类
+            </Button>
+          </div>
+          <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            <div className="grid grid-cols-[1.2fr_1fr_80px_220px] gap-3 bg-slate-50 px-5 py-4 text-xs text-slate-500">
+              <span>分类名称</span>
+              <span>描述</span>
+              <span>排序</span>
+              <span>操作</span>
+            </div>
+            {roots.flatMap((root) => [
+              row(root),
+              ...childrenOf(root.id).map((child) => row(child, true)),
+            ])}
+            {!categories.length && (
+              <div className="py-12 text-center text-sm text-slate-400">
+                暂无数据
+              </div>
+            )}
+          </div>
+        </section>
+      </main>
+      <Modal
+        title={
+          editingId ? "编辑分类" : form.parentId ? "新建子分类" : "新建根分类"
+        }
+        visible={open}
+        onCancel={close}
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button className="modal-cancel-button" onClick={close}>取消</Button>
+            <Button
+              theme="solid"
+              type="warning"
+              loading={loading}
+              onClick={save}
+            >
+              保存
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4 py-2">
+          <Input
+            value={form.name}
+            onChange={(value) => setForm({ ...form, name: value })}
+            placeholder="分类名称"
+          />
+          <Select
+            value={form.parentId ?? undefined}
+            onChange={(value) =>
+              setForm({ ...form, parentId: value ? Number(value) : null })
+            }
+            placeholder="- 作为根分类 -"
+            optionList={roots
+              .filter((item) => item.id !== editingId)
+              .map((item) => ({ label: item.name, value: item.id }))}
+            className="w-full"
+          />
+          <Input.TextArea
+            value={form.description}
+            onChange={(value) => setForm({ ...form, description: value })}
+            placeholder="描述（可选）"
+          />
+          <Input
+            type="number"
+            value={form.sortNo}
+            onChange={(value) => setForm({ ...form, sortNo: value })}
+            placeholder="排序"
+          />
+        </div>
+      </Modal>
+    </PageShell>
+  );
+}

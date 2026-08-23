@@ -1,0 +1,6 @@
+ALTER TABLE app_user
+  ADD COLUMN unit_name VARCHAR(160) NULL AFTER name,
+  ADD COLUMN province VARCHAR(80) NULL AFTER unit_name,
+  ADD COLUMN city VARCHAR(80) NULL AFTER province,
+  ADD COLUMN district VARCHAR(80) NULL AFTER city,
+  ADD COLUMN address VARCHAR(255) NULL AFTER district;
