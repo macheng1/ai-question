@@ -1,32 +1,132 @@
-# 后端说明
+# 智企云考后端
 
-Spring Boot 3 + Java 17 + MyBatis + MySQL + Redis + Swagger/OpenAPI + Flyway。数据库和缓存通过 Docker Compose 启动。
+后端为智企云考提供企业账号、题库、组卷、考试、答题、成绩统计、公告资讯和文件上传等 API 能力。
+
+## 技术栈
+
+- Java 17
+- Spring Boot 3
+- Spring Security + JWT
+- MyBatis
+- MySQL
+- Redis
+- Flyway
+- Swagger/OpenAPI
+
+## 目录说明
+
+```text
+backend/
+├── src/main/java/com/aiquestion/
+│   ├── controller/       # HTTP 接口
+│   ├── service/          # 业务逻辑
+│   ├── repository/       # 数据访问
+│   ├── domain/           # 领域实体
+│   ├── config/            # Spring 与基础设施配置
+│   ├── security/          # JWT 与认证相关代码
+│   ├── integration/       # 阿里云短信、OSS 等外部服务
+│   └── upload/            # 文件上传接口与服务
+├── src/main/resources/
+│   ├── db/migration/      # Flyway 数据库迁移
+│   └── mapper/            # MyBatis XML
+├── scripts/               # 本地启动和停止脚本
+├── docker-compose.yml
+└── .env.example
+```
+
+## 配置
 
 ```bash
-cd backend
 cp .env.example .env
+```
+
+主要配置项：
+
+- `DB_*`：MySQL 连接信息
+- `REDIS_*`：Redis 连接信息
+- `SERVER_PORT`：后端服务端口，开发环境默认 `18080`
+- `JWT_*`：访问令牌和刷新令牌配置
+- `ALIYUN_SMS_*`：短信验证码服务配置
+- `ALIYUN_OSS_*`：文件对象存储配置
+- `UPLOAD_*`：上传大小和数量限制
+
+真实配置只放在 `.env` 或部署平台的环境变量中，禁止提交到 Git。
+
+## 启动依赖服务
+
+```bash
 ./scripts/start-infra.sh
+```
+
+该脚本启动 Docker Compose 中的 MySQL 和 Redis。
+
+## 启动后端
+
+```bash
 ./scripts/run-local.sh
 ```
 
-接口前缀：`http://localhost:18080/api`
+也可以直接运行：
 
-迁移脚本位于 `src/main/resources/db/migration`，建表和初始化数据都必须通过新增 `V3__...sql` 处理，不要直接修改已经执行过的迁移文件。
+```bash
+mvn spring-boot:run
+```
 
-Swagger 地址：`http://localhost:18080/api/swagger-ui.html`
-OpenAPI JSON：`http://localhost:18080/api/v3/api-docs`
+API 根地址：<http://localhost:18080/api>
 
-停止基础设施：`./scripts/stop-infra.sh`
-
-一键构建并启动 MySQL、Redis、Spring Boot 和 Next.js：
+## Docker 启动
 
 ```bash
 docker compose up -d --build
 ```
 
-前端：`http://localhost:3000`
-后端：`http://localhost:18080/api`
+停止基础设施：
 
-JWT、阿里云短信和 OSS 均只从环境变量读取，真实密钥不要写入 Git。短信还需要补充 `ALIYUN_SMS_SIGN_NAME` 和 `ALIYUN_SMS_TEMPLATE_CODE`。
+```bash
+./scripts/stop-infra.sh
+```
 
-通用上传接口：`POST /api/common/upload`，multipart 字段名为 `files`。支持动态参数：`scene`、`maxSizeMb`、`maxCount`、`allowedExtensions`。例如单文件图片上传可传 `maxCount=1&maxSizeMb=5&allowedExtensions=jpg,png`；多文件资料上传可传 `maxCount=10&maxSizeMb=20&allowedExtensions=pdf,doc,docx`。
+## API 文档
+
+- Swagger UI：<http://localhost:18080/api/swagger-ui.html>
+- OpenAPI JSON：<http://localhost:18080/api/v3/api-docs>
+
+## 文件上传
+
+通用上传接口：
+
+```text
+POST /api/common/upload
+Content-Type: multipart/form-data
+```
+
+文件字段名为 `files`，支持以下动态参数：
+
+- `scene`
+- `maxSizeMb`
+- `maxCount`
+- `allowedExtensions`
+
+示例：
+
+```text
+/api/common/upload?maxCount=1&maxSizeMb=5&allowedExtensions=jpg,png
+/api/common/upload?maxCount=10&maxSizeMb=20&allowedExtensions=pdf,doc,docx
+```
+
+## 数据库迁移
+
+迁移文件位于 `src/main/resources/db/migration`。新增表、字段、索引或初始化数据时，必须新增版本文件，例如：
+
+```text
+V22__add_xxx.sql
+```
+
+不要修改已经执行过的迁移文件，否则会导致不同环境的 Flyway 校验失败。
+
+## 开发检查
+
+```bash
+mvn test
+mvn package
+```
