@@ -16,6 +16,11 @@ import java.util.*;
 @Tag(name = "公开考试", description = "考试详情、开始答题、逐题保存和交卷")
 @RestController
 @RequestMapping("/public/exams")
+/**
+ * 后端业务组件。
+ *
+ * @author aiquestion
+ */
 public class PublicExamController {
     private final JdbcTemplate jdbc;
     public PublicExamController(JdbcTemplate jdbc) { this.jdbc = jdbc; }
@@ -71,7 +76,7 @@ public class PublicExamController {
                     id, participantId);
             long latestAttemptId = ((Number) latest.get("id")).longValue();
             List<Map<String, Object>> answers = jdbc.queryForList("SELECT question_id,answer_text FROM assessment_answer WHERE attempt_id=?", latestAttemptId);
-            Map<String, Object> result = new HashMap<>();
+            Map<String, Object> result = new HashMap<>(16);
             result.put("status", "SUBMITTED");
             result.put("attemptId", latestAttemptId);
             result.put("startedAt", latest.get("started_at"));
@@ -99,7 +104,7 @@ public class PublicExamController {
             jdbc.update("UPDATE assessment_participant SET attempt_count=?,status='IN_PROGRESS',updated_at=CURRENT_TIMESTAMP(3) WHERE id=?", attemptCount, participantId);
         } else { attemptId = ((Number) active.get(0).get("id")).longValue(); startedAt = active.get(0).get("started_at"); snapshotQuestions(attemptId, id, String.valueOf(task.get("paperMode"))); }
         List<Map<String, Object>> answers = jdbc.queryForList("SELECT question_id,answer_text FROM assessment_answer WHERE attempt_id=?", attemptId);
-        Map<String, Object> result = new HashMap<>();
+        Map<String, Object> result = new HashMap<>(16);
         result.put("status", "IN_PROGRESS");
         result.put("attemptId", attemptId);
         result.put("startedAt", startedAt);
@@ -134,7 +139,7 @@ public class PublicExamController {
                     "SELECT id FROM assessment_attempt WHERE task_id=? AND participant_id=? AND status='IN_PROGRESS' LIMIT 1",
                     id, participantId).isEmpty();
         }
-        Map<String, Object> result = new HashMap<>();
+        Map<String, Object> result = new HashMap<>(16);
         result.put("allowRetake", allowRetake(task));
         result.put("maxAttempts", configuredMaxAttempts);
         result.put("attemptCount", attemptCount);
@@ -157,7 +162,7 @@ public class PublicExamController {
                         "WHERE aa.task_id=? AND ap.candidate_name=? AND ap.phone=? " +
                         "AND aa.status='IN_PROGRESS' ORDER BY aa.id DESC LIMIT 1",
                 id, name.trim(), phone.trim());
-        if (active.isEmpty()) return ApiResponse.ok(Map.of("inProgress", false));
+        if (active.isEmpty()) { return ApiResponse.ok(Map.of("inProgress", false)); }
         long attemptId = ((Number) active.get(0).get("attempt_id")).longValue();
         List<Map<String, Object>> answers = jdbc.queryForList(
                 "SELECT question_id,answer_text FROM assessment_answer WHERE attempt_id=?",
@@ -197,7 +202,7 @@ public class PublicExamController {
         jdbc.update("UPDATE assessment_attempt SET status='SUBMITTED',score=?,passed=?,submitted_at=CURRENT_TIMESTAMP(3),updated_at=CURRENT_TIMESTAMP(3) WHERE id=?", score, passed, attemptId);
         int attemptNo = ((Number) attempt.get("attempt_no")).intValue();
         int configuredMaxAttempts = maxAttempts(attempt);
-        Map<String, Object> result = new HashMap<>();
+        Map<String, Object> result = new HashMap<>(16);
         result.put("score", score);
         result.put("totalScore", total);
         result.put("passScore", pass);
@@ -263,29 +268,29 @@ public class PublicExamController {
         }
     }
     private int snapshotType(Long attemptId, Long bankId, String type, int count, BigDecimal score, int sortNo, Set<Long> selected) {
-        if (count <= 0) return sortNo;
+        if (count <= 0) { return sortNo; }
         List<Long> ids = jdbc.query("SELECT id FROM question_item WHERE bank_id=? AND question_type=? AND status='ENABLED'", (rs, rowNum) -> rs.getLong("id"), bankId, type);
         Collections.shuffle(ids);
         int inserted = 0;
         for (Long questionId : ids) {
-            if (selected.contains(questionId)) continue;
+            if (selected.contains(questionId)) { continue; }
             jdbc.update("INSERT INTO assessment_attempt_question(attempt_id,question_id,score,sort_no) VALUES(?,?,?,?)", attemptId, questionId, score, sortNo++);
             selected.add(questionId);
-            if (++inserted >= count) break;
+            if (++inserted >= count) { break; }
         }
-        if (inserted < count) throw new BusinessException(ErrorCode.BAD_REQUEST, "随机组卷可用题目不足，请重新配置题库");
+        if (inserted < count) { throw new BusinessException(ErrorCode.BAD_REQUEST, "随机组卷可用题目不足，请重新配置题库"); }
         return sortNo;
     }
     private static int number(Object value) { return value instanceof Number n ? n.intValue() : Integer.parseInt(String.valueOf(value)); }
     private static BigDecimal decimal(Object value) { return value instanceof BigDecimal b ? b : new BigDecimal(String.valueOf(value)); }
     private void ensureTaskOpen(Map<String, Object> task) {
         String status = String.valueOf(task.getOrDefault("taskStatus", "PUBLISHED"));
-        if ("ENDED".equals(status) || "DISABLED".equals(status)) throw new BusinessException(ErrorCode.BAD_REQUEST, "考试已结束，不能继续答题");
+        if ("ENDED".equals(status) || "DISABLED".equals(status)) { throw new BusinessException(ErrorCode.BAD_REQUEST, "考试已结束，不能继续答题"); }
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime startAt = toLocalDateTime(task.get("startAt"));
         LocalDateTime endAt = toLocalDateTime(task.get("endAt"));
-        if (startAt != null && now.isBefore(startAt)) throw new BusinessException(ErrorCode.BAD_REQUEST, "考试尚未开始");
-        if (endAt != null && !now.isBefore(endAt)) throw new BusinessException(ErrorCode.BAD_REQUEST, "考试已结束，不能继续答题");
+        if (startAt != null && now.isBefore(startAt)) { throw new BusinessException(ErrorCode.BAD_REQUEST, "考试尚未开始"); }
+        if (endAt != null && !now.isBefore(endAt)) { throw new BusinessException(ErrorCode.BAD_REQUEST, "考试已结束，不能继续答题"); }
     }
     private Map<String, Object> ensureAttemptOpen(Long attemptId) {
         Map<String, Object> attempt;
@@ -294,13 +299,13 @@ public class PublicExamController {
         } catch (org.springframework.dao.EmptyResultDataAccessException exception) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "答题记录不存在");
         }
-        if (!"IN_PROGRESS".equals(String.valueOf(attempt.get("status")))) throw new BusinessException(ErrorCode.BAD_REQUEST, "该答题记录已结束，不能继续答题");
+        if (!"IN_PROGRESS".equals(String.valueOf(attempt.get("status")))) { throw new BusinessException(ErrorCode.BAD_REQUEST, "该答题记录已结束，不能继续答题"); }
         ensureTaskOpen(attempt);
         return attempt;
     }
     private static LocalDateTime toLocalDateTime(Object value) {
-        if (value instanceof LocalDateTime dateTime) return dateTime;
-        if (value instanceof java.sql.Timestamp timestamp) return timestamp.toLocalDateTime();
+        if (value instanceof LocalDateTime dateTime) { return dateTime; }
+        if (value instanceof java.sql.Timestamp timestamp) { return timestamp.toLocalDateTime(); }
         return value == null ? null : LocalDateTime.parse(String.valueOf(value).replace(" ", "T"));
     }
     private static int maxAttempts(Map<String, Object> task) {

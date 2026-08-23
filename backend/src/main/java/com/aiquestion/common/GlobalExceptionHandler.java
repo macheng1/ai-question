@@ -7,20 +7,33 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.*;
 
 @RestControllerAdvice
+/**
+ * 后端业务组件。
+ *
+ * @author aiquestion
+ */
 public class GlobalExceptionHandler {
-    @ExceptionHandler(BusinessException.class)
-    public ResponseEntity<ApiResponse<Void>> business(BusinessException ex) {
-        return ResponseEntity.status(ex.getErrorCode().getStatus()).body(ApiResponse.fail(ex.getErrorCode(), ex.getMessage()));
-    }
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ApiResponse<Void> invalid(MethodArgumentNotValidException ex) { return ApiResponse.fail(ErrorCode.VALIDATION_ERROR, "请求参数不完整或格式错误"); }
+  @ExceptionHandler(BusinessException.class)
+  public ResponseEntity<ApiResponse<Void>> business(BusinessException ex) {
+    return ResponseEntity.status(ex.getErrorCode().getStatus())
+        .body(ApiResponse.fail(ex.getErrorCode(), ex.getMessage()));
+  }
 
-    @ExceptionHandler(BindException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ApiResponse<Void> bindInvalid(BindException ex) { return ApiResponse.fail(ErrorCode.VALIDATION_ERROR); }
+  @ExceptionHandler(MethodArgumentNotValidException.class)
+  @ResponseStatus(HttpStatus.BAD_REQUEST)
+  public ApiResponse<Void> invalid(MethodArgumentNotValidException ex) {
+    return ApiResponse.fail(ErrorCode.VALIDATION_ERROR, "请求参数不完整或格式错误");
+  }
 
-    @ExceptionHandler(Exception.class)
-    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-    public ApiResponse<Void> system(Exception ex) { return ApiResponse.fail(ErrorCode.SYSTEM_ERROR); }
+  @ExceptionHandler(BindException.class)
+  @ResponseStatus(HttpStatus.BAD_REQUEST)
+  public ApiResponse<Void> bindInvalid(BindException ex) {
+    return ApiResponse.fail(ErrorCode.VALIDATION_ERROR);
+  }
+
+  @ExceptionHandler(Exception.class)
+  @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+  public ApiResponse<Void> system(Exception ex) {
+    return ApiResponse.fail(ErrorCode.SYSTEM_ERROR);
+  }
 }

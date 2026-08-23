@@ -13,6 +13,11 @@ import java.util.Date;
 
 /** JWT 生成和解析统一封装，Controller 不直接操作 JJWT。 */
 @Service
+/**
+ * 后端业务组件。
+ *
+ * @author aiquestion
+ */
 public class JwtTokenService {
     private final JwtProperties properties;
     public JwtTokenService(JwtProperties properties){this.properties=properties;validateSecret(properties.secret());validateSecret(properties.refreshSecret());}

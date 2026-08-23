@@ -20,6 +20,11 @@ import java.util.Map;
 @Tag(name = "个人记录")
 @RestController
 @RequestMapping("/profile")
+/**
+ * 后端业务组件。
+ *
+ * @author aiquestion
+ */
 public class ProfileRecordController {
     private final JdbcTemplate jdbcTemplate;
     private final JwtTokenService tokenService;
@@ -89,7 +94,7 @@ public class ProfileRecordController {
     }
 
     private List<Map<String, Object>> options(Object questionId) {
-        if (questionId == null) return List.of();
+        if (questionId == null) { return List.of(); }
         return jdbcTemplate.queryForList(
                 "SELECT option_key AS `key`, option_text AS text FROM question_option WHERE question_id = ? ORDER BY sort_no, id",
                 questionId);
@@ -103,7 +108,7 @@ public class ProfileRecordController {
             Long userId = Long.valueOf(tokenService.subject(authorization.substring(7), false));
             List<String> phones = jdbcTemplate.query(
                     "SELECT phone FROM app_user WHERE id = ?", (rs, rowNum) -> rs.getString(1), userId);
-            if (phones.isEmpty()) throw new BusinessException(ErrorCode.UNAUTHORIZED);
+            if (phones.isEmpty()) { throw new BusinessException(ErrorCode.UNAUTHORIZED); }
             return new Identity(userId, phones.get(0));
         } catch (BusinessException ex) {
             throw ex;

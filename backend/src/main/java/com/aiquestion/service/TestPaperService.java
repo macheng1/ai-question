@@ -15,6 +15,11 @@ import java.util.Map;
 import java.util.List;
 
 @Service
+/**
+ * 后端业务组件。
+ *
+ * @author aiquestion
+ */
 public class TestPaperService {
     private final TestPaperRepository repository; private final TestPaperQuestionRepository questionRepository; private final QuestionItemRepository itemRepository; private final QuestionOptionRepository optionRepository; private final JdbcTemplate jdbc;
     public TestPaperService(TestPaperRepository repository, TestPaperQuestionRepository questionRepository, QuestionItemRepository itemRepository, QuestionOptionRepository optionRepository, JdbcTemplate jdbc){this.repository=repository;this.questionRepository=questionRepository;this.itemRepository=itemRepository;this.optionRepository=optionRepository;this.jdbc=jdbc;}
@@ -24,7 +29,7 @@ public class TestPaperService {
     public TestPaper update(Long id,String name,String description,String mode,BigDecimal total,BigDecimal pass,Integer duration){var p=get(id);ensureEditable(p);if("PUBLISHED".equals(p.getStatus()))throw new BusinessException(ErrorCode.BAD_REQUEST,"已发布试卷不能直接修改");p.setName(name);p.setDescription(description);p.setMode(mode);p.setTotalScore(total);p.setPassScore(pass);p.setDurationMinutes(duration);repository.update(p);return get(id);}
     public TestPaper changeStatus(Long id,String status){get(id);if(!status.equals("DRAFT")&&!status.equals("PUBLISHED")&&!status.equals("DISABLED"))throw new BusinessException(ErrorCode.BAD_REQUEST,"试卷状态不合法");if("PUBLISHED".equals(status))ensureScoreMatched(id);repository.updateStatus(id,status);return get(id);}
     public void delete(Long id){if(repository.deleteById(id)==0)throw new BusinessException(ErrorCode.NOT_FOUND,"试卷不存在");}
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public TestPaper copy(Long id,String name,String description){
         var source=get(id);var target=new TestPaper();
         target.setName(name);target.setDescription(description==null?source.getDescription():description);
@@ -77,7 +82,7 @@ public class TestPaperService {
         TestPaper paper=get(paperId); ensureRandom(paper); ensureEditable(paper);
         if(jdbc.update("DELETE FROM test_paper_random_bank WHERE paper_id=? AND bank_id=?",paperId,bankId)==0) throw new BusinessException(ErrorCode.NOT_FOUND,"随机组卷题库不存在");
     }
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void saveRandomConfig(Long paperId,List<RandomConfigItem> items){
         TestPaper paper=get(paperId); ensureRandom(paper); ensureEditable(paper);
         if(items==null) items=List.of();
@@ -105,7 +110,12 @@ public class TestPaperService {
         if(single<0||multiple<0||judge<0) throw new BusinessException(ErrorCode.BAD_REQUEST,"抽题数量不能小于 0");
         int availableSingle=available(item.bankId(),"SINGLE"),availableMultiple=available(item.bankId(),"MULTIPLE"),availableJudge=available(item.bankId(),"TRUE_FALSE");
         if(single>availableSingle||multiple>availableMultiple||judge>availableJudge) throw new BusinessException(ErrorCode.BAD_REQUEST,"题库可用题目数量不足，请减少抽题数量");
-        if(single>0&&score(item.singleScore()).signum()<=0 || multiple>0&&score(item.multipleScore()).signum()<=0 || judge>0&&score(item.trueFalseScore()).signum()<=0) throw new BusinessException(ErrorCode.BAD_REQUEST,"已配置题目的分值必须大于 0");
+        boolean singleScoreInvalid = single > 0 && score(item.singleScore()).signum() <= 0;
+        boolean multipleScoreInvalid = multiple > 0 && score(item.multipleScore()).signum() <= 0;
+        boolean judgeScoreInvalid = judge > 0 && score(item.trueFalseScore()).signum() <= 0;
+        if (singleScoreInvalid || multipleScoreInvalid || judgeScoreInvalid) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "已配置题目的分值必须大于 0");
+        }
     }
     private int available(Long bankId,String type){return jdbc.queryForObject("SELECT COUNT(*) FROM question_item WHERE bank_id=? AND question_type=? AND status='ENABLED'",Integer.class,bankId,type);}
     private static int count(Integer value){return value==null?0:value;}

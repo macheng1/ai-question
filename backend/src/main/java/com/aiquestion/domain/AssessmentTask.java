@@ -3,9 +3,154 @@ package com.aiquestion.domain;
 import java.time.LocalDateTime;
 
 /** 发布后的考试任务。 */
+/**
+ * 后端业务组件。
+ *
+ * @author aiquestion
+ */
 public class AssessmentTask {
-    private Long id; private String name; private Long paperId; private LocalDateTime startAt; private LocalDateTime endAt; private Integer durationMinutes; private String candidateScope; private String status; private Boolean allowRetake; private Integer maxAttempts; private Boolean shuffleQuestions; private Boolean shuffleOptions; private Boolean showResultImmediately;
-    private String paperName; private String paperMode; private Integer questionCount;
-    public Long getId(){return id;} public void setId(Long v){id=v;} public String getName(){return name;} public void setName(String v){name=v;} public Long getPaperId(){return paperId;} public void setPaperId(Long v){paperId=v;} public LocalDateTime getStartAt(){return startAt;} public void setStartAt(LocalDateTime v){startAt=v;} public LocalDateTime getEndAt(){return endAt;} public void setEndAt(LocalDateTime v){endAt=v;} public Integer getDurationMinutes(){return durationMinutes;} public void setDurationMinutes(Integer v){durationMinutes=v;} public String getCandidateScope(){return candidateScope;} public void setCandidateScope(String v){candidateScope=v;} public String getStatus(){return status;} public void setStatus(String v){status=v;} public Boolean getAllowRetake(){return allowRetake;} public void setAllowRetake(Boolean v){allowRetake=v;} public Integer getMaxAttempts(){return maxAttempts;} public void setMaxAttempts(Integer v){maxAttempts=v;} public Boolean getShuffleQuestions(){return shuffleQuestions;} public void setShuffleQuestions(Boolean v){shuffleQuestions=v;} public Boolean getShuffleOptions(){return shuffleOptions;} public void setShuffleOptions(Boolean v){shuffleOptions=v;} public Boolean getShowResultImmediately(){return showResultImmediately;} public void setShowResultImmediately(Boolean v){showResultImmediately=v;}
-    public String getPaperName(){return paperName;} public void setPaperName(String v){paperName=v;} public String getPaperMode(){return paperMode;} public void setPaperMode(String v){paperMode=v;} public Integer getQuestionCount(){return questionCount;} public void setQuestionCount(Integer v){questionCount=v;}
+  private Long id;
+  private String name;
+  private Long paperId;
+  private LocalDateTime startAt;
+  private LocalDateTime endAt;
+  private Integer durationMinutes;
+  private String candidateScope;
+  private String status;
+  private Boolean allowRetake;
+  private Integer maxAttempts;
+  private Boolean shuffleQuestions;
+  private Boolean shuffleOptions;
+  private Boolean showResultImmediately;
+  private String paperName;
+  private String paperMode;
+  private Integer questionCount;
+
+  public Long getId() {
+    return id;
+  }
+
+  public void setId(Long v) {
+    id = v;
+  }
+
+  public String getName() {
+    return name;
+  }
+
+  public void setName(String v) {
+    name = v;
+  }
+
+  public Long getPaperId() {
+    return paperId;
+  }
+
+  public void setPaperId(Long v) {
+    paperId = v;
+  }
+
+  public LocalDateTime getStartAt() {
+    return startAt;
+  }
+
+  public void setStartAt(LocalDateTime v) {
+    startAt = v;
+  }
+
+  public LocalDateTime getEndAt() {
+    return endAt;
+  }
+
+  public void setEndAt(LocalDateTime v) {
+    endAt = v;
+  }
+
+  public Integer getDurationMinutes() {
+    return durationMinutes;
+  }
+
+  public void setDurationMinutes(Integer v) {
+    durationMinutes = v;
+  }
+
+  public String getCandidateScope() {
+    return candidateScope;
+  }
+
+  public void setCandidateScope(String v) {
+    candidateScope = v;
+  }
+
+  public String getStatus() {
+    return status;
+  }
+
+  public void setStatus(String v) {
+    status = v;
+  }
+
+  public Boolean getAllowRetake() {
+    return allowRetake;
+  }
+
+  public void setAllowRetake(Boolean v) {
+    allowRetake = v;
+  }
+
+  public Integer getMaxAttempts() {
+    return maxAttempts;
+  }
+
+  public void setMaxAttempts(Integer v) {
+    maxAttempts = v;
+  }
+
+  public Boolean getShuffleQuestions() {
+    return shuffleQuestions;
+  }
+
+  public void setShuffleQuestions(Boolean v) {
+    shuffleQuestions = v;
+  }
+
+  public Boolean getShuffleOptions() {
+    return shuffleOptions;
+  }
+
+  public void setShuffleOptions(Boolean v) {
+    shuffleOptions = v;
+  }
+
+  public Boolean getShowResultImmediately() {
+    return showResultImmediately;
+  }
+
+  public void setShowResultImmediately(Boolean v) {
+    showResultImmediately = v;
+  }
+
+  public String getPaperName() {
+    return paperName;
+  }
+
+  public void setPaperName(String v) {
+    paperName = v;
+  }
+
+  public String getPaperMode() {
+    return paperMode;
+  }
+
+  public void setPaperMode(String v) {
+    paperMode = v;
+  }
+
+  public Integer getQuestionCount() {
+    return questionCount;
+  }
+
+  public void setQuestionCount(Integer v) {
+    questionCount = v;
+  }
 }
