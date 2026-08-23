@@ -15,6 +15,11 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/public/news")
+/**
+ * 后端业务组件。
+ *
+ * @author aiquestion
+ */
 public class PublicNewsController {
     private final JdbcTemplate jdbc;
 

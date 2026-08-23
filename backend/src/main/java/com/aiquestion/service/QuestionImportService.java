@@ -21,6 +21,11 @@ import java.util.*;
 
 /** 负责按“试题导入模板.xlsx”解析、校验和批量写入题库。 */
 @Service
+/**
+ * 后端业务组件。
+ *
+ * @author aiquestion
+ */
 public class QuestionImportService {
     private final QuestionBankRepository bankRepository;
     private final QuestionItemRepository itemRepository;
@@ -45,31 +50,31 @@ public class QuestionImportService {
         } catch (IOException e) { throw new BusinessException(ErrorCode.SYSTEM_ERROR, "模板生成失败"); }
     }
 
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public ImportResult importFile(Long bankId, MultipartFile file, Long userId) {
-        if (bankRepository.findOwnedById(bankId, userId) == null) throw new BusinessException(ErrorCode.QUESTION_BANK_NOT_FOUND);
-        if (file == null || file.isEmpty()) throw new BusinessException(ErrorCode.BAD_REQUEST, "请上传 Excel 文件");
+        if (bankRepository.findOwnedById(bankId, userId) == null) { throw new BusinessException(ErrorCode.QUESTION_BANK_NOT_FOUND); }
+        if (file == null || file.isEmpty()) { throw new BusinessException(ErrorCode.BAD_REQUEST, "请上传 Excel 文件"); }
         String name = Optional.ofNullable(file.getOriginalFilename()).orElse("").toLowerCase(Locale.ROOT);
-        if (!name.endsWith(".xlsx")) throw new BusinessException(ErrorCode.BAD_REQUEST, "仅支持 .xlsx 格式");
+        if (!name.endsWith(".xlsx")) { throw new BusinessException(ErrorCode.BAD_REQUEST, "仅支持 .xlsx 格式"); }
         int imported = 0, skipped = 0; List<String> errors = new ArrayList<>();
         try (Workbook workbook = WorkbookFactory.create(file.getInputStream())) {
             Sheet sheet = workbook.getSheetAt(0); DataFormatter formatter = new DataFormatter();
             int headerRow = findHeaderRow(sheet, formatter);
-            if (headerRow < 0) throw new BusinessException(ErrorCode.BAD_REQUEST, "未找到模板表头“题型”，请使用标准试题导入模板");
+            if (headerRow < 0) { throw new BusinessException(ErrorCode.BAD_REQUEST, "未找到模板表头“题型”，请使用标准试题导入模板"); }
             for (int rowIndex = headerRow + 1; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
                 Row row = sheet.getRow(rowIndex); if (row == null || blank(formatter, row, 1)) continue;
                 int line = rowIndex + 1;
                 try {
                     String typeText = value(formatter, row, 0), stem = value(formatter, row, 1), answer = value(formatter, row, 6);
                     String type = normalizeType(typeText);
-                    if (stem.isBlank() || answer.isBlank()) throw new IllegalArgumentException("题干和正确答案不能为空");
+                    if (stem.isBlank() || answer.isBlank()) { throw new IllegalArgumentException("题干和正确答案不能为空"); }
                     if (itemRepository.countByBankIdAndStem(bankId, stem) > 0) { skipped++; continue; }
                     List<OptionRequest> options = new ArrayList<>();
-                    if (type.equals("TRUE_FALSE")) { answer = normalizeBoolean(answer); }
+                    if ("TRUE_FALSE".equals(type)) { answer = normalizeBoolean(answer); }
                     else {
                         String normalizedAnswer = answer.replaceAll("[，、,\\s]+", "").toUpperCase(Locale.ROOT);
                         for (int i = 0; i < 4; i++) { String text = value(formatter, row, 2 + i); if (!text.isBlank()) options.add(new OptionRequest(String.valueOf((char)('A' + i)), text, normalizedAnswer.contains(String.valueOf((char)('A' + i))), i)); }
-                        if (options.size() < 2 || options.stream().noneMatch(OptionRequest::correct)) throw new IllegalArgumentException("选项至少填写两项且必须包含正确答案");
+                        if (options.size() < 2 || options.stream().noneMatch(OptionRequest::correct)) { throw new IllegalArgumentException("选项至少填写两项且必须包含正确答案"); }
                         answer = normalizedAnswer;
                     }
                     QuestionItem item = new QuestionItem(); item.setBankId(bankId); item.setQuestionType(type); item.setStem(stem); item.setAnswerText(answer); item.setAnalysis(value(formatter,row,7)); item.setTags(value(formatter,row,8)); item.setDifficulty(normalizeDifficulty(value(formatter,row,9))); item.setScore(BigDecimal.ONE); item.setSource(value(formatter,row,10)); item.setStatus("ENABLED"); itemRepository.insert(item);
