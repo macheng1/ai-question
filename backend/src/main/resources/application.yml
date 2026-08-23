@@ -43,7 +43,7 @@ management:
       exposure:
         include: health,info
 app:
-  cors-origins: http://localhost:13000,http://localhost:3000,http://localhost:3001
+  cors-origins: http://localhost:13000,http://localhost:3000,http://localhost:3001,http://47.93.46.138:13000,http://shopai.org.cn,http://www.shopai.org.cn
   trace-header: X-Trace-Id
   redis-key-prefix: ${REDIS_KEY_PREFIX:aiquestion:}
   upload:
