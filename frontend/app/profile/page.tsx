@@ -6,7 +6,12 @@ import "@douyinfe/semi-ui/react19-adapter";
 import { Toast } from "@douyinfe/semi-ui";
 import { PageShell } from "@/components/layout/PageShell";
 import { ProfileSidebar } from "@/components/layout/ProfileSidebar";
-import { getCurrentUser, type UserProfile } from "@/features/auth/api";
+import {
+  changePassword,
+  getCurrentUser,
+  updateProfile,
+  type UserProfile,
+} from "@/features/auth/api";
 import { getManagedBanks } from "@/features/banks/management-api";
 import { getPapers } from "@/features/papers/api";
 import { useAuthStore } from "@/features/auth/store";
@@ -18,6 +23,10 @@ export default function ProfilePage() {
   const [questionCount, setQuestionCount] = useState(0);
   const [paperCount, setPaperCount] = useState(0);
   const [mounted, setMounted] = useState(false);
+  const [dialog, setDialog] = useState<"profile" | "password" | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [profileForm, setProfileForm] = useState({ name: "", unitName: "", address: "" });
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
 
   useEffect(() => {
     setMounted(true);
@@ -52,6 +61,61 @@ export default function ProfilePage() {
     ],
     [bankCount, questionCount, paperCount],
   );
+  const openProfileDialog = () => {
+    setProfileForm({
+      name: user?.name ?? sessionUser?.name ?? "",
+      unitName: user?.unitName ?? "",
+      address: user?.address ?? "",
+    });
+    setDialog("profile");
+  };
+  const openPasswordDialog = () => {
+    setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+    setDialog("password");
+  };
+  const saveProfile = async () => {
+    if (!profileForm.name.trim() || !profileForm.unitName.trim()) {
+      Toast.error("请填写用户名和企业名称");
+      return;
+    }
+    setSaving(true);
+    try {
+      const updated = await updateProfile({
+        name: profileForm.name.trim(),
+        unitName: profileForm.unitName.trim(),
+        address: profileForm.address.trim(),
+      });
+      setUser(updated);
+      const auth = useAuthStore.getState();
+      if (auth.accessToken) auth.setSession({ phone: updated.phone, name: updated.name }, auth.accessToken);
+      Toast.success("用户信息已更新");
+      setDialog(null);
+    } catch (error) {
+      Toast.error(error instanceof Error ? error.message : "保存失败，请稍后重试");
+    } finally {
+      setSaving(false);
+    }
+  };
+  const savePassword = async () => {
+    if (!passwordForm.currentPassword || passwordForm.newPassword.length < 6) {
+      Toast.error("请输入当前密码和至少 6 位的新密码");
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      Toast.error("两次输入的新密码不一致");
+      return;
+    }
+    setSaving(true);
+    try {
+      await changePassword(passwordForm);
+      Toast.success("密码已修改");
+      setDialog(null);
+    } catch (error) {
+      Toast.error(error instanceof Error ? error.message : "修改失败，请稍后重试");
+    } finally {
+      setSaving(false);
+    }
+  };
   if (!mounted)
     return (
       <PageShell>
@@ -156,13 +220,13 @@ export default function ProfilePage() {
             </div>
             <div className="flex gap-5 text-sm">
               <button
-                onClick={() => Toast.info("用户名修改功能即将开放")}
+                onClick={openProfileDialog}
                 className="text-slate-600 hover:text-blue-600"
               >
-                修改用户名
+                修改用户信息
               </button>
               <button
-                onClick={() => Toast.info("密码修改功能即将开放")}
+                onClick={openPasswordDialog}
                 className="text-slate-600 hover:text-blue-600"
               >
                 修改密码
@@ -171,6 +235,98 @@ export default function ProfilePage() {
           </div>
         </section>
       </main>
+      {dialog && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          onMouseDown={() => !saving && setDialog(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-slate-800">
+                {dialog === "profile" ? "修改用户信息" : "修改密码"}
+              </h2>
+              <button
+                aria-label="关闭"
+                className="text-2xl leading-none text-slate-400 hover:text-slate-700"
+                onClick={() => !saving && setDialog(null)}
+              >
+                ×
+              </button>
+            </div>
+            {dialog === "profile" ? (
+              <div className="mt-6 space-y-4">
+                <label className="block text-sm font-medium text-slate-700">
+                  用户名
+                  <input
+                    value={profileForm.name}
+                    onChange={(event) => setProfileForm({ ...profileForm, name: event.target.value })}
+                    className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2.5 outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                    maxLength={80}
+                  />
+                </label>
+                <label className="block text-sm font-medium text-slate-700">
+                  企业名称
+                  <input
+                    value={profileForm.unitName}
+                    onChange={(event) => setProfileForm({ ...profileForm, unitName: event.target.value })}
+                    className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2.5 outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                    maxLength={160}
+                  />
+                </label>
+                <label className="block text-sm font-medium text-slate-700">
+                  地址（选填）
+                  <textarea
+                    value={profileForm.address}
+                    onChange={(event) => setProfileForm({ ...profileForm, address: event.target.value })}
+                    className="mt-2 min-h-24 w-full resize-y rounded-lg border border-slate-200 px-3 py-2.5 outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                    maxLength={255}
+                  />
+                </label>
+              </div>
+            ) : (
+              <div className="mt-6 space-y-4">
+                {([
+                  ["当前密码", "currentPassword"],
+                  ["新密码", "newPassword"],
+                  ["确认新密码", "confirmPassword"],
+                ] as const).map(([label, key]) => (
+                  <label key={key} className="block text-sm font-medium text-slate-700">
+                    {label}
+                    <input
+                      type="password"
+                      value={passwordForm[key]}
+                      onChange={(event) => setPasswordForm({ ...passwordForm, [key]: event.target.value })}
+                      className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2.5 outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                      maxLength={64}
+                    />
+                  </label>
+                ))}
+              </div>
+            )}
+            <div className="mt-7 flex justify-end gap-3">
+              <button
+                className="rounded-lg border border-slate-200 px-5 py-2.5 text-sm text-slate-600 hover:bg-slate-50"
+                onClick={() => setDialog(null)}
+                disabled={saving}
+              >
+                取消
+              </button>
+              <button
+                className="rounded-lg bg-[#f97316] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#ea580c] disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={dialog === "profile" ? saveProfile : savePassword}
+                disabled={saving}
+              >
+                {saving ? "保存中..." : "保存"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </PageShell>
   );
 }

@@ -67,6 +67,16 @@ public class AuthController {
       String address,
       String roleCode) {}
 
+  public record ProfileUpdateCommand(
+      @NotBlank @Size(max = 80) String name,
+      @NotBlank @Size(max = 160) String unitName,
+      @Size(max = 255) String address) {}
+
+  public record PasswordChangeCommand(
+      @NotBlank String currentPassword,
+      @NotBlank @Size(min = 6, max = 64) String newPassword,
+      @NotBlank String confirmPassword) {}
+
   @Operation(summary = "发送注册验证码")
   @PostMapping("/captcha")
   public ApiResponse<Map<String, String>> captcha(
@@ -150,15 +160,7 @@ public class AuthController {
   @GetMapping("/me")
   public ApiResponse<UserProfile> me(
       @RequestHeader(value = "Authorization", required = false) String authorization) {
-    if (authorization == null || !authorization.startsWith("Bearer ")) {
-      throw new BusinessException(ErrorCode.UNAUTHORIZED);
-    }
-    final String userId;
-    try {
-      userId = tokens.subject(authorization.substring(7), false);
-    } catch (RuntimeException exception) {
-      throw new BusinessException(ErrorCode.INVALID_TOKEN);
-    }
+    String userId = currentUserId(authorization);
     var users =
         jdbc.query(
             "SELECT id,name,phone,unit_name,province,city,district,address,role_code FROM app_user WHERE id=? AND status='ACTIVE'",
@@ -178,5 +180,68 @@ public class AuthController {
       throw new BusinessException(ErrorCode.UNAUTHORIZED);
     }
     return ApiResponse.ok(users.get(0));
+  }
+
+  @Operation(summary = "修改当前用户信息")
+  @PutMapping("/me/profile")
+  public ApiResponse<UserProfile> updateProfile(
+      @RequestHeader(value = "Authorization", required = false) String authorization,
+      @Valid @RequestBody ProfileUpdateCommand command) {
+    String userId = currentUserId(authorization);
+    String name = command.name().trim();
+    String unitName = command.unitName().trim();
+    if (jdbc.queryForObject(
+            "SELECT COUNT(*) FROM app_user WHERE name=? AND id<>?", Integer.class, name, userId)
+        > 0) {
+      throw new BusinessException(ErrorCode.USERNAME_ALREADY_EXISTS);
+    }
+    jdbc.update(
+        "UPDATE app_user SET name=?, unit_name=?, address=?, updated_at=? WHERE id=? AND status='ACTIVE'",
+        name,
+        unitName,
+        blankToNull(command.address()),
+        LocalDateTime.now(),
+        userId);
+    return me(authorization);
+  }
+
+  @Operation(summary = "修改当前用户密码")
+  @PutMapping("/me/password")
+  public ApiResponse<Void> changePassword(
+      @RequestHeader(value = "Authorization", required = false) String authorization,
+      @Valid @RequestBody PasswordChangeCommand command) {
+    String userId = currentUserId(authorization);
+    if (!command.newPassword().equals(command.confirmPassword())) {
+      throw new BusinessException(ErrorCode.PASSWORD_NOT_MATCH);
+    }
+    String passwordHash =
+        jdbc.queryForObject(
+            "SELECT password_hash FROM app_user WHERE id=? AND status='ACTIVE'",
+            String.class,
+            userId);
+    if (passwordHash == null || !encoder.matches(command.currentPassword(), passwordHash)) {
+      throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
+    }
+    jdbc.update(
+        "UPDATE app_user SET password_hash=?, updated_at=? WHERE id=? AND status='ACTIVE'",
+        encoder.encode(command.newPassword()),
+        LocalDateTime.now(),
+        userId);
+    return ApiResponse.ok(null);
+  }
+
+  private String currentUserId(String authorization) {
+    if (authorization == null || !authorization.startsWith("Bearer ")) {
+      throw new BusinessException(ErrorCode.UNAUTHORIZED);
+    }
+    try {
+      return tokens.subject(authorization.substring(7), false);
+    } catch (RuntimeException exception) {
+      throw new BusinessException(ErrorCode.INVALID_TOKEN);
+    }
+  }
+
+  private String blankToNull(String value) {
+    return value == null || value.isBlank() ? null : value.trim();
   }
 }
