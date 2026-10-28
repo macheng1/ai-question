@@ -1,6 +1,7 @@
 package com.aiquestion.service;
 
 import com.aiquestion.common.*;
+import com.aiquestion.security.ManagementAccess;
 import com.aiquestion.domain.AssessmentTask;
 import com.aiquestion.repository.AssessmentTaskRepository;
 import com.aiquestion.repository.TestPaperRepository;
@@ -33,7 +34,7 @@ public class AssessmentTaskService {
   public AssessmentTask get(Long id) {
     syncExpiredStatuses();
     var t = repository.findById(id);
-    if (t == null) {
+    if (t == null || !ManagementAccess.userId().equals(t.getCreatedBy())) {
       throw new BusinessException(ErrorCode.NOT_FOUND, "考试任务不存在");
     }
     return t;
@@ -57,11 +58,13 @@ public class AssessmentTaskService {
       Boolean sq,
       Boolean so,
       Boolean show) {
-    if (paperRepository.findById(paperId) == null) {
+    var paper = paperRepository.findById(paperId);
+    if (paper == null || !ManagementAccess.userId().equals(paper.getCreatedBy())) {
       throw new BusinessException(ErrorCode.NOT_FOUND, "试卷不存在");
     }
     validateTime(start, end);
     var t = new AssessmentTask();
+    t.setCreatedBy(ManagementAccess.userId());
     apply(t, name, paperId, start, end, duration, scope, retake, max, sq, so, show);
     t.setStatus(statusForTime(start, end));
     repository.insert(t);
@@ -167,6 +170,7 @@ public class AssessmentTaskService {
 
   public void delete(Long id) {
     get(id);
+    if (repository.countTrainingReferences(id) > 0) throw new BusinessException(ErrorCode.BAD_REQUEST, "该考试已关联培训，请先解除关联");
     if (repository.deleteById(id) == 0) {
       throw new BusinessException(ErrorCode.NOT_FOUND, "考试任务不存在");
     }

@@ -1,16 +1,11 @@
 "use client";
 
+import { IconArrowLeft, IconPlus } from "@/features/exam/components/ExamIcons";
+
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import "@douyinfe/semi-ui/react19-adapter";
-import {
-  Button,
-  Input as SemiInput,
-  Modal,
-  Select,
-  TextArea as SemiTextArea,
-  Toast,
-} from "@douyinfe/semi-ui";
+import { Table,  Button, Input as SemiInput, Modal, Select, TextArea as SemiTextArea, Toast  } from "@douyinfe/semi-ui";
 import { PageShell } from "@/components/layout/PageShell";
 import { ProfileSidebar } from "@/components/layout/ProfileSidebar";
 import {
@@ -122,30 +117,6 @@ export default function CategoriesPage() {
       },
     });
   };
-  const row = (item: Category, child = false) => (
-    <div
-      key={item.id}
-      className="grid grid-cols-[1.2fr_1fr_80px_220px] gap-3 border-t border-slate-100 px-5 py-4 text-sm text-slate-600"
-    >
-      <span className={child ? "pl-6" : "font-medium"}>
-        {child ? "└ " : ""}
-        {item.name}
-      </span>
-      <span>{item.description || "-"}</span>
-      <span>{item.sortNo ?? 0}</span>
-      <span className="flex flex-wrap gap-3">
-        <button onClick={() => openCreate(item.id)} className="text-blue-500">
-          添加子分类
-        </button>
-        <button onClick={() => openEdit(item)} className="text-slate-500">
-          编辑
-        </button>
-        <button onClick={() => remove(item.id)} className="text-red-500">
-          删除
-        </button>
-      </span>
-    </div>
-  );
   return (
     <PageShell>
       <main className="mx-auto flex min-h-[720px] w-[92%] max-w-[1160px] flex-col gap-6 py-10 sm:py-14 md:flex-row">
@@ -155,27 +126,34 @@ export default function CategoriesPage() {
             href="/profile/banks"
             className="text-sm font-semibold text-blue-600 no-underline"
           >
-            ← 返回题库管理
+            <IconArrowLeft aria-hidden="true" /> 返回题库管理
           </Link>
           <div className="mt-5 flex items-center justify-between gap-3">
             <h1 className="text-2xl font-bold text-slate-800">
               题库管理 - 分类管理
             </h1>
             <Button theme="solid" type="warning" onClick={() => openCreate()}>
-              + 新建根分类
+              <IconPlus aria-hidden="true" /> 新建根分类
             </Button>
           </div>
           <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-            <div className="grid grid-cols-[1.2fr_1fr_80px_220px] gap-3 bg-slate-50 px-5 py-4 text-xs text-slate-500">
-              <span>分类名称</span>
-              <span>描述</span>
-              <span>排序</span>
-              <span>操作</span>
-            </div>
-            {roots.flatMap((root) => [
-              row(root),
-              ...childrenOf(root.id).map((child) => row(child, true)),
-            ])}
+            <Table rowKey="id" pagination={false} scroll={{x: 720}} dataSource={roots.flatMap(root => [{...root, child: false}, ...childrenOf(root.id).map(item => ({...item, child: true}))])} columns={[{ title: "分类名称", render: (_value: unknown, item: Category & {child: boolean}) => (<span className={item.child ? "pl-6" : "font-medium"}>
+        {item.child && <span className="mr-2 inline-block h-3 w-3 border-b border-l border-slate-300" aria-hidden="true" />}
+        {item.name}
+      </span>) },
+{ title: "描述", render: (_value: unknown, item: Category & {child: boolean}) => (<span>{item.description || "-"}</span>) },
+{ title: "排序", render: (_value: unknown, item: Category & {child: boolean}) => (<span>{item.sortNo ?? 0}</span>) },
+{ title: "操作", render: (_value: unknown, item: Category & {child: boolean}) => (<span className="flex flex-wrap gap-3">
+        <Button theme="borderless" onClick={() => openCreate(item.id)} className="text-blue-500">
+          添加子分类
+        </Button>
+        <Button theme="borderless" onClick={() => openEdit(item)} className="text-slate-500">
+          编辑
+        </Button>
+        <Button theme="borderless" onClick={() => remove(item.id)} className="text-red-500">
+          删除
+        </Button>
+      </span>) }]} />
             {!categories.length && (
               <div className="py-12 text-center text-sm text-slate-400">
                 暂无数据

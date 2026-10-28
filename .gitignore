@@ -14,3 +14,7 @@ target/
 !.env.example
 *.log
 .DS_Store
+
+# Local training videos
+/data/training-videos/
+/backend/data/training-videos/

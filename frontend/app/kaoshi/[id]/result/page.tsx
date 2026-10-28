@@ -1,3 +1,5 @@
+
+import { IconArrowLeft } from "@/features/exam/components/ExamIcons";
 import { loadExamPaper } from "@/features/exam/load-paper";
 import { ResultLoader } from "./ResultLoader";
 
@@ -24,7 +26,7 @@ export default async function ExamResultPage({
           href="/profile"
           className="print-hidden block py-1 text-sm text-slate-500 no-underline"
         >
-          ← 返回个人中心
+          <IconArrowLeft aria-hidden="true" /> 返回个人中心
         </a>
         {query.attemptId ? (
           <ResultLoader paper={paper} attemptId={query.attemptId} />

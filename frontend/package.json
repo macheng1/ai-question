@@ -9,6 +9,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@douyinfe/semi-icons": "^2.104.0",
     "@douyinfe/semi-ui": "^2.102.0",
     "@visactor/react-vchart": "^2.1.6",
     "@visactor/vchart": "^2.1.6",

@@ -1,5 +1,7 @@
 "use client";
 
+import { AppIcon } from "@/components/ui/AppIcon";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -56,7 +58,7 @@ export function BankList() {
     <div className="mt-7 grid gap-5 md:grid-cols-2 lg:grid-cols-3">{visible.map((bank, index) => <article key={bank.id} className="rounded-2xl border border-slate-200 bg-white p-7 transition hover:-translate-y-0.5 hover:border-[#46c9c0] hover:shadow-lg">
       <div className="flex items-start justify-between"><span className={`grid h-12 w-12 place-items-center rounded-xl ${iconStyles[index % iconStyles.length]}`}><IconBook /></span><Button theme="borderless" className={favorites.includes(bank.id) ? "!border !border-[#35c5bd] !text-[#35c5bd]" : "!border !border-slate-200"} icon={favorites.includes(bank.id) ? <IconStar /> : <IconStarStroked />} onClick={() => toggleFavorite(bank.id)}>{favorites.includes(bank.id) ? "已收藏" : "收藏"}</Button></div>
       <h2 className="mt-6 text-lg font-bold text-slate-800">{bank.name}</h2><p className="mt-2 min-h-10 text-sm leading-6 text-slate-500">{bank.source || "公开题库"}</p>
-      <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-5 text-sm text-slate-400"><span>▧ 共 {bank.questionCount} 道</span><Link href={`/banks/${bank.id}`} className="font-semibold text-[#35c5bd] no-underline">查看题库 →</Link></div>
+      <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-5 text-sm text-slate-400"><span><AppIcon name="book" /> 共 {bank.questionCount} 道</span><Link href={`/banks/${bank.id}`} className="font-semibold text-[#35c5bd] no-underline">查看题库 <AppIcon name="arrowRight" /></Link></div>
     </article>)}</div>
   </section>;
 }

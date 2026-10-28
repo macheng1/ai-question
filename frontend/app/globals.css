@@ -143,3 +143,19 @@ input[placeholder="标签（可选）"] { display: none !important; }
   .result-print-card { border: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
   .result-print-question { break-inside: avoid; }
 }
+
+/* 评估表单保持 Semi 控件行为，使用独立样式类统一移动端触摸区域。 */
+.survey-form .survey-rating { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; width: 100%; background: transparent; }
+.survey-form .survey-rating .semi-radio { margin: 0; padding: 0; min-width: 0; }
+.survey-form .survey-rating .semi-radio-addon-buttonRadio { display: flex; width: 100%; height: 46px; min-height: 46px; align-items: center; justify-content: center; padding: 0; line-height: 22px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; color: #64748b; font-size: 14px; }
+.survey-form .survey-rating .semi-radio-addon-buttonRadio-checked { border-color: #35c5bd; background: #effcfb; color: #1d817b; }
+.survey-form .survey-choices { width: 100%; gap: 8px; }
+.survey-form .survey-choices .semi-radio { display: flex; align-items: center; min-height: 46px; margin: 0; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
+.survey-form .survey-choices .semi-radio-checked { border-color: #35c5bd; background: #effcfb; }
+.survey-form .survey-choices .semi-radio-addon { white-space: normal; overflow-wrap: anywhere; line-height: 24px; }
+.survey-form .survey-comment { border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
+.survey-form .survey-comment .semi-input-textarea { min-height: 112px; padding: 12px; background: transparent; line-height: 24px; }
+.survey-form > .semi-button { min-height: 46px; }
+
+.survey-form .survey-rating .semi-radio-content { width: 100%; }
+.survey-form .survey-choices .semi-radio-inner-checked .semi-radio-inner-display { border-color: #35c5bd; background: #35c5bd; }

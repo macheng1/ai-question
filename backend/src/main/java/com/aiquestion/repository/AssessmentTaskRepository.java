@@ -444,4 +444,5 @@ public interface AssessmentTaskRepository {
    */
   List<Map<String, Object>> difficultQuestions(
       @Param("id") Long id, @Param("includeRetake") boolean includeRetake);
+  int countTrainingReferences(Long id);
 }

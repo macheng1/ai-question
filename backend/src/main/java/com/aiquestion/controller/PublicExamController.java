@@ -32,7 +32,13 @@ public class PublicExamController {
                                                 @RequestParam(required = false) Long attemptId) {
         Map<String, Object> task = task(id);
         // 是否展示答案必须由考试配置决定，不能通过请求参数绕过配置。
-        boolean reviewEnabled = flag(task.get("reviewEnabled"));
+        boolean submitted = false;
+        if (attemptId != null) {
+            List<Map<String, Object>> attempts = jdbc.queryForList("SELECT status FROM assessment_attempt WHERE id=? AND task_id=?", attemptId, id);
+            if (attempts.isEmpty()) throw new BusinessException(ErrorCode.NOT_FOUND, "答题记录不存在");
+            submitted = "SUBMITTED".equals(String.valueOf(attempts.get(0).get("status")));
+        }
+        boolean reviewEnabled = revealAnswers && submitted && flag(task.get("reviewEnabled"));
         List<Map<String, Object>> questions = questionRows(id, attemptId);
         questions.forEach(q -> {
             q.put("kind", kind(String.valueOf(q.get("question_type"))));
@@ -57,7 +63,8 @@ public class PublicExamController {
     public ApiResponse<Map<String, Object>> start(@PathVariable Long id, @RequestBody CandidateCommand command) {
         Map<String, Object> task = task(id);
         ensureTaskOpen(task);
-        String phone = command.phone() == null ? "" : command.phone().trim();
+        com.aiquestion.service.CandidateLearningService.validate(command.name(), command.phone());
+        String phone = command.phone().trim();
         String name = command.name().trim();
         List<Map<String, Object>> participants = jdbc.queryForList("SELECT id,attempt_count FROM assessment_participant WHERE task_id=? AND candidate_name=? AND phone=? ORDER BY id DESC LIMIT 1", id, name, phone);
         long participantId;
@@ -96,6 +103,7 @@ public class PublicExamController {
             return ApiResponse.ok(result);
         }
         if (active.isEmpty()) {
+            new com.aiquestion.service.CandidateLearningService(jdbc).requireComplete(id, name, phone);
             attemptCount++;
             jdbc.update("INSERT INTO assessment_attempt(task_id,participant_id,attempt_no,status,total_score,started_at,created_at,updated_at) SELECT ?,?,?, 'IN_PROGRESS',p.total_score,CURRENT_TIMESTAMP(3),CURRENT_TIMESTAMP(3),CURRENT_TIMESTAMP(3) FROM test_paper p JOIN assessment_task a ON a.paper_id=p.id WHERE a.id=?", id, participantId, attemptCount, id);
             attemptId = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
@@ -125,6 +133,7 @@ public class PublicExamController {
                                                          @RequestParam String name,
                                                          @RequestParam String phone) {
         Map<String, Object> task = task(id);
+        com.aiquestion.service.CandidateLearningService.validate(name, phone);
         int configuredMaxAttempts = maxAttempts(task);
         List<Map<String, Object>> participants = jdbc.queryForList(
                 "SELECT id,attempt_count FROM assessment_participant WHERE task_id=? AND candidate_name=? AND phone=? ORDER BY id DESC LIMIT 1",
@@ -155,6 +164,7 @@ public class PublicExamController {
                                                       @RequestParam String name,
                                                       @RequestParam String phone) {
         task(id);
+        com.aiquestion.service.CandidateLearningService.validate(name, phone);
         List<Map<String, Object>> active = jdbc.queryForList(
                         "SELECT aa.id attempt_id,aa.started_at " +
                         "FROM assessment_attempt aa " +
@@ -173,7 +183,7 @@ public class PublicExamController {
     @Operation(summary = "保存单题答案")
     @PutMapping("/attempts/{attemptId}/answers/{questionId}")
     public ApiResponse<Void> answer(@PathVariable Long attemptId, @PathVariable Long questionId, @RequestBody AnswerCommand command) {
-        ensureAttemptOpen(attemptId);
+        ensureAttemptOpen(attemptId, false);
         Map<String, Object> question = jdbc.queryForMap("SELECT q.question_type,q.answer_text,aq.score FROM assessment_attempt_question aq JOIN question_item q ON q.id=aq.question_id WHERE aq.attempt_id=? AND aq.question_id=?", attemptId, questionId);
         String answer = command.answer() == null ? "" : command.answer().trim().toUpperCase(Locale.ROOT);
         String correct = String.valueOf(question.getOrDefault("answer_text", "")).trim().toUpperCase(Locale.ROOT);
@@ -187,13 +197,13 @@ public class PublicExamController {
     @Operation(summary = "交卷并计算成绩")
     @PostMapping("/attempts/{attemptId}/submit")
     public ApiResponse<Map<String, Object>> submit(@PathVariable Long attemptId) {
-        ensureAttemptOpen(attemptId);
+        Map<String, Object> openAttempt = ensureAttemptOpen(attemptId, true);
         Map<String, Object> attempt = jdbc.queryForMap("SELECT a.task_id,a.participant_id,a.attempt_no,t.paper_id,t.allow_retake allowRetake,t.max_attempts maxAttempts,p.total_score,p.pass_score FROM assessment_attempt a JOIN assessment_task t ON t.id=a.task_id JOIN test_paper p ON p.id=t.paper_id WHERE a.id=?", attemptId);
         Integer totalQuestions = jdbc.queryForObject("SELECT COUNT(*) FROM assessment_attempt_question WHERE attempt_id=?", Integer.class, attemptId);
         Integer answeredQuestions = jdbc.queryForObject(
                 "SELECT COUNT(DISTINCT question_id) FROM assessment_answer WHERE attempt_id=? AND answer_text IS NOT NULL AND TRIM(answer_text)<>''",
                 Integer.class, attemptId);
-        if (answeredQuestions == null || totalQuestions == null || answeredQuestions < totalQuestions) {
+        if (!expired(openAttempt) && (answeredQuestions == null || totalQuestions == null || answeredQuestions < totalQuestions)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "请完成所有题目后再提交");
         }
         BigDecimal score = jdbc.queryForObject("SELECT COALESCE(SUM(score),0) FROM assessment_answer WHERE attempt_id=?", BigDecimal.class, attemptId);
@@ -286,26 +296,35 @@ public class PublicExamController {
     private void ensureTaskOpen(Map<String, Object> task) {
         String status = String.valueOf(task.getOrDefault("taskStatus", "PUBLISHED"));
         if ("ENDED".equals(status) || "DISABLED".equals(status)) { throw new BusinessException(ErrorCode.BAD_REQUEST, "考试已结束，不能继续答题"); }
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(java.time.ZoneOffset.UTC);
         LocalDateTime startAt = toLocalDateTime(task.get("startAt"));
         LocalDateTime endAt = toLocalDateTime(task.get("endAt"));
         if (startAt != null && now.isBefore(startAt)) { throw new BusinessException(ErrorCode.BAD_REQUEST, "考试尚未开始"); }
         if (endAt != null && !now.isBefore(endAt)) { throw new BusinessException(ErrorCode.BAD_REQUEST, "考试已结束，不能继续答题"); }
     }
-    private Map<String, Object> ensureAttemptOpen(Long attemptId) {
+    private Map<String, Object> ensureAttemptOpen(Long attemptId, boolean submitting) {
         Map<String, Object> attempt;
         try {
-            attempt = jdbc.queryForMap("SELECT a.id,a.status,t.status taskStatus,t.start_at startAt,t.end_at endAt FROM assessment_attempt a JOIN assessment_task t ON t.id=a.task_id WHERE a.id=?", attemptId);
+            attempt = jdbc.queryForMap("SELECT a.id,a.status,a.started_at startedAt,t.duration_minutes duration,t.status taskStatus,t.start_at startAt,t.end_at endAt FROM assessment_attempt a JOIN assessment_task t ON t.id=a.task_id WHERE a.id=?", attemptId);
         } catch (org.springframework.dao.EmptyResultDataAccessException exception) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "答题记录不存在");
         }
         if (!"IN_PROGRESS".equals(String.valueOf(attempt.get("status")))) { throw new BusinessException(ErrorCode.BAD_REQUEST, "该答题记录已结束，不能继续答题"); }
-        ensureTaskOpen(attempt);
+        if (!submitting) {
+            ensureTaskOpen(attempt);
+            if (expired(attempt)) throw new BusinessException(ErrorCode.BAD_REQUEST, "答题时间已结束，请交卷");
+        }
         return attempt;
+    }
+    private static boolean expired(Map<String, Object> attempt) {
+        LocalDateTime now = LocalDateTime.now(java.time.ZoneOffset.UTC);
+        LocalDateTime end = toLocalDateTime(attempt.get("endAt"));
+        LocalDateTime start = toLocalDateTime(attempt.get("startedAt"));
+        return (end != null && !now.isBefore(end)) || (start != null && !now.isBefore(start.plusMinutes(number(attempt.get("duration")))));
     }
     private static LocalDateTime toLocalDateTime(Object value) {
         if (value instanceof LocalDateTime dateTime) { return dateTime; }
-        if (value instanceof java.sql.Timestamp timestamp) { return timestamp.toLocalDateTime(); }
+        if (value instanceof java.sql.Timestamp timestamp) { return LocalDateTime.ofInstant(timestamp.toInstant(), java.time.ZoneOffset.UTC); }
         return value == null ? null : LocalDateTime.parse(String.valueOf(value).replace(" ", "T"));
     }
     private static int maxAttempts(Map<String, Object> task) {
@@ -330,14 +349,13 @@ public class PublicExamController {
     private static List<String> answerList(Object value, String type) { String raw = value == null ? "" : String.valueOf(value).trim(); if (raw.isBlank()) return List.of(); if ("TRUE_FALSE".equals(type)) return List.of(raw.equalsIgnoreCase("TRUE") ? "A" : "B"); if ("MULTIPLE".equals(type) && raw.matches("[A-Za-z]+")) return raw.toUpperCase(Locale.ROOT).chars().mapToObj(c -> String.valueOf((char) c)).toList(); return Arrays.stream(raw.split("[,，、\\s]+")).filter(s -> !s.isBlank()).toList(); }
     private static String kind(String type) { return switch (type) { case "MULTIPLE" -> "multi"; case "TRUE_FALSE" -> "judge"; default -> "single"; }; }
     /**
-     * 按题型判断答案：单选、判断题要求答案一致；多选题只要命中全部标准答案即可，
-     * 不受选项顺序影响，也不因额外选择其他选项而判错。
+     * 按题型判断答案：单选、判断题要求答案一致；多选题必须与标准答案集合完全一致，不受选项顺序影响。
      */
     private static boolean matchesAnswer(String type, String answer, String correct) {
         if ("MULTIPLE".equals(type)) {
             Set<String> selected = new HashSet<>(answerList(answer, type));
             Set<String> required = new HashSet<>(answerList(correct, type));
-            return !selected.isEmpty() && !required.isEmpty() && selected.containsAll(required);
+            return !selected.isEmpty() && !required.isEmpty() && selected.equals(required);
         }
         return normalize(answer).equals(normalize(correct));
     }

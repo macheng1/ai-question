@@ -1,5 +1,7 @@
 "use client";
 
+import { IconLock, IconList, IconClock, IconStar, IconPlus } from "@/features/exam/components/ExamIcons";
+
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import "@douyinfe/semi-ui/react19-adapter";
@@ -159,7 +161,7 @@ export default function PapersPage() {
               <h1 className="text-2xl font-bold text-slate-800">试卷管理</h1>
               <p className="mt-2 text-sm text-slate-400">创建固定或随机试卷，并安排考试。</p>
             </div>
-            <Button theme="solid" type="warning" onClick={openCreate}>+ 创建试卷</Button>
+            <Button theme="solid" type="warning" onClick={openCreate}><IconPlus aria-hidden="true" /> 创建试卷</Button>
           </div>
           <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4">
             <Input value={keyword} onChange={setKeyword} onEnterPress={load} showClear placeholder="搜索试卷名称..." />
@@ -178,18 +180,29 @@ export default function PapersPage() {
                     <div className="flex shrink-0 flex-col items-end gap-2 text-xs">
                       <span className="rounded-md bg-blue-50 px-2 py-1 text-blue-600">{modeLabel(paper.mode)}</span>
                       <span className={`rounded-md px-2 py-1 ${completed ? "bg-emerald-50 text-emerald-600" : "bg-orange-50 text-orange-600"}`}>{completed ? "已完成组卷" : "未完成组卷"}</span>
-                      <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-500">{locked ? "🔒 已锁定" : "私有"}</span>
+                      <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-500">{locked ? <><IconLock aria-hidden="true" /> 已锁定</> : "私有"}</span>
                     </div>
                   </div>
-                  <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-500">
-                    <span>▤ {paper.questionCount || 0} 题</span><span>◷ {paper.durationMinutes} 分钟</span><span>◎ {paper.totalScore} 分</span>
+                  <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-[13px] leading-5 text-slate-400">
+                    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                      <IconList aria-hidden="true" style={{ fontSize: 14 }} />
+                      <span><span className="font-medium tabular-nums text-slate-600">{paper.questionCount || 0}</span> 题</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                      <IconClock aria-hidden="true" style={{ fontSize: 14 }} />
+                      <span><span className="font-medium tabular-nums text-slate-600">{paper.durationMinutes}</span> 分钟</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                      <IconStar aria-hidden="true" style={{ fontSize: 14 }} />
+                      <span><span className="font-medium tabular-nums text-slate-600">{paper.totalScore}</span> 分</span>
+                    </span>
                   </div>
                   <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4 text-sm">
                     <Link href={`/profile/papers/${paper.id}/compose`} className={`rounded-lg px-4 py-2 font-semibold no-underline ${locked ? "bg-slate-100 text-slate-400" : "bg-blue-50 text-blue-600"}`}>组卷{locked ? "（已锁定）" : ""}</Link>
-                    <button className="text-slate-700" onClick={() => setArrange(paper)} disabled={!completed}>安排考试</button>
-                    <button className="text-slate-600" onClick={() => openEdit(paper)}>编辑</button>
-                    <button className="text-slate-600" onClick={() => openCopy(paper)}>复制</button>
-                    <button className="text-red-500" onClick={() => remove(paper)}>删除</button>
+                    <Button theme="borderless" className="text-slate-700" onClick={() => setArrange(paper)} disabled={!completed}>安排考试</Button>
+                    <Button theme="borderless" className="text-slate-600" onClick={() => openEdit(paper)}>编辑</Button>
+                    <Button theme="borderless" className="text-slate-600" onClick={() => openCopy(paper)}>复制</Button>
+                    <Button theme="borderless" className="text-red-500" onClick={() => remove(paper)}>删除</Button>
                   </div>
                 </article>
               );

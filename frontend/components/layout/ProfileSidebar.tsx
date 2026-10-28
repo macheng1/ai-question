@@ -11,6 +11,7 @@ const menu = [
   { label: "概览", href: "/profile" },
   { label: "题库管理", href: "/profile/banks" },
   { label: "试卷管理", href: "/profile/papers" },
+  { label: "培训管理", href: "/profile/trainings" },
   { label: "考试管理", href: "/profile/assessments" },
 ];
 
@@ -65,26 +66,26 @@ export function ProfileSidebar() {
       <aside className="hidden w-56 shrink-0 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-[0_10px_35px_rgba(15,23,42,.06)] md:block">
         {links()}
         <div className="my-2 border-t border-slate-100" />
-        <button
-          type="button"
+        <Button
+          htmlType="button"
           onClick={logout}
           className="block w-full rounded-xl px-4 py-3 text-left text-sm font-semibold text-slate-500 hover:bg-orange-50 hover:text-orange-600"
         >
           退出登录
-        </button>
+        </Button>
       </aside>
       <nav
         aria-label="个人中心导航"
         className="flex w-full gap-2 overflow-x-auto pb-1 md:hidden"
       >
         {links(true)}
-        <button
-          type="button"
+        <Button
+          htmlType="button"
           onClick={logout}
           className="shrink-0 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-slate-500"
         >
           退出登录
-        </button>
+        </Button>
       </nav>
       <Modal title="确认退出登录" visible={logoutOpen} onCancel={() => setLogoutOpen(false)} footer={<div className="flex justify-end gap-3"><Button className="modal-cancel-button" onClick={() => setLogoutOpen(false)}>取消</Button><Button theme="solid" type="warning" onClick={confirmLogout}>确认退出</Button></div>}>确定要退出当前账号吗？</Modal>
     </>

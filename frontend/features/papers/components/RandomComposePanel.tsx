@@ -1,7 +1,8 @@
 "use client";
+import { IconPlus } from "@/features/exam/components/ExamIcons";
 
 import { useEffect, useMemo, useState } from "react";
-import { Button, Input, Modal, Toast } from "@douyinfe/semi-ui";
+import { Table, Button, Input, Modal, Toast } from "@douyinfe/semi-ui";
 import {
   addRandomBank,
   getRandomConfig,
@@ -90,16 +91,16 @@ export function RandomComposePanel({ paper, locked, onCompleted }: Props) {
     <section className="mx-auto max-w-[1120px] rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div><h2 className="text-lg font-semibold text-slate-800">随机抽题配置</h2><p className="mt-3 text-sm text-slate-400">为每个题库分别设置各题型的抽取数量与分值。</p></div>
-        <Button theme="borderless" onClick={() => { setTab("mine"); setModalVisible(true); }} disabled={locked}>+ 添加题库</Button>
+        <Button theme="borderless" onClick={() => { setTab("mine"); setModalVisible(true); }} disabled={locked}><IconPlus aria-hidden="true" /> 添加题库</Button>
       </div>
       {!items.length ? <div className="grid min-h-[180px] place-items-center border-b border-slate-100 text-sm text-slate-400">请点击「添加题库」开始配置</div> : <div className="mt-8 overflow-x-auto">
         <div className="min-w-[820px] text-sm">
-          <div className="grid grid-cols-[2fr_repeat(3,1.4fr)_0.7fr_0.5fr] gap-3 border-b border-slate-100 pb-3 font-medium text-slate-600"><span>题库</span><span>单选</span><span>多选</span><span>判断</span><span>小计</span><span /></div>
-          {items.map((item) => { const subtotal = item.singleCount * Number(item.singleScore || 0) + item.multipleCount * Number(item.multipleScore || 0) + item.trueFalseCount * Number(item.trueFalseScore || 0); return <div key={item.bankId} className="grid grid-cols-[2fr_repeat(3,1.4fr)_0.7fr_0.5fr] items-center gap-3 border-b border-slate-100 py-4">
-            <div><div className="font-medium text-slate-800">{item.bankName}</div><div className="mt-1 text-xs text-slate-400">可用 单选 {item.availableSingleCount} · 多选 {item.availableMultipleCount} · 判断 {item.availableTrueFalseCount}</div></div>
-            {(["single", "multiple", "trueFalse"] as const).map((kind) => { const countKey = `${kind}Count` as keyof RandomConfig; const scoreKey = `${kind}Score` as keyof RandomConfig; return <div key={kind} className="flex gap-2"><Input type="number" value={String(item[countKey])} onChange={(v) => update(item.bankId, countKey, v)} disabled={locked} suffix="题" /><Input type="number" value={String(item[scoreKey])} onChange={(v) => update(item.bankId, scoreKey, v)} disabled={locked} suffix="分" /></div>; })}
-            <span className="font-medium text-slate-700">{subtotal}</span><Button theme="borderless" type="danger" disabled={locked} onClick={() => remove(item.bankId)}>移除</Button>
-          </div>; })}
+          <Table rowKey="bankId" dataSource={items} pagination={false} scroll={{ x: 820 }} columns={[
+            { title: "题库", render: (_: unknown, item: RandomConfig) => <div><b>{item.bankName}</b><div className="text-xs text-slate-400">可用 单选 {item.availableSingleCount} · 多选 {item.availableMultipleCount} · 判断 {item.availableTrueFalseCount}</div></div> },
+            ...(["single", "multiple", "trueFalse"] as const).map((kind, index) => ({ title: ["单选", "多选", "判断"][index], render: (_: unknown, item: RandomConfig) => { const countKey = `${kind}Count` as keyof RandomConfig; const scoreKey = `${kind}Score` as keyof RandomConfig; return <div className="flex gap-2"><Input type="number" value={String(item[countKey])} onChange={v => update(item.bankId, countKey, v)} disabled={locked} suffix="题" /><Input type="number" value={String(item[scoreKey])} onChange={v => update(item.bankId, scoreKey, v)} disabled={locked} suffix="分" /></div>; } })),
+            { title: "小计", render: (_: unknown, item: RandomConfig) => item.singleCount * Number(item.singleScore || 0) + item.multipleCount * Number(item.multipleScore || 0) + item.trueFalseCount * Number(item.trueFalseScore || 0) },
+            { title: "操作", render: (_: unknown, item: RandomConfig) => <Button theme="borderless" type="danger" disabled={locked} onClick={() => remove(item.bankId)}>移除</Button> }
+          ]} />
         </div>
       </div>}
       <div className="mt-5 flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-5"><div className="text-sm text-slate-600">合计：<b className={total === Number(paper.totalScore) ? "text-green-600" : "text-orange-500"}>{total}</b> 分 <span className="text-slate-400">/ 试卷设定 {paper.totalScore} 分</span></div><div className="flex gap-3"><Button theme="solid" type="warning" disabled={locked} onClick={() => save()}>保存配置</Button><Button theme="solid" type="primary" disabled={locked} onClick={() => save(true)}>完成组卷</Button></div></div>
@@ -107,12 +108,12 @@ export function RandomComposePanel({ paper, locked, onCompleted }: Props) {
     <Modal title="选择题库" visible={modalVisible} onCancel={() => setModalVisible(false)} footer={null} width={460}>
       <div className="mb-4 flex gap-5 border-b border-slate-100 text-sm">
         {([["mine", "我的题库"], ["favorite", "收藏的题库"], ["public", "公开题库"]] as const).map(([value, label]) => (
-          <button key={value} className={`pb-3 ${tab === value ? "border-b-2 border-blue-500 font-semibold text-blue-600" : "text-slate-500"}`} onClick={() => setTab(value)}>{label}</button>
+          <Button theme="borderless" key={value} className={`pb-3 ${tab === value ? "border-b-2 border-blue-500 font-semibold text-blue-600" : "text-slate-500"}`} onClick={() => setTab(value)}>{label}</Button>
         ))}
       </div>
       <div className="h-[420px] overflow-y-auto pr-1">
         <div className="space-y-3">
-          {banks.filter((bank) => !items.some((item) => item.bankId === bank.id)).map((bank) => <button key={bank.id} className="w-full rounded-lg border border-slate-200 p-4 text-left transition hover:border-blue-400 hover:bg-blue-50" onClick={() => selectBank(bank)}><div className="font-medium text-slate-800">{bank.name}</div><div className="mt-1 text-xs text-slate-400">共 {bank.questionCount} 题</div></button>)}
+          {banks.filter((bank) => !items.some((item) => item.bankId === bank.id)).map((bank) => <Button theme="borderless" key={bank.id} className="w-full rounded-lg border border-slate-200 p-4 text-left transition hover:border-blue-400 hover:bg-blue-50" onClick={() => selectBank(bank)}><div className="font-medium text-slate-800">{bank.name}</div><div className="mt-1 text-xs text-slate-400">共 {bank.questionCount} 题</div></Button>)}
           {!banks.filter((bank) => !items.some((item) => item.bankId === bank.id)).length && <div className="py-8 text-center text-sm text-slate-400">暂无可添加题库</div>}
         </div>
       </div>

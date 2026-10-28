@@ -1,3 +1,5 @@
+
+import { IconArrowLeft, IconEdit } from "@/features/exam/components/ExamIcons";
 import { ExamRunner } from "@/features/exam/components/ExamRunner";
 import { loadExamPaper } from "@/features/exam/load-paper";
 
@@ -22,11 +24,11 @@ export default async function ExamAnswerPage({
           href="/profile"
           className="mb-4 block py-1 text-sm text-slate-500 no-underline"
         >
-          ← 返回个人中心
+          <IconArrowLeft aria-hidden="true" /> 返回个人中心
         </a>
         <div className="mb-6 text-center">
           <div className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-xl bg-[#dff7f5] text-2xl">
-            📝
+            <IconEdit aria-hidden="true" />
           </div>
           <h1 className="break-words text-xl font-bold leading-8 text-slate-800 sm:text-2xl">
             {paper.title}

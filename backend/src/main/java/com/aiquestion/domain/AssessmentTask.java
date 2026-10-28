@@ -9,6 +9,9 @@ import java.time.LocalDateTime;
  * @author aiquestion
  */
 public class AssessmentTask {
+  private Long createdBy;
+  public Long getCreatedBy() { return createdBy; }
+  public void setCreatedBy(Long value) { createdBy = value; }
   private Long id;
   private String name;
   private Long paperId;

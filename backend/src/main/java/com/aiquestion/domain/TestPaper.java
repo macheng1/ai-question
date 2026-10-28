@@ -9,6 +9,9 @@ import java.math.BigDecimal;
  * @author aiquestion
  */
 public class TestPaper {
+  private Long createdBy;
+  public Long getCreatedBy() { return createdBy; }
+  public void setCreatedBy(Long value) { createdBy = value; }
   private Long id;
   private String name;
   private String description;

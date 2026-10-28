@@ -1,5 +1,7 @@
 "use client";
 
+import { AppIcon } from "@/components/ui/AppIcon";
+
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState } from "react";
@@ -40,7 +42,7 @@ export function Header() {
         <Image src="/brand-logo.png" alt="智企云考 Logo" width={44} height={44} priority className="h-11 w-11 object-contain" />
         <span><strong className="block text-[15px] tracking-wide">智企云考</strong><small className="mt-1 block text-[10px] text-slate-400">企业培训考试，一站式管理</small></span>
       </Link>
-      <button className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 shadow-sm sm:hidden" onClick={() => setOpen(!open)} aria-label="打开导航">☰</button>
+      <Button className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 shadow-sm sm:hidden" onClick={() => setOpen(!open)} aria-label="打开导航"><AppIcon name="menu" /></Button>
       <nav className={`${open ? "flex" : "hidden"} absolute left-0 right-0 top-[72px] z-20 flex-col gap-1 border-b border-slate-200 bg-white p-4 shadow-xl sm:absolute sm:left-1/2 sm:right-auto sm:top-1/2 sm:flex sm:w-max sm:flex-row sm:items-center sm:gap-2 sm:whitespace-nowrap sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none sm:-translate-x-1/2 sm:-translate-y-1/2`}>
         <Link onClick={close} className={navClass("/")} href="/">首页</Link>
         <Link onClick={close} className={navClass("/banks")} href="/banks">题库大全</Link>
@@ -57,7 +59,7 @@ export function Header() {
           </Link>
           <div className="absolute right-0 top-10 hidden w-32 rounded-lg border border-slate-200 bg-white p-1 shadow-lg group-hover:block">
             <Link onClick={close} href="/profile" className="block rounded-md px-3 py-2 text-xs text-slate-600 no-underline hover:bg-[#effbfb] hover:text-[#239f99]">个人中心</Link>
-            <button onClick={logout} className="block w-full rounded-md px-3 py-2 text-left text-xs text-slate-500 hover:bg-orange-50 hover:text-orange-600">退出登录</button>
+            <Button onClick={logout} className="block w-full rounded-md px-3 py-2 text-left text-xs text-slate-500 hover:bg-orange-50 hover:text-orange-600">退出登录</Button>
           </div>
         </div> : <Link onClick={close} className="rounded-lg bg-[#ff8500] px-4 py-2.5 text-center text-sm font-bold text-white shadow-sm shadow-orange-100 transition hover:bg-[#eb7600] sm:hidden" href="/login">登录/注册</Link>}
       </nav>
@@ -68,7 +70,7 @@ export function Header() {
         </Link>
         <div className="absolute right-0 top-12 hidden w-32 rounded-lg border border-slate-200 bg-white p-1 shadow-lg group-hover:block">
           <Link onClick={close} href="/profile" className="block rounded-md px-3 py-2 text-xs text-slate-600 no-underline hover:bg-[#effbfb] hover:text-[#239f99]">个人中心</Link>
-          <button onClick={logout} className="block w-full rounded-md px-3 py-2 text-left text-xs text-slate-500 hover:bg-orange-50 hover:text-orange-600">退出登录</button>
+          <Button onClick={logout} className="block w-full rounded-md px-3 py-2 text-left text-xs text-slate-500 hover:bg-orange-50 hover:text-orange-600">退出登录</Button>
         </div>
       </div> : <Link onClick={close} className="hidden rounded-lg bg-[#ff8500] px-4 py-2.5 text-center text-sm font-bold text-white shadow-sm shadow-orange-100 transition hover:bg-[#eb7600] sm:block" href="/login">登录/注册</Link>}
     </div>

@@ -1,3 +1,5 @@
+
+import { IconArrowLeft, IconEdit } from "@/features/exam/components/ExamIcons";
 import { ExamRunner } from "@/features/exam/components/ExamRunner";
 import { loadExamPaper } from "@/features/exam/load-paper";
 
@@ -15,12 +17,12 @@ export default async function ExamPage({
           href="/profile"
           className="mb-4 block text-sm text-slate-500 no-underline"
         >
-          ← 返回个人中心
+          <IconArrowLeft aria-hidden="true" /> 返回个人中心
         </a>
         <section className="overflow-hidden rounded-2xl bg-white shadow-sm">
           <div className="bg-gradient-to-r from-[#4bcac2] to-[#3db9ad] px-6 py-8 text-center text-white">
             <div className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-xl bg-white/80 text-2xl">
-              📝
+              <IconEdit aria-hidden="true" />
             </div>
             <h1 className="text-xl font-bold">
         {paper.title}
@@ -35,7 +37,7 @@ export default async function ExamPage({
               <Stat value={paper.passScore} label="及格分" orange />
             </div>
             <p className="mt-4 text-center text-xs text-slate-400">
-              考试时间：2026-08-21 23:18 ~ 2026-08-22 23:18
+              考试时间：{paper.startAt ? new Date(paper.startAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" }) : "不限"} ~ {paper.endAt ? new Date(paper.endAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" }) : "不限"}
             </p>
             <div className="mt-5 border-t border-slate-100 pt-4">
               <ExamRunner paper={paper} compact allowRestore={false} />

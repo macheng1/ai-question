@@ -1,7 +1,11 @@
 "use client";
+
+import { IconClose, IconTick } from "@/features/exam/components/ExamIcons";
 import { useEffect, useState } from "react";
 import "@douyinfe/semi-ui/react19-adapter";
-import { Toast } from "@douyinfe/semi-ui";
+import { Button, Input, Toast } from "@douyinfe/semi-ui";
+import { ExamTrainingVideos, loadExamLearning, type ExamLearning } from "@/features/trainings/components/ExamTrainingVideos";
+import { TrainingExamLinks } from "@/features/trainings/components/TrainingExamLinks";
 import type { ExamPaper } from "../types";
 import { loadExamPaper } from "../load-paper";
 import {
@@ -11,6 +15,12 @@ import {
   startPublicExam,
   submitPublicAttempt,
 } from "../api";
+
+const withTraining = (path: string) => {
+  if (typeof window === "undefined") return path;
+  const trainingId = new URLSearchParams(window.location.search).get("trainingId");
+  return trainingId && /^\d+$/.test(trainingId) ? `${path}${path.includes("?") ? "&" : "?"}trainingId=${trainingId}` : path;
+};
 
 const remainingSeconds = (
   startedAt: string | undefined,
@@ -65,7 +75,12 @@ const savedAnswerKeys = (
 
 const formatResultDate = (value?: string) => {
   if (!value) return "-";
-  return value.replace("T", " ").slice(0, 16);
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "-";
+  return date.toLocaleString("zh-CN", {
+    timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit",
+    day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
+  });
 };
 
 const formatResultDuration = (startedAt?: string, submittedAt?: string) => {
@@ -95,6 +110,7 @@ export function ExamRunner({
   initialShowAnswers = true,
   compact = false,
   allowRestore = true,
+  learningPage = false,
 }: {
   paper: ExamPaper;
   practice?: boolean;
@@ -121,6 +137,7 @@ export function ExamRunner({
   compact?: boolean;
   /** 是否从本地草稿恢复答题进度；考试入口页需要关闭，独立答题页保持开启。 */
   allowRestore?: boolean;
+  learningPage?: boolean;
 }) {
   const [stage, setStage] = useState<"info" | "answer" | "result">(
     initialStage,
@@ -151,6 +168,19 @@ export function ExamRunner({
   );
   const [restored, setRestored] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [learning, setLearning] = useState<ExamLearning>();
+  const [learningError, setLearningError] = useState("");
+  useEffect(() => {
+    if (!learningPage) return;
+    if (!initialName.trim() || !/^1\d{10}$/.test(initialPhone)) {
+      window.location.replace(`/kaoshi/${initialPaper.id}`); return;
+    }
+    let active = true;
+    loadExamLearning(initialPaper.id, initialName, initialPhone)
+      .then(data => { if (active) setLearning(data); })
+      .catch(e => { if (active) setLearningError(e.message || "学习进度加载失败"); });
+    return () => { active = false; };
+  }, [learningPage, initialPaper.id, initialName, initialPhone]);
   const draftKey = `aiquestion:exam-draft:${practice ? "practice" : "official"}:${paper.id}`;
   const q = activeQuestions[index];
   const score = result?.score || 0;
@@ -183,7 +213,7 @@ export function ExamRunner({
     setRestored(true);
   }, [allowRestore, draftKey, paper.duration, paper.questions.length]);
   useEffect(() => {
-    if (practice || initialStage !== "info") return;
+    if (practice || initialStage !== "info" || learningPage) return;
     try {
       const persisted = JSON.parse(
         localStorage.getItem("aiquestion-auth") || "null",
@@ -206,7 +236,7 @@ export function ExamRunner({
             query.set("attemptId", String(progress.attemptId));
           }
           window.location.replace(
-            `/kaoshi/${paper.id}/answer?${query.toString()}`,
+            withTraining(`/kaoshi/${paper.id}/answer?${query.toString()}`),
           );
         })
         .catch(() => {
@@ -215,7 +245,7 @@ export function ExamRunner({
     } catch {
       /* ignore an invalid persisted session */
     }
-  }, [initialStage, paper.id, practice]);
+  }, [initialStage, paper.id, practice, learningPage]);
   useEffect(() => {
     if (
       practice ||
@@ -294,7 +324,7 @@ export function ExamRunner({
         }
       })
       .catch(() => {
-        /* 页面仍可展示，提交时会提示考试记录不存在 */
+        window.location.replace(`/kaoshi/${paper.id}`);
       });
   }, [attemptId, initialStage, name, paper.id, phone, practice]);
   useEffect(() => {
@@ -371,12 +401,27 @@ export function ExamRunner({
     }
     setStarting(true);
     try {
+      const now = Date.now();
+      if (paper.taskStatus === "DISABLED" || paper.taskStatus === "ENDED" || (paper.endAt && now >= Date.parse(paper.endAt))) throw new Error("考试已结束，不能继续答题");
+      if (paper.startAt && now < Date.parse(paper.startAt)) throw new Error("考试尚未开始");
       // 先检查重考资格；服务端 start 接口仍会再次校验，防止并发或绕过前端。
       const eligibility = await checkPublicExamEligibility(paper.id, {
         name,
         phone,
       });
       setRemainingAttempts(eligibility.remainingAttempts);
+      // 续考和已用完次数的成绩跳转维持原逻辑；新答题实例必须先完成全部关联视频。
+      if (eligibility.canStart && !eligibility.inProgress) {
+        const requiredLearning = await loadExamLearning(paper.id, name, phone);
+        if (requiredLearning.videos.some(video => !video.completed)) {
+          if (learningPage) setLearning(requiredLearning);
+          else {
+            const query = new URLSearchParams({ name: name.trim(), phone: phone.trim() });
+            window.location.assign(`/kaoshi/${paper.id}/learning?${query}`);
+          }
+          return;
+        }
+      }
       const started = await startPublicExam(paper.id, { name, phone });
       const runtimePaper = await loadExamPaper(String(paper.id), { attemptId: started.attemptId });
       setActiveQuestions(runtimePaper.questions);
@@ -407,7 +452,7 @@ export function ExamRunner({
         setRemainingAttempts(started.remainingAttempts || 0);
         sessionStorage.removeItem(draftKey);
         window.location.assign(
-          `/kaoshi/${paper.id}/result?attemptId=${started.attemptId}`,
+          withTraining(`/kaoshi/${paper.id}/result?attemptId=${started.attemptId}`),
         );
         return;
       }
@@ -431,11 +476,7 @@ export function ExamRunner({
         // 将本次随机抽题实例传给答题页，首屏直接加载固定的随机快照。
         attemptId: String(started.attemptId),
       });
-      window.open(
-        `/kaoshi/${paper.id}/answer?${query.toString()}`,
-        "_blank",
-        "noopener,noreferrer",
-      );
+      window.location.assign(withTraining(`/kaoshi/${paper.id}/answer?${query.toString()}`));
     } catch (error) {
       Toast.error(error instanceof Error ? error.message : "无法开始考试");
     } finally {
@@ -450,12 +491,12 @@ export function ExamRunner({
     const unansweredIndex = paper.questions.findIndex(
       (question) => !(answers[question.id] || []).length,
     );
-    if (unansweredIndex >= 0) {
+    if (unansweredIndex >= 0 && (practice || seconds > 0)) {
       setIndex(unansweredIndex);
       Toast.error(`第 ${unansweredIndex + 1} 题未作答，请完成所有题目后再提交`);
       return;
     }
-    if (!(await persistAnswer(q.id, answers[q.id] || []))) return;
+    if ((practice || seconds > 0) && !(await persistAnswer(q.id, answers[q.id] || []))) return;
     if (!practice)
       try {
         if (!attemptId) throw new Error("考试记录不存在，请重新开始考试");
@@ -464,7 +505,7 @@ export function ExamRunner({
         setRemainingAttempts(submittedResult.remainingAttempts || 0);
         if (!practice) {
           window.location.assign(
-            `/kaoshi/${paper.id}/result?attemptId=${attemptId}`,
+            withTraining(`/kaoshi/${paper.id}/result?attemptId=${attemptId}`),
           );
           return;
         }
@@ -494,6 +535,10 @@ export function ExamRunner({
     // 清理旧版本遗留的持久化自测记录，避免升级后仍显示历史数据。
     localStorage.removeItem("aiquestion:records");
   };
+  if (stage === "info" && learningPage) {
+    if (!learning) return <div className="space-y-4 py-8 text-center"><p>{learningError || "正在恢复学习进度…"}</p>{learningError && <Button onClick={() => window.location.reload()}>重新加载</Button>}</div>;
+    return <ExamTrainingVideos key={learning.token} examId={paper.id} data={learning} starting={starting} onBack={() => window.location.assign(`/kaoshi/${paper.id}`)} onContinue={beginExam} />;
+  }
   if (stage === "info")
     return (
       <section
@@ -513,39 +558,36 @@ export function ExamRunner({
           <div className="mt-4 space-y-4">
             <label className="block text-xs font-medium text-slate-600">
               姓名 <span className="text-red-500">*</span>
-              <input
-                className="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-teal-400"
+              <Input
+                className="mt-2 w-full"
+                size="large"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(value) => setName(value)}
                 placeholder="请输入姓名"
               />
             </label>
             <label className="block text-xs font-medium text-slate-600">
               手机号 <span className="text-red-500">*</span>
-              <input
-                className="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-teal-400"
+              <Input
+                className="mt-2 w-full"
+                size="large"
+                type="tel"
+                maxLength={11}
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(value) => setPhone(value.trim())}
                 placeholder="请输入11位手机号"
               />
             </label>
-            <label className="block text-xs font-medium text-slate-600">
-              工种/职务{" "}
-              <span className="font-normal text-slate-400">（选填）</span>
-              <input
-                className="mt-2 w-full rounded-lg border border-slate-200 px-4 py-3 text-sm outline-none focus:border-teal-400"
-                placeholder="请输入工种或职务（选填）"
-              />
-            </label>
+
           </div>
         )}
-        <button
-          className="mt-5 w-full rounded-lg bg-[#ff8500] px-5 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+        <Button theme="solid" type="warning" size="large" loading={starting}
+          className="mt-5 w-full"
           onClick={beginExam}
           disabled={starting}
         >
           {starting ? "正在检查考试记录…" : `开始${practice ? "自测" : "考试"}`}
-        </button>
+        </Button>
       </section>
     );
   if (stage === "answer" && !q)
@@ -653,7 +695,7 @@ export function ExamRunner({
                     <span
                       className={`shrink-0 text-sm font-semibold ${correct ? "text-emerald-600" : "text-red-500"}`}
                     >
-                      {correct ? "✓" : "×"} {correct ? question.score || 0 : 0}{" "}
+                      {correct ? <IconTick aria-hidden="true" /> : <IconClose aria-hidden="true" />} {correct ? question.score || 0 : 0}{" "}
                       分
                     </span>
                   </div>
@@ -694,18 +736,19 @@ export function ExamRunner({
           </div>
         </section>
         )}
+        <TrainingExamLinks examId={String(paper.id)} />
         <div className="flex flex-col justify-center gap-3 sm:flex-row sm:flex-wrap">
-          <button
-            type="button"
+          <Button theme="borderless"
+            htmlType="button"
             onClick={() => window.print()}
             className="print-hidden w-full rounded-lg bg-[#ff8500] px-6 py-3 text-sm font-bold text-white sm:w-auto"
           >
             打印成绩
-          </button>
+          </Button>
           {remainingAttempts > 0 && (
             <a
               className="print-hidden w-full rounded-lg bg-[#ff8500] px-6 py-3 text-center text-sm font-bold text-white no-underline sm:w-auto"
-              href={`/kaoshi/${paper.id}`}
+              href={withTraining(`/kaoshi/${paper.id}`)}
             >
               重做（还可 {remainingAttempts} 次）
             </a>
@@ -773,44 +816,48 @@ export function ExamRunner({
                 : "单选题"}
           </p>
         </div>
-        <div className="mt-4 grid gap-3 sm:mt-5">
+        <div className="mt-4 grid gap-2.5 sm:mt-5">
           {options.map((option) => (
-            <button
+            <Button theme="borderless"
               key={option.key}
+              aria-pressed={picked.includes(option.key)}
+              style={{ height: "auto", minHeight: 52, padding: "12px 14px", whiteSpace: "normal", justifyContent: "flex-start" }}
               onClick={() => choose(option.key)}
-              className={`flex min-h-14 w-full items-start gap-3 rounded-xl border p-3 text-left text-sm leading-6 sm:items-center sm:p-4 sm:text-base ${picked.includes(option.key) ? "border-teal-400 bg-teal-50" : "border-slate-200 bg-white"}`}
+              className={`w-full rounded-xl border text-left text-sm leading-6 sm:text-base ${picked.includes(option.key) ? "border-teal-400 bg-teal-50" : "border-slate-200 bg-white"}`}
             >
+              <span className="flex w-full items-start gap-3">
               <span
-                className={`grid h-7 w-7 place-items-center rounded-full text-xs ${picked.includes(option.key) ? "bg-[#2db9b0] text-white" : "bg-slate-100 text-slate-500"}`}
+                className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs ${picked.includes(option.key) ? "bg-[#2db9b0] text-white" : "bg-slate-100 text-slate-500"}`}
               >
                 {option.key}
               </span>
-              {option.text}
-            </button>
+              <span className="min-w-0 flex-1 break-words py-0.5 text-left leading-6">{option.text}</span>
+              </span>
+            </Button>
           ))}
         </div>
-        <div className="mt-6 grid grid-cols-2 gap-3 sm:mt-7 sm:flex sm:justify-between">
-          <button
+        <div className="mt-5 grid grid-cols-2 gap-3 border-t border-slate-100 pt-4 sm:flex sm:justify-between">
+          <Button theme="borderless"
             className="w-full rounded-lg border border-teal-100 px-3 py-3 text-sm font-bold text-teal-700 disabled:opacity-40 sm:w-auto sm:px-5"
             disabled={index === 0}
             onClick={goPrevious}
           >
             上一题
-          </button>
-          {index < paper.questions.length - 1 ? (
-            <button
+          </Button>
+          {index < paper.questions.length - 1 && (practice || seconds > 0) ? (
+            <Button theme="borderless"
               className="w-full rounded-lg bg-[#ff8500] px-3 py-3 text-sm font-bold text-white sm:w-auto sm:px-5"
               onClick={goNext}
             >
               下一题
-            </button>
+            </Button>
           ) : (
-            <button
+            <Button theme="borderless"
               className="w-full rounded-lg bg-[#ff8500] px-3 py-3 text-sm font-bold text-white sm:w-auto sm:px-5"
               onClick={submit}
             >
               提交试卷
-            </button>
+            </Button>
           )}
         </div>
       </div>

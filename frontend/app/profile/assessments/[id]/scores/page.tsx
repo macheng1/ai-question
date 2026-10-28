@@ -1,10 +1,12 @@
 "use client";
 
+import { IconArrowLeft } from "@/features/exam/components/ExamIcons";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import "@douyinfe/semi-ui/react19-adapter";
-import { Spin, Tag, Toast } from "@douyinfe/semi-ui";
+import { Table,  Checkbox, Spin, Tag, Toast  } from "@douyinfe/semi-ui";
 import { PageShell } from "@/components/layout/PageShell";
 import { ProfileSidebar } from "@/components/layout/ProfileSidebar";
 import {
@@ -115,7 +117,7 @@ export default function AssessmentScoresPage() {
             href="/profile/assessments"
             className="text-sm font-semibold text-blue-600 no-underline"
           >
-            ← 返回考试管理
+            <IconArrowLeft aria-hidden="true" /> 返回考试管理
           </Link>
           <div className="mt-5">
             <h1 className="text-2xl font-bold text-slate-800">成绩统计</h1>
@@ -129,10 +131,9 @@ export default function AssessmentScoresPage() {
                 {task?.paperName || "当前试卷"}
               </div>
               <label className="flex items-center gap-2 text-sm text-slate-600">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={includeRetake}
-                  onChange={(event) => setIncludeRetake(event.target.checked)}
+                  onChange={(event) => setIncludeRetake(Boolean(event.target.checked))}
                 />
                 包含重考记录
               </label>
@@ -156,25 +157,9 @@ export default function AssessmentScoresPage() {
           </div>
           <div className="mt-5 overflow-x-auto rounded-2xl border border-slate-200 bg-white">
             <div className="min-w-[1080px]">
-              <div className="grid grid-cols-[60px_1.5fr_1.2fr_80px_100px_90px_90px_160px_60px] gap-3 bg-slate-50 px-5 py-4 text-xs text-slate-500">
-                <span>序号</span>
-                <span>考试</span>
-                <span>姓名</span>
-                <span>得分</span>
-                <span>状态</span>
-                <span>次数</span>
-                <span>用时</span>
-                <span>交卷时间</span>
-                <span>操作</span>
-              </div>
-              {records.map((record, index) => (
-                <div
-                  key={record.id}
-                  className="grid grid-cols-[60px_1.5fr_1.2fr_80px_100px_90px_90px_160px_60px] gap-3 border-t border-slate-100 px-5 py-4 text-sm text-slate-600"
-                >
-                  <span>{index + 1}</span>
-                  <span>{record.paperName || task?.paperName || "-"}</span>
-                  <span>
+              <Table dataSource={records} rowKey="id" pagination={false} scroll={{x: 1080}} columns={[{title: "序号", render: (_value: unknown, record: (typeof records)[number], index: number) => (<span>{index + 1}</span>)},
+{title: "考试", render: (_value: unknown, record: (typeof records)[number], index: number) => (<span>{record.paperName || task?.paperName || "-"}</span>)},
+{title: "姓名", render: (_value: unknown, record: (typeof records)[number], index: number) => (<span>
                     <b className="block font-normal text-slate-700">
                       {record.candidateName || record.phone || "匿名考生"}
                     </b>
@@ -186,29 +171,29 @@ export default function AssessmentScoresPage() {
                         （第{record.attemptNo}次）
                       </small>
                     )}
-                  </span>
-                  <span
+                  </span>)},
+{title: "得分", render: (_value: unknown, record: (typeof records)[number], index: number) => (<span
                     className={`font-semibold ${record.status === "VOID" ? "text-slate-400" : "text-slate-700"}`}
                   >
                     {record.status === "IN_PROGRESS"
                       ? "-"
                       : (record.score ?? 0)}
-                  </span>
-                  <span>
+                  </span>)},
+{title: "状态", render: (_value: unknown, record: (typeof records)[number], index: number) => (<span>
                     <Tag color={statusMeta(record).color} type="light" size="small">
                       {statusMeta(record).label}
                     </Tag>
-                  </span>
-                  <span>
+                  </span>)},
+{title: "次数", render: (_value: unknown, record: (typeof records)[number], index: number) => (<span>
                     {record.attemptNo === 1
                       ? "首次"
                       : `第 ${record.attemptNo} 次`}
-                  </span>
-                  <span>
+                  </span>)},
+{title: "用时", render: (_value: unknown, record: (typeof records)[number], index: number) => (<span>
                     {durationText(record.startedAt, record.submittedAt)}
-                  </span>
-                  <span>{textDate(record.submittedAt)}</span>
-                  {record.status !== "IN_PROGRESS" && (
+                  </span>)},
+{title: "交卷时间", render: (_value: unknown, record: (typeof records)[number], index: number) => (<span>{textDate(record.submittedAt)}</span>)},
+{title: "操作", render: (_value: unknown, record: (typeof records)[number], index: number) => (record.status !== "IN_PROGRESS" && (
                     <Link
                       href={`/kaoshi/${taskId}/result?attemptId=${record.id}`}
                       target="_blank"
@@ -216,9 +201,7 @@ export default function AssessmentScoresPage() {
                     >
                       查看
                     </Link>
-                  )}
-                </div>
-              ))}
+                  ))}]} />
               {!records.length && (
                 <div className="py-24 text-center text-sm text-slate-400">
                   暂无成绩记录

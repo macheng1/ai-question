@@ -1,9 +1,11 @@
 "use client";
 
+import { AppIcon } from "@/components/ui/AppIcon";
+
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import "@douyinfe/semi-ui/react19-adapter";
-import { Toast } from "@douyinfe/semi-ui";
+import { Toast, Button, Input, TextArea } from "@douyinfe/semi-ui";
 import { PageShell } from "@/components/layout/PageShell";
 import { ProfileSidebar } from "@/components/layout/ProfileSidebar";
 import {
@@ -169,9 +171,9 @@ export default function ProfilePage() {
             >
               <div className="flex items-center justify-between">
                 <span className="grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-lg text-blue-600">
-                  ▧
+                  <AppIcon name="book" />
                 </span>
-                <span className="text-xl text-slate-400">→</span>
+                <span className="text-xl text-slate-400"><AppIcon name="arrowRight" /></span>
               </div>
               <h3 className="mt-4 font-bold text-slate-800">我的考试</h3>
               <p className="mt-2 text-xs text-slate-400">
@@ -184,9 +186,9 @@ export default function ProfilePage() {
             >
               <div className="flex items-center justify-between">
                 <span className="grid h-10 w-10 place-items-center rounded-xl bg-red-50 text-lg text-red-500">
-                  ▤
+                  <AppIcon name="file" />
                 </span>
-                <span className="text-xl text-slate-400">→</span>
+                <span className="text-xl text-slate-400"><AppIcon name="arrowRight" /></span>
               </div>
               <h3 className="mt-4 font-bold text-slate-800">我的错题</h3>
               <p className="mt-2 text-xs text-slate-400">
@@ -199,9 +201,9 @@ export default function ProfilePage() {
             >
               <div className="flex items-center justify-between">
                 <span className="grid h-10 w-10 place-items-center rounded-xl bg-orange-50 text-lg text-orange-500">
-                  ☆
+                  <AppIcon name="star" />
                 </span>
-                <span className="text-xl text-slate-400">→</span>
+                <span className="text-xl text-slate-400"><AppIcon name="arrowRight" /></span>
               </div>
               <h3 className="mt-4 font-bold text-slate-800">我的收藏</h3>
               <p className="mt-2 text-xs text-slate-400">我收藏的公开题库</p>
@@ -210,7 +212,7 @@ export default function ProfilePage() {
           <h2 className="mt-7 text-base font-bold text-slate-600">账号设置</h2>
           <div className="mt-4 flex flex-col gap-4 rounded-xl border border-blue-400 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
-              <span className="text-xl text-blue-500">♢</span>
+              <span className="text-xl text-blue-500"><AppIcon name="user" /></span>
               <div>
                 <b className="block text-sm text-slate-800">账号设置</b>
                 <span className="mt-1 block text-xs text-slate-400">
@@ -219,18 +221,18 @@ export default function ProfilePage() {
               </div>
             </div>
             <div className="flex gap-5 text-sm">
-              <button
+              <Button
                 onClick={openProfileDialog}
                 className="text-slate-600 hover:text-blue-600"
               >
                 修改用户信息
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={openPasswordDialog}
                 className="text-slate-600 hover:text-blue-600"
               >
                 修改密码
-              </button>
+              </Button>
             </div>
           </div>
         </section>
@@ -250,39 +252,39 @@ export default function ProfilePage() {
               <h2 className="text-lg font-bold text-slate-800">
                 {dialog === "profile" ? "修改用户信息" : "修改密码"}
               </h2>
-              <button
+              <Button
                 aria-label="关闭"
                 className="text-2xl leading-none text-slate-400 hover:text-slate-700"
                 onClick={() => !saving && setDialog(null)}
               >
-                ×
-              </button>
+                <AppIcon name="close" />
+              </Button>
             </div>
             {dialog === "profile" ? (
               <div className="mt-6 space-y-4">
                 <label className="block text-sm font-medium text-slate-700">
                   用户名
-                  <input
+                  <Input
                     value={profileForm.name}
-                    onChange={(event) => setProfileForm({ ...profileForm, name: event.target.value })}
+                    onChange={(value) => setProfileForm({ ...profileForm, name: value })}
                     className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2.5 outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
                     maxLength={80}
                   />
                 </label>
                 <label className="block text-sm font-medium text-slate-700">
                   企业名称
-                  <input
+                  <Input
                     value={profileForm.unitName}
-                    onChange={(event) => setProfileForm({ ...profileForm, unitName: event.target.value })}
+                    onChange={(value) => setProfileForm({ ...profileForm, unitName: value })}
                     className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2.5 outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
                     maxLength={160}
                   />
                 </label>
                 <label className="block text-sm font-medium text-slate-700">
                   地址（选填）
-                  <textarea
+                  <TextArea
                     value={profileForm.address}
-                    onChange={(event) => setProfileForm({ ...profileForm, address: event.target.value })}
+                    onChange={(value) => setProfileForm({ ...profileForm, address: value })}
                     className="mt-2 min-h-24 w-full resize-y rounded-lg border border-slate-200 px-3 py-2.5 outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
                     maxLength={255}
                   />
@@ -297,10 +299,10 @@ export default function ProfilePage() {
                 ] as const).map(([label, key]) => (
                   <label key={key} className="block text-sm font-medium text-slate-700">
                     {label}
-                    <input
+                    <Input
                       type="password"
                       value={passwordForm[key]}
-                      onChange={(event) => setPasswordForm({ ...passwordForm, [key]: event.target.value })}
+                      onChange={(value) => setPasswordForm({ ...passwordForm, [key]: value })}
                       className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2.5 outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
                       maxLength={64}
                     />
@@ -309,20 +311,20 @@ export default function ProfilePage() {
               </div>
             )}
             <div className="mt-7 flex justify-end gap-3">
-              <button
+              <Button
                 className="rounded-lg border border-slate-200 px-5 py-2.5 text-sm text-slate-600 hover:bg-slate-50"
                 onClick={() => setDialog(null)}
                 disabled={saving}
               >
                 取消
-              </button>
-              <button
+              </Button>
+              <Button
                 className="rounded-lg bg-[#f97316] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#ea580c] disabled:cursor-not-allowed disabled:opacity-60"
                 onClick={dialog === "profile" ? saveProfile : savePassword}
                 disabled={saving}
               >
                 {saving ? "保存中..." : "保存"}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

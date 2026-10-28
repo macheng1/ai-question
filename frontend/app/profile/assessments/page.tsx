@@ -1,16 +1,10 @@
 "use client";
+import { IconPlus } from "@/features/exam/components/ExamIcons";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import "@douyinfe/semi-ui/react19-adapter";
-import {
-  Button,
-  DatePicker,
-  Input,
-  Modal,
-  Spin,
-  Toast,
-} from "@douyinfe/semi-ui";
+import { Button, DatePicker, Input, Modal, Spin, Toast } from "@douyinfe/semi-ui";
 import { PageShell } from "@/components/layout/PageShell";
 import { ProfileSidebar } from "@/components/layout/ProfileSidebar";
 import {
@@ -121,12 +115,12 @@ export default function AssessmentManagementPage() {
                 管理已发布的考试任务、成绩和考生入口
               </p>
             </div>
-            <button
+            <Button theme="borderless"
               onClick={openArrange}
               className="rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white"
             >
-              + 安排考试
-            </button>
+              <IconPlus aria-hidden="true" /> 安排考试
+            </Button>
           </div>
           <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 lg:flex-row lg:items-center">
             <div className="flex flex-1 items-center gap-3">
@@ -204,12 +198,12 @@ export default function AssessmentManagementPage() {
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-4 text-sm">
-                        <button
+                        <Button theme="borderless"
                           className="font-semibold text-slate-700"
                           onClick={() => setEditing(item)}
                         >
                           编辑
-                        </button>
+                        </Button>
                         <Link
                           className="text-blue-500 no-underline"
                           href={`/profile/assessments/${item.id}/scores`}
@@ -224,26 +218,26 @@ export default function AssessmentManagementPage() {
                             统计
                           </Link>
                         )}
-                        <button
+                        <Button theme="borderless"
                           className="text-blue-500"
                           onClick={() => setSelected(item)}
                         >
                           二维码
-                        </button>
+                        </Button>
                         {label !== "已结束" && (
-                          <button
+                          <Button theme="borderless"
                             className="text-orange-500"
                             onClick={() => forceEnd(item)}
                           >
                             强制结束考试
-                          </button>
+                          </Button>
                         )}
-                        <button
+                        <Button theme="borderless"
                           className="text-red-500"
                           onClick={() => remove(item)}
                         >
                           删除
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   </article>

@@ -1,5 +1,7 @@
 "use client";
 
+import { IconArrowLeft, IconLock } from "@/features/exam/components/ExamIcons";
+
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -280,7 +282,7 @@ export default function ComposePaperPage() {
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-white px-5 py-3 sm:px-8">
           <div className="flex items-center gap-3 text-sm">
             <Link href="/profile/papers" className="text-slate-500 no-underline">
-              ← 返回
+              <IconArrowLeft aria-hidden="true" /> 返回
             </Link>
             <strong className="text-lg text-slate-800">{paper?.name}</strong>
             <span className="rounded bg-blue-50 px-2 py-1 text-blue-600">
@@ -291,7 +293,7 @@ export default function ComposePaperPage() {
             </span>
             {locked && (
               <span className="rounded bg-slate-200 px-2 py-1 text-slate-600">
-                🔒 已锁定
+                <IconLock aria-hidden="true" /> 已锁定
               </span>
             )}
           </div>
@@ -331,24 +333,24 @@ export default function ComposePaperPage() {
         <div className="mx-auto grid min-h-[650px] max-w-[1440px] gap-4 p-4 lg:grid-cols-2 lg:p-5">
           <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
             <div className="flex flex-wrap gap-5 border-b border-slate-100 px-5 pt-4 text-sm font-semibold">
-              <button
+              <Button theme="borderless"
                 className={`pb-3 ${bankSource === "owned" ? "border-b-2 border-blue-500 text-blue-500" : "text-slate-500"}`}
                 onClick={() => changeBankSource("owned")}
               >
                 我的题库
-              </button>
-              <button
+              </Button>
+              <Button theme="borderless"
                 className={`pb-3 ${bankSource === "favorite" ? "border-b-2 border-blue-500 text-blue-500" : "text-slate-500"}`}
                 onClick={() => changeBankSource("favorite")}
               >
                 收藏的题库
-              </button>
-              <button
+              </Button>
+              <Button theme="borderless"
                 className={`pb-3 ${bankSource === "public" ? "border-b-2 border-blue-500 text-blue-500" : "text-slate-500"}`}
                 onClick={() => changeBankSource("public")}
               >
                 公开题库
-              </button>
+              </Button>
             </div>
             <div className="flex flex-wrap gap-2 p-4">
               <Select
@@ -400,7 +402,7 @@ export default function ComposePaperPage() {
             </div>
             <div className="max-h-[720px] space-y-2 overflow-y-auto bg-slate-50/40 p-2">
               {visibleQuestions.map((item, index) => (
-                <button
+                <Button theme="borderless"
                   key={item.id}
                   disabled={locked}
                   onClick={() => add(item)}
@@ -428,7 +430,7 @@ export default function ComposePaperPage() {
                       </div>
                     ))}
                   </div>
-                </button>
+                </Button>
               ))}
               {!visibleQuestions.length && (
                 <div className="py-24 text-center text-sm text-slate-400">

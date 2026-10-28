@@ -1,5 +1,7 @@
 "use client";
 
+import { IconArrowLeft } from "@/features/exam/components/ExamIcons";
+
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -77,7 +79,7 @@ export default function AssessmentStatisticsPage() {
                 href={`/profile/assessments`}
                 className="text-sm font-semibold text-blue-600 no-underline"
               >
-                ← 返回考试管理
+                <IconArrowLeft aria-hidden="true" /> 返回考试管理
               </Link>
               <h1 className="mt-5 text-2xl font-bold text-slate-800">考试统计</h1>
             </div>
@@ -97,7 +99,7 @@ export default function AssessmentStatisticsPage() {
                   <div>
                     <div className="flex flex-wrap items-center gap-3">
                       <h2 className="text-lg font-bold text-slate-800">{data.task.name}</h2>
-                      <Tag color="red" type="light">已结束</Tag>
+                      <Tag type="light">{data.task.status === "ENDED" || (data.task.endAt && Date.parse(data.task.endAt) <= Date.now()) ? "已结束" : data.task.status === "DISABLED" ? "已停用" : data.task.status === "DRAFT" ? "草稿" : data.task.startAt && Date.parse(data.task.startAt) > Date.now() ? "未开始" : "进行中"}</Tag>
                     </div>
                     <p className="mt-2 text-sm text-slate-500">
                       试卷：{data.task.paperName || data.task.paperId} · {dateText(data.task.startAt)} ～ {dateText(data.task.endAt)} · 时长 {data.task.durationMinutes} 分钟 · 满分 {data.overview.totalScore} 分 · 及格 {data.overview.passScore} 分

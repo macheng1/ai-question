@@ -30,7 +30,7 @@ public class QuestionItemService {
   }
   /** 管理端题目列表也必须返回选项，供组卷页面展示和选择。 */
   public PageResult<QuestionItem> page(Long bankId, PageQuery query, Long userId) {
-    if (bankId != null && bankRepository.findOwnedById(bankId, userId) == null) {
+    if (bankId == null || bankRepository.findOwnedById(bankId, userId) == null) {
       throw new BusinessException(ErrorCode.QUESTION_BANK_NOT_FOUND);
     }
     var records = repository.findPage(bankId, query);

@@ -1,5 +1,7 @@
 "use client";
 
+import { AppIcon } from "@/components/ui/AppIcon";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button, Empty, Tag, Toast } from "@douyinfe/semi-ui";
@@ -50,7 +52,7 @@ export default function FavoritesPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <Link href="/profile" className="text-sm text-slate-400 no-underline hover:text-blue-500">
-                ← 返回个人中心
+                <AppIcon name="arrowLeft" /> 返回个人中心
               </Link>
               <h1 className="mt-4 text-2xl font-bold text-slate-800">我的收藏</h1>
               <p className="mt-2 text-sm text-slate-500">查看我收藏的公开题库和题目</p>
@@ -79,7 +81,7 @@ export default function FavoritesPage() {
                       <span className="text-slate-400">共 {bank.questionCount || 0} 道题</span>
                       <div className="flex items-center gap-3">
                         <Link href={`/banks/${bank.id}`} className="text-blue-500 no-underline hover:text-blue-600">查看</Link>
-                        <button type="button" onClick={() => void removeFavorite(bank.id)} className="text-slate-400 hover:text-red-500">取消收藏</button>
+                        <Button htmlType="button" onClick={() => void removeFavorite(bank.id)} className="text-slate-400 hover:text-red-500">取消收藏</Button>
                       </div>
                     </div>
                   </article>

@@ -1,4 +1,5 @@
 "use client";
+import { IconPlus } from "@/features/exam/components/ExamIcons";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -108,7 +109,7 @@ export default function ManagedBanksPage() {
           <div className="flex items-center justify-between gap-3">
             <h1 className="text-2xl font-bold text-slate-800">题库管理</h1>
             <Button theme="solid" type="warning" onClick={() => setOpen(true)}>
-              + 新建题库
+              <IconPlus aria-hidden="true" /> 新建题库
             </Button>
           </div>
           <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:flex-row">
@@ -161,18 +162,18 @@ export default function ManagedBanksPage() {
                     题目管理
                   </Link>
                   <span className="flex gap-3">
-                    <button
+                    <Button theme="borderless"
                       onClick={() => edit(bank)}
                       className="text-slate-600"
                     >
                       编辑
-                    </button>
-                    <button
+                    </Button>
+                    <Button theme="borderless"
                       onClick={() => remove(bank.id)}
                       className="text-red-500"
                     >
                       删除
-                    </button>
+                    </Button>
                   </span>
                 </div>
               </article>

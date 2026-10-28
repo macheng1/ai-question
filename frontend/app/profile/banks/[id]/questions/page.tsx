@@ -1,17 +1,12 @@
 "use client";
 
+import { IconArrowLeft, IconPlus } from "@/features/exam/components/ExamIcons";
+
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import "@douyinfe/semi-ui/react19-adapter";
-import {
-  Button,
-  Input as SemiInput,
-  Modal,
-  Select,
-  TextArea as SemiTextArea,
-  Toast,
-} from "@douyinfe/semi-ui";
+import { Table,  Button, Input as SemiInput, Modal, Select, TextArea as SemiTextArea, Toast, Upload  } from "@douyinfe/semi-ui";
 import { PageShell } from "@/components/layout/PageShell";
 import { ProfileSidebar } from "@/components/layout/ProfileSidebar";
 import {
@@ -238,7 +233,7 @@ export default function QuestionsPage() {
             href="/profile/banks"
             className="text-sm font-semibold text-blue-600 no-underline"
           >
-            ← 返回题库管理
+            <IconArrowLeft aria-hidden="true" /> 返回题库管理
           </Link>
           <h1 className="mt-5 text-2xl font-bold text-slate-800">
             题库管理 -- 题目管理
@@ -278,26 +273,13 @@ export default function QuestionsPage() {
                 type="warning"
                 onClick={() => setOpen(true)}
               >
-                + 新增题目
+                <IconPlus aria-hidden="true" /> 新增题目
               </Button>
             </div>
           </section>
           <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-            <div className="grid grid-cols-[80px_110px_1fr_110px_130px_150px] gap-3 bg-slate-50 px-5 py-4 text-xs text-slate-500">
-              <span>ID</span>
-              <span>题型</span>
-              <span>题干</span>
-              <span>难度</span>
-              <span>答案</span>
-              <span>操作</span>
-            </div>
-            {visible.map((item) => (
-              <div
-                key={item.id}
-                className="grid grid-cols-[80px_110px_1fr_110px_130px_150px] gap-3 border-t border-slate-100 px-5 py-4 text-sm text-slate-600"
-              >
-                <span>{item.id}</span>
-                <span>
+            <Table dataSource={visible} rowKey="id" pagination={false} scroll={{x: 850}} columns={[{title: "ID", render: (_value: unknown, item: (typeof visible)[number], index: number) => (<span>{item.id}</span>)},
+{title: "题型", render: (_value: unknown, item: (typeof visible)[number], index: number) => (<span>
                   <b className="rounded-full bg-blue-50 px-2 py-1 text-xs text-blue-600">
                     {item.questionType === "MULTIPLE"
                       ? "多选"
@@ -305,26 +287,24 @@ export default function QuestionsPage() {
                         ? "判断"
                         : "单选"}
                   </b>
-                </span>
-                <span className="truncate">{item.stem}</span>
-                <span>{item.difficulty || "-"}</span>
-                <span>{item.answerText || "-"}</span>
-                <span className="flex gap-3">
-                  <button
+                </span>)},
+{title: "题干", render: (_value: unknown, item: (typeof visible)[number], index: number) => (<span className="truncate">{item.stem}</span>)},
+{title: "难度", render: (_value: unknown, item: (typeof visible)[number], index: number) => (<span>{item.difficulty || "-"}</span>)},
+{title: "答案", render: (_value: unknown, item: (typeof visible)[number], index: number) => (<span>{item.answerText || "-"}</span>)},
+{title: "操作", render: (_value: unknown, item: (typeof visible)[number], index: number) => (<span className="flex gap-3">
+                  <Button theme="borderless"
                     onClick={() => edit(item.id)}
                     className="text-blue-500"
                   >
                     编辑
-                  </button>
-                  <button
+                  </Button>
+                  <Button theme="borderless"
                     onClick={() => remove(item.id)}
                     className="text-red-500"
                   >
                     删除
-                  </button>
-                </span>
-              </div>
-            ))}
+                  </Button>
+                </span>)}]} />
             {!visible.length && (
               <div className="py-12 text-center text-sm text-slate-400">
                 暂无题目，点击右上角新增
@@ -392,7 +372,7 @@ export default function QuestionsPage() {
             <div className="rounded-xl border border-slate-200 p-4">
               <div className="mb-3 flex justify-between text-sm text-slate-600">
                 <span>选项</span>
-                <button
+                <Button theme="borderless"
                   onClick={() =>
                     setOptions([
                       ...options,
@@ -405,8 +385,8 @@ export default function QuestionsPage() {
                   }
                   className="text-blue-500"
                 >
-                  + 添加选项
-                </button>
+                  <IconPlus aria-hidden="true" /> 添加选项
+                </Button>
               </div>
               {options.map((option, index) => (
                 <div key={index} className="mb-2 flex items-center gap-3">
@@ -419,7 +399,7 @@ export default function QuestionsPage() {
                     placeholder={`选项 ${option.optionKey}`}
                     className="flex-1"
                   />
-                  <button
+                  <Button theme="borderless"
                     onClick={() =>
                       setOptions(
                         options.filter((_, itemIndex) => itemIndex !== index),
@@ -428,7 +408,7 @@ export default function QuestionsPage() {
                     className="text-red-500"
                   >
                     删除
-                  </button>
+                  </Button>
                 </div>
               ))}
             </div>
@@ -533,12 +513,7 @@ export default function QuestionsPage() {
           >
             下载导入模板
           </Button>
-          <input
-            type="file"
-            accept=".xlsx"
-            className="block w-full rounded-lg border border-slate-200 p-2 text-sm"
-            onChange={(event) => setImportFile(event.target.files?.[0] || null)}
-          />
+          <Upload accept=".xlsx" limit={1} action="" uploadTrigger="custom" beforeUpload={({ file }) => { setImportFile(file.fileInstance || null); return { shouldUpload: false }; }} onRemove={() => setImportFile(null)}><Button>选择导入文件</Button></Upload>
         </div>
       </Modal>
     </PageShell>
