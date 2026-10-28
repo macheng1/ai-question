@@ -12,7 +12,8 @@ public class TrainingController {
   private final TrainingService service;
   private final JwtTokenService tokens;
   private final JdbcTemplate jdbc;
-  public TrainingController(TrainingService service, JwtTokenService tokens, JdbcTemplate jdbc) { this.service = service; this.tokens = tokens; this.jdbc = jdbc; }
+  private final com.aiquestion.service.TrainingVideoStorage storage;
+  public TrainingController(TrainingService service, JwtTokenService tokens, JdbcTemplate jdbc, com.aiquestion.service.TrainingVideoStorage storage) { this.service = service; this.tokens = tokens; this.jdbc = jdbc; this.storage = storage; }
   private long user(String authorization) {
     if (authorization == null || !authorization.startsWith("Bearer ")) throw new BusinessException(ErrorCode.UNAUTHORIZED);
     long id;
@@ -37,8 +38,6 @@ public class TrainingController {
   public ApiResponse<?> survey(@PathVariable long id, @RequestHeader(value="Authorization", required=false) String auth) { return ApiResponse.ok(service.survey(id, user(auth))); }
   @PostMapping("/trainings/{id}/survey")
   public ApiResponse<?> submit(@PathVariable long id, @RequestBody TrainingService.Submission command, @RequestHeader(value="Authorization", required=false) String auth) { service.submit(id, command, user(auth)); return ApiResponse.ok(null); }
-  @org.springframework.beans.factory.annotation.Value("${training.video-directory:./data/training-videos}")
-  private String videoDirectory;
   @GetMapping("/trainings/{id}")
   public ApiResponse<?> learning(@PathVariable long id,@RequestHeader(value="Authorization",required=false) String auth) { return ApiResponse.ok(service.learning(id,user(auth))); }
   public record Progress(double position,boolean completed) {}
@@ -53,17 +52,16 @@ public class TrainingController {
     byte[] head;try(var stream=file.getInputStream()){head=stream.readNBytes(12);}
     boolean valid=mp4 ? head[4]=='f'&&head[5]=='t'&&head[6]=='y'&&head[7]=='p' : (head[0]&255)==0x1a&&(head[1]&255)==0x45&&(head[2]&255)==0xdf&&(head[3]&255)==0xa3;
     if(!valid) throw new BusinessException(ErrorCode.BAD_REQUEST,"视频文件内容与扩展名不匹配");
-    var root=java.nio.file.Path.of(videoDirectory).toAbsolutePath().normalize(); java.nio.file.Files.createDirectories(root);
-    String key=UUID.randomUUID()+(mp4?".mp4":".webm"); var target=root.resolve(key);
-    try(var stream=file.getInputStream()){java.nio.file.Files.copy(stream,target);}
-    try{service.addVideo(id,uid,name.substring(0,Math.min(name.length(),255)),key,mp4?"video/mp4":"video/webm");}catch(RuntimeException e){java.nio.file.Files.deleteIfExists(target);throw e;}
+    String type=mp4?"video/mp4":"video/webm";
+    String key=storage.upload(file,type);
+    try { service.addVideo(id,uid,name.substring(0,Math.min(name.length(),255)),key,type); }
+    catch(RuntimeException e) { cleanupVideo(key); throw e; }
     return ApiResponse.ok(service.learning(id,uid));
   }
   @GetMapping("/trainings/{id}/videos/{video}/content")
   public org.springframework.http.ResponseEntity<org.springframework.core.io.Resource> content(@PathVariable long id,@PathVariable long video,@RequestHeader(value="Authorization",required=false) String auth) {
-    user(auth);var row=service.video(id,video);var root=java.nio.file.Path.of(videoDirectory).toAbsolutePath().normalize();var path=root.resolve(row.get("storage_path").toString()).normalize();
-    if(!path.startsWith(root)||!java.nio.file.Files.isRegularFile(path)) throw new BusinessException(ErrorCode.NOT_FOUND);
-    return org.springframework.http.ResponseEntity.ok().contentType(org.springframework.http.MediaType.parseMediaType(row.get("content_type").toString())).header("Cache-Control","private, no-store").body(new org.springframework.core.io.FileSystemResource(path));
+    service.get(id,user(auth));
+    return storage.content(service.video(id,video));
   }
   @DeleteMapping("/management/trainings/{id}/videos/{video}")
   public ApiResponse<?> removeVideo(@PathVariable long id,@PathVariable long video,@RequestHeader(value="Authorization",required=false) String auth) {
@@ -76,8 +74,8 @@ public class TrainingController {
     service.reorderVideos(id,user(auth),ids);return ApiResponse.ok(null);
   }
   private void cleanupVideo(String key) {
-    var root=java.nio.file.Path.of(videoDirectory).toAbsolutePath().normalize();var path=root.resolve(key).normalize();
-    if(path.startsWith(root)) try{java.nio.file.Files.deleteIfExists(path);}catch(java.io.IOException error){
+    try { storage.delete(key); }
+    catch (RuntimeException error) {
       org.slf4j.LoggerFactory.getLogger(TrainingController.class).warn("Training video cleanup failed for storage key {}",key,error);
     }
   }

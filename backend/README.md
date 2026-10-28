@@ -130,3 +130,19 @@ V22__add_xxx.sql
 mvn test
 mvn package
 ```
+
+### 培训视频 OSS 存储
+
+新培训视频复用 `ALIYUN_OSS_ACCESS_KEY_ID`、`ALIYUN_OSS_ACCESS_KEY_SECRET`、
+`ALIYUN_OSS_ENDPOINT`、`ALIYUN_OSS_BUCKET` 配置上传 OSS。配置缺失或上传失败会明确报错，不会回退到本地磁盘。
+对象位于 `training-videos/` 下，并在上传时设置私有 ACL；RAM 权限应包含该前缀的上传、读取、删除及设置对象 ACL 权限。
+管理预览校验培训归属，考生播放校验学习凭证，然后由后端流式读取 OSS；不会向客户端暴露永久公开地址或密钥，也不要求浏览器跨域访问 OSS。
+`training_video.storage_path` 保存 `oss:training-videos/<uuid>.mp4`（或 `.webm`），沿用已有字段，不新增迁移。
+删除培训或视频会清理对应 OSS 对象；清理异常写入日志，可按日志对象键补偿清理。
+
+无 `oss:` 前缀的历史记录仍兼容 `training.video-directory` 指向的本地文件。
+历史文件不会自动搬迁；发布前已有的本地视频应保留原目录，或通过培训编辑页重新上传至 OSS 后替换。
+新视频不依赖本地视频卷，但上传过程仍可能使用容器临时目录缓存 multipart 请求。
+
+可选真实 OSS 验证：设置 `RUN_OSS_LIVE_TEST=true`、`OSS_TEST_VIDEO` 为 MP4 样片绝对路径以及上述 OSS 环境变量，
+运行 `mvn test -Dtest=TrainingOssLiveTest`。测试会上传、完整读取比对并删除本次测试对象；默认测试不会访问 OSS。
