@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Banner, Button, Progress, Spin, Tag, VideoPlayer } from "@douyinfe/semi-ui";
-import { IconPlay, IconTick } from "@douyinfe/semi-icons";
+import { Banner, Button, Progress, Spin, VideoPlayer } from "@douyinfe/semi-ui";
+import { IconPlay, IconTick, IconClock, IconArrowRight } from "@douyinfe/semi-icons";
 import { apiClient } from "@/lib/api/client";
 
 export type ExamVideo = { id: number; trainingId: number; title: string; positionSeconds: number; completed: boolean };
@@ -106,15 +106,17 @@ export function ExamTrainingVideos({ examId, data, onBack, onContinue, starting 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src, selectedId, examId, data.token]);
 
-  return <section className="space-y-4">
-    <div className="flex items-center justify-between gap-3"><h3 className="font-semibold text-slate-700">考前视频学习</h3><Tag color={allCompleted ? "green" : "cyan"}>{completedCount} / {videos.length} 已完成</Tag></div>
-    <p className="text-sm leading-6 text-slate-500">请完整观看全部培训视频，再进入考试。学习期间不计考试用时，已保存的进度可继续观看。</p>
-    <Progress percent={Math.round(completedCount / Math.max(1, videos.length) * 100)} showInfo={false} />
-    <div className="space-y-2">{videos.map((v, i) => <Button key={v.id} block theme={v.id === selectedId ? "light" : "borderless"} icon={v.completed ? <IconTick /> : <IconPlay />} style={{ height: "auto", minHeight: 40, justifyContent: "flex-start", whiteSpace: "normal", textAlign: "left" }} disabled={saving || starting} onClick={async () => { player.current?.pause(); await retrySave.current?.(); setSelectedId(v.id); }}>{i + 1}. {v.title} · {v.completed ? "已观看" : "待完成"}</Button>)}</div>
-    {src ? <VideoPlayer key={src} ref={player} src={src} width="100%" height="auto" style={{ aspectRatio: "16 / 9", borderRadius: 12, overflow: "hidden" }} autoPlay={false} clickToPlay defaultPlaybackRate={1} muted={false} playbackRateList={[{ label: "1.0x", value: 1 }]} theme="dark" volume={80} controlsList={["play", "time", "volume", "fullscreen"]} /> : !error && <div className="flex h-48 items-center justify-center rounded-xl bg-slate-100"><Spin tip="正在加载视频…" /></div>}
-    {error && <Banner type="danger" description={error} closeIcon={null}>{src && <Button theme="borderless" disabled={saving} onClick={() => void retrySave.current?.()}>重试保存进度</Button>}<Button theme="borderless" disabled={saving} onClick={() => setRetry(n => n + 1)}>重新加载视频</Button></Banner>}
-    {saving && <p className="text-xs text-slate-400">正在保存观看进度…</p>}
-    <Button block theme="solid" type="warning" size="large" disabled={!allCompleted || saving || starting} loading={starting} onClick={onContinue}>{allCompleted ? "继续答题" : "请先完成全部视频学习"}</Button>
-    <Button block theme="borderless" disabled={saving || starting} onClick={async () => { player.current?.pause(); await retrySave.current?.(); onBack(); }}>返回填写信息</Button>
+  return <section>
+    <div className="h5-content">
+      {src ? <VideoPlayer key={src} ref={player} src={src} width="100%" height="auto" style={{ aspectRatio: "16 / 9", borderRadius: 15, overflow: "hidden" }} autoPlay={false} clickToPlay defaultPlaybackRate={1} muted={false} playbackRateList={[{ label: "1.0x", value: 1 }]} theme="dark" volume={80} controlsList={["play", "time", "volume", "fullscreen"]} /> : !error && <div className="flex h-48 items-center justify-center rounded-xl bg-slate-100"><Spin tip="正在加载视频…" /></div>}
+      {video && <div className="h5-video-resume"><IconClock /> {video.completed ? "本节视频已完成，可再次观看" : video.positionSeconds > 0 ? `已保存到 ${Math.floor(video.positionSeconds / 60)} 分 ${Math.floor(video.positionSeconds % 60)} 秒，下次可继续观看` : "观看进度自动保存，完成学习后进入考试"}</div>}
+      <h1 className="h5-video-title">{video?.title || "培训视频学习"}</h1><p className="h5-muted">请完整观看全部培训视频。学习期间不占用考试答题时间。</p>
+      <div className="h5-lesson-progress"><h2>课程完成进度</h2><span>{completedCount} / {videos.length} 节</span></div>
+      <Progress percent={Math.round(completedCount / Math.max(1, videos.length) * 100)} stroke="#53ab8b" showInfo={false} />
+      <div className="h5-lesson-list">{videos.map((v, i) => <Button key={v.id} block className={`h5-lesson ${v.id === selectedId ? "selected" : ""}`} theme="borderless" icon={v.completed ? <IconTick /> : <IconPlay />} disabled={saving || starting} onClick={async () => { player.current?.pause(); await retrySave.current?.(); setSelectedId(v.id); }}>{i + 1}. {v.title} · {v.completed ? "已完成" : "待完成"}</Button>)}</div>
+      {error && <Banner type="danger" description={error} closeIcon={null}>{src && <Button theme="borderless" disabled={saving} onClick={() => void retrySave.current?.()}>重试保存进度</Button>}<Button theme="borderless" disabled={saving} onClick={() => setRetry(n => n + 1)}>重新加载视频</Button></Banner>}
+      {saving && <p className="h5-muted" role="status">正在保存观看进度…</p>}
+    </div>
+    <div className="h5-bottom"><p>{allCompleted ? "全部视频已完成，可以开始考试" : "请先完成全部视频学习"}</p><Button block theme="solid" className="h5-primary" size="large" disabled={!allCompleted || saving || starting} loading={starting} onClick={onContinue}>{allCompleted ? "开始考试" : "完成学习后开始考试"}<IconArrowRight /></Button><Button block theme="borderless" className="h5-link" disabled={saving || starting} onClick={async () => { player.current?.pause(); await retrySave.current?.(); onBack(); }}>返回填写信息</Button></div>
   </section>;
 }

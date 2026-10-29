@@ -1,11 +1,11 @@
 "use client";
 
-import { IconClose, IconTick } from "@/features/exam/components/ExamIcons";
+import { IconClock, IconList, IconTick, IconArrowRight } from "@douyinfe/semi-icons";
+import { ExamResultView, type QuestionGrade } from "./ExamResultView";
 import { useEffect, useState } from "react";
 import "@douyinfe/semi-ui/react19-adapter";
-import { Button, Input, Toast } from "@douyinfe/semi-ui";
+import { Button, Input, Toast, Modal, Radio, RadioGroup, Checkbox, CheckboxGroup, Progress } from "@douyinfe/semi-ui";
 import { ExamTrainingVideos, loadExamLearning, type ExamLearning } from "@/features/trainings/components/ExamTrainingVideos";
-import { TrainingExamLinks } from "@/features/trainings/components/TrainingExamLinks";
 import type { ExamPaper } from "../types";
 import { loadExamPaper } from "../load-paper";
 import {
@@ -73,25 +73,6 @@ const savedAnswerKeys = (
   });
 };
 
-const formatResultDate = (value?: string) => {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return "-";
-  return date.toLocaleString("zh-CN", {
-    timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit",
-    day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
-  });
-};
-
-const formatResultDuration = (startedAt?: string, submittedAt?: string) => {
-  if (!startedAt || !submittedAt) return "-";
-  const duration = Math.max(0, Date.parse(submittedAt) - Date.parse(startedAt));
-  if (!Number.isFinite(duration)) return "-";
-  const seconds = Math.floor(duration / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  return minutes ? `${minutes}分${remainingSeconds}秒` : `${remainingSeconds}秒`;
-};
 export function ExamRunner({
   paper: initialPaper,
   practice = false,
@@ -111,6 +92,9 @@ export function ExamRunner({
   compact = false,
   allowRestore = true,
   learningPage = false,
+  details = false,
+  initialGrades,
+  resultAttemptId,
 }: {
   paper: ExamPaper;
   practice?: boolean;
@@ -138,6 +122,9 @@ export function ExamRunner({
   /** 是否从本地草稿恢复答题进度；考试入口页需要关闭，独立答题页保持开启。 */
   allowRestore?: boolean;
   learningPage?: boolean;
+  details?: boolean;
+  initialGrades?: QuestionGrade[];
+  resultAttemptId?: string;
 }) {
   const [stage, setStage] = useState<"info" | "answer" | "result">(
     initialStage,
@@ -168,6 +155,10 @@ export function ExamRunner({
   );
   const [restored, setRestored] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [cardOpen, setCardOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [navigating, setNavigating] = useState(false);
   const [learning, setLearning] = useState<ExamLearning>();
   const [learningError, setLearningError] = useState("");
   useEffect(() => {
@@ -483,7 +474,7 @@ export function ExamRunner({
       setStarting(false);
     }
   };
-  const submit = async () => {
+  const submitAnswers = async () => {
     if (!practice && (!name.trim() || !/^1\d{10}$/.test(phone))) {
       Toast.error("请填写正确的姓名和11位手机号");
       return;
@@ -535,239 +526,36 @@ export function ExamRunner({
     // 清理旧版本遗留的持久化自测记录，避免升级后仍显示历史数据。
     localStorage.removeItem("aiquestion:records");
   };
+  const submit = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    try { await submitAnswers(); } finally { setSubmitting(false); setConfirmOpen(false); }
+  };
+  const requestSubmit = async () => {
+    if (navigating || submitting) return;
+    setNavigating(true);
+    const saved = (practice || seconds > 0) ? await persistAnswer(q.id, answers[q.id] || []) : true;
+    setNavigating(false);
+    if (!saved) return;
+    const missing = paper.questions.findIndex(question => !(answers[question.id] || []).length);
+    if (missing >= 0 && (practice || seconds > 0)) {
+      setIndex(missing); setCardOpen(false);
+      Toast.warning(`第 ${missing + 1} 题未作答，请先完成`); return;
+    }
+    setCardOpen(false); setConfirmOpen(true);
+  };
   if (stage === "info" && learningPage) {
     if (!learning) return <div className="space-y-4 py-8 text-center"><p>{learningError || "正在恢复学习进度…"}</p>{learningError && <Button onClick={() => window.location.reload()}>重新加载</Button>}</div>;
     return <ExamTrainingVideos key={learning.token} examId={paper.id} data={learning} starting={starting} onBack={() => window.location.assign(`/kaoshi/${paper.id}`)} onContinue={beginExam} />;
   }
-  if (stage === "info")
-    return (
-      <section
-        className={
-          compact
-            ? ""
-            : "mt-8 max-w-xl rounded-2xl border border-slate-200 bg-white p-7 shadow-sm"
-        }
-      >
-        <h3 className="text-sm font-bold text-slate-700">填写信息</h3>
-        <p className="mt-2 text-sm text-slate-500">
-          {practice
-            ? "无需登录，答完即可查看解析。"
-            : "请填写姓名和手机号，交卷后可查询成绩。"}
-        </p>
-        {!practice && (
-          <div className="mt-4 space-y-4">
-            <label className="block text-xs font-medium text-slate-600">
-              姓名 <span className="text-red-500">*</span>
-              <Input
-                className="mt-2 w-full"
-                size="large"
-                value={name}
-                onChange={(value) => setName(value)}
-                placeholder="请输入姓名"
-              />
-            </label>
-            <label className="block text-xs font-medium text-slate-600">
-              手机号 <span className="text-red-500">*</span>
-              <Input
-                className="mt-2 w-full"
-                size="large"
-                type="tel"
-                maxLength={11}
-                value={phone}
-                onChange={(value) => setPhone(value.trim())}
-                placeholder="请输入11位手机号"
-              />
-            </label>
-
-          </div>
-        )}
-        <Button theme="solid" type="warning" size="large" loading={starting}
-          className="mt-5 w-full"
-          onClick={beginExam}
-          disabled={starting}
-        >
-          {starting ? "正在检查考试记录…" : `开始${practice ? "自测" : "考试"}`}
-        </Button>
-      </section>
-    );
-  if (stage === "answer" && !q)
-    return <div className="mx-auto mt-8 max-w-3xl rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-400">正在加载本次考试题目...</div>;
-  const optionsFor = (question: (typeof paper.questions)[number]) =>
-    question.options?.length
-      ? question.options
-      : question.kind === "judge"
-        ? [
-            { key: "A", text: "正确" },
-            { key: "B", text: "错误" },
-          ]
-        : [];
-  const answerLabel = (
-    question: (typeof paper.questions)[number],
-    keys: string[],
-  ) =>
-    keys
-      .map((key) => {
-        const option = optionsFor(question).find((item) => item.key === key);
-        return option ? `${option.key}. ${option.text}` : key;
-      })
-      .join("、");
-  const isAnswerCorrect = (
-    question: (typeof paper.questions)[number],
-    pickedKeys: string[],
-  ) => {
-    const correctKeys = question.answer || [];
-    if (!pickedKeys.length || !correctKeys.length) return false;
-    if (question.kind === "multi") {
-      const picked = new Set(pickedKeys);
-      return correctKeys.every((key) => picked.has(key));
-    }
-    return (
-      [...pickedKeys].sort().join(",") === [...correctKeys].sort().join(",")
-    );
-  };
-  const correctCount = paper.questions.filter((question) =>
-    isAnswerCorrect(question, answers[question.id] || []),
-  ).length;
-  const showAnswers = initialShowAnswers;
-  if (stage === "result")
-    return (
-      <div className="result-print-root mx-auto mt-4 max-w-3xl space-y-3 pb-6 sm:mt-8 sm:space-y-4 sm:pb-10">
-        <section className="result-print-card rounded-xl border border-slate-200 bg-white px-4 py-6 text-center shadow-sm sm:rounded-2xl sm:px-8 sm:py-7">
-          <h1 className="break-words text-xl font-bold leading-8 text-slate-800">{paper.title}</h1>
-          <p className="mt-2 break-words text-sm text-slate-500">{paper.subtitle}</p>
-          {(initialCandidateName || initialCandidatePhone) && (
-            <p className="mt-2 break-words text-sm text-slate-600">
-              {initialCandidateName || "匿名考生"} · {initialCandidatePhone || "-"}
-            </p>
-          )}
-          <p className="mt-1 text-xs text-slate-400">
-            第 {initialAttemptNo || 1} 次答题
-          </p>
-          <div className="mt-4 text-5xl font-bold text-slate-800 sm:text-6xl">
-            {score}
-            <small className="ml-2 text-lg font-medium text-slate-400">
-              分
-            </small>
-          </div>
-          <p className="mt-2 text-sm text-slate-500">
-            满分 {paper.totalScore}
-            {showAnswers && <> · 答对 {correctCount}/{paper.questions.length} 题</>}
-          </p>
-          {(initialStartedAt || initialSubmittedAt) && (
-            <p className="mt-2 text-xs text-slate-400">
-              开始：{formatResultDate(initialStartedAt)} · 交卷：
-              {formatResultDate(initialSubmittedAt)} · 用时：
-              {formatResultDuration(initialStartedAt, initialSubmittedAt)}
-            </p>
-          )}
-          <p
-            className={`mt-3 font-semibold ${score >= paper.passScore ? "text-emerald-600" : "text-orange-600"}`}
-          >
-            {score >= paper.passScore ? "恭喜，通过考试" : "本次未达到及格线"}
-          </p>
-        </section>
-        {showAnswers && (
-        <section className="result-print-card rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:rounded-2xl sm:p-7">
-          <h2 className="text-lg font-bold text-slate-800">答题详情</h2>
-          <div className="mt-4 divide-y divide-slate-100">
-            {paper.questions.map((question, questionIndex) => {
-              const pickedKeys = answers[question.id] || [];
-              const correct = isAnswerCorrect(question, pickedKeys);
-              return (
-                <article
-                  key={question.id}
-                  className="result-print-question py-5 first:pt-2 last:pb-2"
-                >
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
-                    <div className="min-w-0 break-words text-sm font-medium leading-6 text-slate-800">
-                      <span className="mr-2 text-slate-400">
-                        {questionIndex + 1}.
-                      </span>
-                      <span className="mr-2 rounded bg-blue-50 px-2 py-1 text-xs text-blue-600">
-                        {question.kind === "multi"
-                          ? "多选"
-                          : question.kind === "judge"
-                            ? "判断"
-                            : "单选"}
-                      </span>
-                      {question.title}
-                    </div>
-                    <span
-                      className={`shrink-0 text-sm font-semibold ${correct ? "text-emerald-600" : "text-red-500"}`}
-                    >
-                      {correct ? <IconTick aria-hidden="true" /> : <IconClose aria-hidden="true" />} {correct ? question.score || 0 : 0}{" "}
-                      分
-                    </span>
-                  </div>
-                  <div className="mt-3 grid gap-2 break-words text-sm text-slate-600 sm:grid-cols-2">
-                    {optionsFor(question).map((option) => (
-                      <div
-                        key={option.key}
-                        className={
-                          question.answer.includes(option.key)
-                            ? "font-medium text-emerald-600"
-                            : pickedKeys.includes(option.key)
-                              ? "font-medium text-red-500"
-                              : "text-slate-600"
-                        }
-                      >
-                        {option.key}. {option.text}
-                      </div>
-                    ))}
-                  </div>
-                  <p className="mt-2 text-xs text-slate-500">
-                    答案：
-                    {pickedKeys.length
-                      ? answerLabel(question, pickedKeys)
-                      : "未作答"}
-                  </p>
-                  <p className="mt-1 text-xs font-medium text-emerald-600">
-                    正确答案：
-                    {answerLabel(question, question.answer || []) ||
-                      "暂无答案"}
-                  </p>
-                  <div className="mt-2 break-words rounded-lg bg-amber-50 px-3 py-2 text-xs leading-6 text-slate-600">
-                    <span className="font-medium text-slate-700">解析：</span>
-                    {question.analysis || "暂无解析"}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        </section>
-        )}
-        <TrainingExamLinks examId={String(paper.id)} />
-        <div className="flex flex-col justify-center gap-3 sm:flex-row sm:flex-wrap">
-          <Button theme="borderless"
-            htmlType="button"
-            onClick={() => window.print()}
-            className="print-hidden w-full rounded-lg bg-[#ff8500] px-6 py-3 text-sm font-bold text-white sm:w-auto"
-          >
-            打印成绩
-          </Button>
-          {remainingAttempts > 0 && (
-            <a
-              className="print-hidden w-full rounded-lg bg-[#ff8500] px-6 py-3 text-center text-sm font-bold text-white no-underline sm:w-auto"
-              href={withTraining(`/kaoshi/${paper.id}`)}
-            >
-              重做（还可 {remainingAttempts} 次）
-            </a>
-          )}
-          <a
-            className="print-hidden w-full rounded-lg border border-slate-200 bg-white px-6 py-3 text-center text-sm font-bold text-slate-600 no-underline sm:w-auto"
-            href="/"
-          >
-            回到首页
-          </a>
-          <a
-            className="print-hidden w-full rounded-lg border border-slate-200 bg-white px-6 py-3 text-center text-sm font-bold text-slate-600 no-underline sm:w-auto"
-            href="/profile"
-          >
-            查看个人中心
-          </a>
-        </div>
-      </div>
-    );
+  if (stage === "info") return <section className={compact ? "h5-form" : "h5-form h5-content"}>
+    <h3 className="h5-section-title">填写考生信息</h3><p className="h5-muted">{practice ? "无需登录，答完即可查看解析。" : "用于记录学习与成绩，请准确填写。"}</p>
+    {!practice && <><label>姓名 <span>*</span><Input aria-label="姓名" size="large" maxLength={100} value={name} onChange={setName} placeholder="请输入姓名" /></label><label>手机号 <span>*</span><Input aria-label="手机号" size="large" type="tel" maxLength={11} value={phone} onChange={value => setPhone(value.trim())} placeholder="请输入11位手机号" /></label></>}
+    <div className="h5-hint"><IconClock /><span>如关联培训视频，请完成学习后再参加考试。已完成的学习可直接进入考试。</span></div>
+    <div className="h5-bottom" style={{ margin: "24px -22px -24px" }}><Button block theme="solid" size="large" className="h5-primary" loading={starting} disabled={starting} onClick={beginExam}>{starting ? "正在检查考试记录…" : practice ? "开始自测" : "确认信息，继续"}<IconArrowRight /></Button></div>
+  </section>;
+  if (stage === "answer" && !q) return <div className="h5-empty">正在加载本次考试题目…</div>;
+  if (stage === "result") return <ExamResultView paper={paper} score={score} passed={result?.passed ?? score >= paper.passScore} answers={answers} showAnswers={initialShowAnswers} grades={initialGrades} candidateName={initialCandidateName || name} candidatePhone={initialCandidatePhone || phone} attemptNo={initialAttemptNo} startedAt={initialStartedAt} submittedAt={initialSubmittedAt} remainingAttempts={remainingAttempts} attemptId={resultAttemptId} details={details} practice={practice} />;
   const picked = answers[q.id] || [];
   const options = q.options?.length
     ? q.options
@@ -779,88 +567,28 @@ export function ExamRunner({
       : [];
   const time = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 
-  const goPrevious = async () => {
-    if (!(await persistAnswer(q.id, picked))) return;
-    setIndex((current) => Math.max(0, current - 1));
+  const moveTo = async (target: number) => {
+    if (navigating || submitting) return;
+    setNavigating(true);
+    try { if (await persistAnswer(q.id, picked)) { setIndex(target); setCardOpen(false); } }
+    finally { setNavigating(false); }
   };
-
   const goNext = async () => {
-    if (!picked.length) {
-      Toast.error("请先完成本题后再进入下一题");
-      return;
-    }
-    if (!(await persistAnswer(q.id, picked))) return;
-    setIndex((current) =>
-      Math.min(paper.questions.length - 1, current + 1),
-    );
+    if (!picked.length) { Toast.warning("请先完成本题后再进入下一题"); return; }
+    await moveTo(Math.min(paper.questions.length - 1, index + 1));
   };
-  return (
-    <section className="mx-auto mt-4 max-w-3xl sm:mt-8">
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:rounded-2xl sm:p-8">
-        <div className="flex justify-between border-b border-slate-100 pb-4 text-sm text-slate-500">
-          <span>
-            第 {index + 1} / {paper.questions.length} 题
-            {attemptNo ? ` · 第 ${attemptNo} 次答题` : ""}
-          </span>
-          <b className="text-[#ff8500]">剩余 {time}</b>
-        </div>
-        <div className="mt-5 sm:mt-7">
-          <h3 className="break-words text-lg font-bold leading-8 text-slate-800 sm:text-xl sm:leading-9">
-            {q.title}
-          </h3>
-          <p className="mt-2 text-xs text-[#2db9b0]">
-            {q.kind === "multi"
-              ? "多选题"
-              : q.kind === "judge"
-                ? "判断题"
-                : "单选题"}
-          </p>
-        </div>
-        <div className="mt-4 grid gap-2.5 sm:mt-5">
-          {options.map((option) => (
-            <Button theme="borderless"
-              key={option.key}
-              aria-pressed={picked.includes(option.key)}
-              style={{ height: "auto", minHeight: 52, padding: "12px 14px", whiteSpace: "normal", justifyContent: "flex-start" }}
-              onClick={() => choose(option.key)}
-              className={`w-full rounded-xl border text-left text-sm leading-6 sm:text-base ${picked.includes(option.key) ? "border-teal-400 bg-teal-50" : "border-slate-200 bg-white"}`}
-            >
-              <span className="flex w-full items-start gap-3">
-              <span
-                className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs ${picked.includes(option.key) ? "bg-[#2db9b0] text-white" : "bg-slate-100 text-slate-500"}`}
-              >
-                {option.key}
-              </span>
-              <span className="min-w-0 flex-1 break-words py-0.5 text-left leading-6">{option.text}</span>
-              </span>
-            </Button>
-          ))}
-        </div>
-        <div className="mt-5 grid grid-cols-2 gap-3 border-t border-slate-100 pt-4 sm:flex sm:justify-between">
-          <Button theme="borderless"
-            className="w-full rounded-lg border border-teal-100 px-3 py-3 text-sm font-bold text-teal-700 disabled:opacity-40 sm:w-auto sm:px-5"
-            disabled={index === 0}
-            onClick={goPrevious}
-          >
-            上一题
-          </Button>
-          {index < paper.questions.length - 1 && (practice || seconds > 0) ? (
-            <Button theme="borderless"
-              className="w-full rounded-lg bg-[#ff8500] px-3 py-3 text-sm font-bold text-white sm:w-auto sm:px-5"
-              onClick={goNext}
-            >
-              下一题
-            </Button>
-          ) : (
-            <Button theme="borderless"
-              className="w-full rounded-lg bg-[#ff8500] px-3 py-3 text-sm font-bold text-white sm:w-auto sm:px-5"
-              onClick={submit}
-            >
-              提交试卷
-            </Button>
-          )}
-        </div>
-      </div>
-    </section>
-  );
+  const answeredCount = paper.questions.filter(question => (answers[question.id] || []).length).length;
+  const optionBody = (option: (typeof options)[number]) => <span className="h5-option-body"><span className="h5-option-key">{option.key}</span><span>{option.text}</span></span>;
+  return <section>
+    <div className="h5-exam-toolbar"><div className={`h5-timer ${seconds < 60 ? "urgent" : ""}`}><IconClock /><strong>{time}</strong><small>剩余时间</small></div><Button aria-label="打开答题卡" theme="borderless" className="h5-link" icon={<IconList />} onClick={() => setCardOpen(true)}>已答 {answeredCount}/{paper.questions.length}</Button></div>
+    <Progress percent={(index + 1) / Math.max(1, paper.questions.length) * 100} showInfo={false} stroke="#60af91" style={{ height: 3 }} />
+    <div className="h5-content h5-answer-content"><div className="h5-question-meta"><span className="h5-tag">{q.kind === "multi" ? "多选题" : q.kind === "judge" ? "判断题" : "单选题"}</span><span>本题 {q.score || 0} 分</span><b>{String(index + 1).padStart(2, "0")} <small>/ {String(paper.questions.length).padStart(2, "0")}</small></b></div>
+      <h1 className="h5-question" id="exam-question-title">{q.title}</h1><p className="h5-muted">{q.kind === "multi" ? "请选择所有符合题意的选项" : "请选择一个正确答案"}</p>
+      {q.kind === "multi" ? <CheckboxGroup aria-labelledby="exam-question-title" className="h5-answer-options" value={picked} disabled={navigating || submitting} onChange={values => setAnswers(current => ({ ...current, [q.id]: values.map(String) }))}>{options.map(option => <Checkbox key={option.key} value={option.key}>{optionBody(option)}</Checkbox>)}</CheckboxGroup> : <RadioGroup aria-labelledby="exam-question-title" className="h5-answer-options" value={picked[0]} disabled={navigating || submitting} onChange={e => choose(String(e.target.value))}>{options.map(option => <Radio key={option.key} value={option.key}>{optionBody(option)}</Radio>)}</RadioGroup>}
+      <p className="h5-save"><IconTick />答案保留在当前会话，切题时同步保存</p>
+    </div>
+    <div className="h5-bottom"><div className="h5-actions"><Button size="large" className="h5-secondary" disabled={index === 0 || navigating || submitting} onClick={() => moveTo(Math.max(0, index - 1))}>上一题</Button>{index < paper.questions.length - 1 && (practice || seconds > 0) ? <Button size="large" theme="solid" className="h5-primary" loading={navigating} disabled={submitting} onClick={goNext}>下一题 <IconArrowRight /></Button> : <Button size="large" theme="solid" className="h5-primary" loading={submitting} disabled={navigating} onClick={requestSubmit}>提交答卷</Button>}</div><Button theme="borderless" className="h5-link" onClick={() => setCardOpen(true)}>查看答题卡 · 检查并交卷</Button></div>
+    <Modal title="答题卡" visible={cardOpen} className="h5-modal-root" modalContentClass="h5-modal" style={{ width: "min(440px, calc(100vw - 28px))" }} footer={null} onCancel={() => setCardOpen(false)}><p className="h5-muted">已答 {answeredCount} / {paper.questions.length} 题，绿色为已答题目。</p><div className="h5-card-grid">{paper.questions.map((question, i) => <Button key={question.id} aria-label={`第 ${i + 1} 题${(answers[question.id] || []).length ? "，已答" : "，未答"}`} className={`${(answers[question.id] || []).length ? "answered" : ""} ${i === index ? "current" : ""}`} disabled={navigating || submitting} onClick={() => moveTo(i)}>{i + 1}</Button>)}</div><Button block size="large" theme="solid" onClick={requestSubmit} disabled={navigating || submitting}>提交答卷</Button></Modal>
+    <Modal title="确认提交答卷？" visible={confirmOpen} className="h5-modal-root" modalContentClass="h5-modal" style={{ width: "min(440px, calc(100vw - 28px))" }} okText="确认提交" cancelText="继续检查" confirmLoading={submitting} cancelButtonProps={{ disabled: submitting }} closable={!submitting} maskClosable={!submitting} onCancel={() => { if (!submitting) setConfirmOpen(false); }} onOk={submit}><p className="h5-muted">已完成 {answeredCount} / {paper.questions.length} 道题目。提交后将结束本次考试，无法修改答案。</p>{seconds === 0 && <p className="h5-muted">考试时间已到，请提交当前答卷。</p>}</Modal>
+  </section>;
 }

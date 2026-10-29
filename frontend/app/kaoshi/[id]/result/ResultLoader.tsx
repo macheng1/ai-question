@@ -8,13 +8,14 @@ import type { ExamPaper } from "@/features/exam/types";
 type ResultLoaderProps = {
   paper: ExamPaper;
   attemptId: string;
+  details?: boolean;
 };
 
 /**
  * 结果页只负责按答题记录加载数据，具体结果展示仍复用考试组件，
  * 保证正式考试和练习模式的详情样式、答案映射保持一致。
  */
-export function ResultLoader({ paper, attemptId }: ResultLoaderProps) {
+export function ResultLoader({ paper, attemptId, details = false }: ResultLoaderProps) {
   const [data, setData] = useState<{
     result: {
       score: number;
@@ -30,6 +31,7 @@ export function ResultLoader({ paper, attemptId }: ResultLoaderProps) {
     startedAt?: string;
     submittedAt?: string;
     showAnswers: boolean;
+    grades: { questionId: number; isCorrect: boolean; score: number }[];
   } | null>(null);
   const [error, setError] = useState("");
 
@@ -38,6 +40,7 @@ export function ResultLoader({ paper, attemptId }: ResultLoaderProps) {
     getPublicAttemptResult(attemptId)
       .then((response) => {
         if (!active) return;
+        if (String(response.taskId) !== String(paper.id)) throw new Error("答题记录与本场考试不匹配");
         const answers = Object.fromEntries(
           (response.answers || []).map((item) => {
             const question = paper.questions.find((q) => q.id === item.questionId);
@@ -68,6 +71,7 @@ export function ResultLoader({ paper, attemptId }: ResultLoaderProps) {
           startedAt: response.startedAt,
           submittedAt: response.submittedAt,
           showAnswers: response.showAnswers !== false,
+          grades: response.answers || [],
         });
       })
       .catch((reason) => {
@@ -112,6 +116,9 @@ export function ResultLoader({ paper, attemptId }: ResultLoaderProps) {
       initialSubmittedAt={data.submittedAt}
       initialShowAnswers={data.showAnswers}
       allowRestore={false}
+      details={details}
+      initialGrades={data.grades}
+      resultAttemptId={attemptId}
     />
   );
 }

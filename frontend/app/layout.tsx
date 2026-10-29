@@ -3,6 +3,7 @@ import "@douyinfe/semi-ui/react19-adapter";
 import "./tailwind.css";
 import "./globals.css";
 import "./interaction.css";
+import "./h5.css";
 
 export const metadata: Metadata = {
   title: "智企云考 | 企业考试平台",
