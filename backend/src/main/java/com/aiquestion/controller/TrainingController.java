@@ -22,6 +22,12 @@ public class TrainingController {
     if (jdbc.queryForObject("SELECT COUNT(*) FROM app_user WHERE id=? AND status='ACTIVE'", Integer.class, id) == 0) throw new BusinessException(ErrorCode.UNAUTHORIZED);
     return id;
   }
+  public record QuestionDraftRequest(String type) {}
+  @PostMapping("/management/trainings/question-drafts")
+  public ApiResponse<?> createQuestionDraft(@RequestBody QuestionDraftRequest command, @RequestHeader(value="Authorization", required=false) String auth) {
+    user(auth);
+    return ApiResponse.ok(service.createQuestionDraft(command.type()));
+  }
   @GetMapping("/management/trainings")
   public ApiResponse<?> list(@RequestHeader(value="Authorization", required=false) String auth) { return ApiResponse.ok(service.list(user(auth))); }
   @GetMapping("/management/trainings/{id}")

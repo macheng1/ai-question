@@ -10,3 +10,5 @@ export const deleteTraining = (id: number) => apiClient.delete<void>(`/managemen
 export const getResponses = (id: string) => apiClient.get<SurveyResponse[]>(`/management/trainings/${id}/responses`);
 export const getSurvey = (id: string) => apiClient.get<Training>(`/trainings/${id}/survey`);
 export const submitSurvey = (id: number, version: number, answers: Record<string, string>) => apiClient.post<void>(`/trainings/${id}/survey`, { version, answers });
+
+export const createSurveyQuestion = (type: SurveyQuestion["type"]) => apiClient.post<SurveyQuestion>("/management/trainings/question-drafts", { type });

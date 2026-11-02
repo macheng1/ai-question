@@ -15,6 +15,13 @@ public class TrainingService {
   public TrainingService(JdbcTemplate jdbc, ObjectMapper json) { this.jdbc = jdbc; this.json = json; }
   public record SaveTraining(String name, String description, boolean surveyEnabled, List<TrainingSurveyRules.Question> questions, Integer version, Long assessmentId) {}
   public record Submission(Integer version, Map<String, String> answers) {}
+  public TrainingSurveyRules.Question createQuestionDraft(String type) {
+    if (type == null || !Set.of("RATING", "SINGLE", "TEXT").contains(type)) {
+      throw new BusinessException(ErrorCode.BAD_REQUEST, "不支持的评估题型");
+    }
+    return new TrainingSurveyRules.Question(UUID.randomUUID().toString(), type, "", true,
+        "SINGLE".equals(type) ? List.of("满意", "一般") : List.of());
+  }
   private String encode(Object value) {
     try { return json.writeValueAsString(value); } catch (Exception e) { throw new IllegalStateException(e); }
   }

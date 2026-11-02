@@ -1,11 +1,11 @@
 "use client";
 import { IconArrowLeft, IconArrowRight, IconPlus } from "@douyinfe/semi-icons";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import "@douyinfe/semi-ui/react19-adapter";
 import { Button, Input, TextArea, Select, Checkbox, Radio, Modal, Switch, Toast } from "@douyinfe/semi-ui";
-import { getTraining, saveTraining, type Training, type SurveyQuestion } from "../api";
+import { createSurveyQuestion, getTraining, saveTraining, type Training, type SurveyQuestion } from "../api";
 import { TrainingShell } from "./TrainingShell";
 import { SurveyForm } from "./SurveyForm";
 import { TrainingVideos } from "./TrainingVideos";
@@ -19,6 +19,8 @@ export function TrainingEditor({ id }: { id?: string }) {
   const [loading, setLoading] = useState(Boolean(id));
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [adding, setAdding] = useState<SurveyQuestion["type"] | null>(null);
+  const addingRef = useRef(false);
   const [dirty, setDirty] = useState(false);
   const [tab, setTab] = useState("content");
   const [preview, setPreview] = useState(false);
@@ -42,9 +44,24 @@ export function TrainingEditor({ id }: { id?: string }) {
   const change = (patch: Partial<Training>) => { setTraining(old => ({ ...old, ...patch })); setDirty(true); };
   const locked = (training.responseCount || 0) > 0;
   const updateQuestion = (index: number, patch: Partial<SurveyQuestion>) => change({ questions: training.questions.map((q, i) => i === index ? { ...q, ...patch } : q) });
-  const add = (type: SurveyQuestion["type"]) => change({ questions: [...training.questions, { id: crypto.randomUUID(), type, title: "", required: true, options: type === "SINGLE" ? ["满意", "一般"] : [] }] });
+  const add = async (type: SurveyQuestion["type"]) => {
+    if (addingRef.current || locked || busy || training.questions.length >= 50) return;
+    addingRef.current = true;
+    setAdding(type);
+    try {
+      const question = await createSurveyQuestion(type);
+      setTraining(old => ({ ...old, questions: [...old.questions, question] }));
+      setDirty(true);
+    } catch (e) {
+      Toast.error(e instanceof Error ? e.message : "添加题目失败，请重试");
+    } finally {
+      addingRef.current = false;
+      setAdding(null);
+    }
+  };
   const move = (index: number, offset: number) => { const questions = [...training.questions]; [questions[index], questions[index + offset]] = [questions[index + offset], questions[index]]; change({ questions }); };
   const save = async () => {
+    if (addingRef.current || busy) return;
     if (!training.name.trim()) { Toast.error("请输入培训名称"); setTab("content"); return; }
     if (training.surveyEnabled && !training.questions.length) { Toast.error("请至少添加一道评估题目"); setTab("survey"); return; }
     if (training.questions.some(q => !q.title.trim() || (q.type === "SINGLE" && (q.options.length < 2 || q.options.some(o => !o.trim()) || new Set(q.options.map(o => o.trim())).size !== q.options.length)))) { Toast.error("请填写题目标题，单选题至少两个不同的非空选项"); setTab("survey"); return; }
@@ -55,7 +72,7 @@ export function TrainingEditor({ id }: { id?: string }) {
   };
   return <TrainingShell>
     <Link href="/profile/trainings" className="text-sm text-teal-700">{<IconArrowLeft />} 返回培训列表</Link>
-    <div className="my-5 flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl font-bold text-slate-800">{id ? "编辑培训" : "新建培训"}</h1><div className="flex gap-3"><Button disabled={loading || !!error} onClick={() => setPreview(true)}>预览评估</Button><Button theme="solid" type="warning" loading={busy} disabled={loading || !!error} onClick={save}>保存</Button></div></div>
+    <div className="my-5 flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl font-bold text-slate-800">{id ? "编辑培训" : "新建培训"}</h1><div className="flex gap-3"><Button disabled={loading || !!error || !!adding} onClick={() => setPreview(true)}>预览评估</Button><Button theme="solid" type="warning" loading={busy} disabled={loading || !!error || !!adding} onClick={save}>保存</Button></div></div>
     {loading ? <p>加载中…</p> : error ? <p role="alert" className="text-red-600">{error}</p> : <>
     <div className="mb-5 flex gap-6 border-b border-slate-200">{[["content", "培训信息"], ["survey", "满意度评估"]].map(([key, label]) => <Button theme="borderless" key={key} onClick={() => setTab(key)} className={`pb-3 text-sm font-semibold ${tab === key ? "border-b-2 border-teal-500 text-teal-700" : "text-slate-500"}`}>{label}</Button>)}</div>
     <fieldset disabled={busy} className="min-w-0">
@@ -72,7 +89,7 @@ export function TrainingEditor({ id }: { id?: string }) {
       {q.type === "SINGLE" && <div className="space-y-2">{q.options.map((option, i) => <div key={i} className="flex items-center gap-2"><span className="text-slate-400"><Radio disabled checked={false} aria-label="选项" /></span><Input disabled={locked || busy} aria-label={`选项${i + 1}`} maxLength={200} value={option} onChange={value => updateQuestion(index, { options: q.options.map((o, n) => n === i ? value : o) })} /><Button theme="borderless" disabled={locked || busy || q.options.length <= 2} className="shrink-0 text-sm text-red-500 disabled:text-slate-300" onClick={() => updateQuestion(index, { options: q.options.filter((_, n) => n !== i) })}>移除</Button></div>)}<Button disabled={locked || busy || q.options.length >= 20} onClick={() => updateQuestion(index, { options: [...q.options, ""] })}>添加选项</Button></div>}
     </div>)}
     {!training.questions.length && <div className="rounded-xl border border-dashed border-slate-300 p-10 text-center text-slate-500">还没有题目，请添加评分、单选或意见题。</div>}
-    <div className="flex flex-wrap gap-3">{(["RATING", "SINGLE", "TEXT"] as const).map(type => <Button key={type} disabled={locked || busy || training.questions.length >= 50} onClick={() => add(type)}>{<IconPlus />} {labels[type]}</Button>)}</div>
+    <div className="flex flex-wrap gap-3">{(["RATING", "SINGLE", "TEXT"] as const).map(type => <Button key={type} loading={adding === type} disabled={locked || busy || !!adding || training.questions.length >= 50} onClick={() => add(type)}>{<IconPlus />} {labels[type]}</Button>)}</div>
     </fieldset></div>}
     </fieldset></>}
     <Modal title="满意度评估预览" visible={preview} onCancel={() => setPreview(false)} footer={null} style={{ width: "min(640px, 94vw)" }}><div className="max-h-[70vh] overflow-y-auto p-1"><h2 className="mb-4 text-xl font-bold">{training.name || "培训名称"}</h2><SurveyForm key={JSON.stringify(training)} training={training} preview /></div></Modal>
