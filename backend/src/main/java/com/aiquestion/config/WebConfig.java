@@ -1,6 +1,5 @@
 package com.aiquestion.config;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.*;
 
@@ -17,16 +16,15 @@ public class WebConfig implements WebMvcConfigurer {
     this.traceIdInterceptor = traceIdInterceptor;
   }
 
-  @Value("${app.cors-origins}")
-  private String origins;
-
   @Override
   public void addCorsMappings(CorsRegistry registry) {
     registry
         .addMapping("/**")
-        .allowedOrigins(origins.split(","))
-        .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
-        .allowedHeaders("*");
+        .allowedOriginPatterns("*")
+        .allowedMethods("*")
+        .allowedHeaders("*")
+        .exposedHeaders("Content-Disposition", "X-Trace-Id", "Accept-Ranges", "Content-Range")
+        .maxAge(3600);
   }
 
   @Override
