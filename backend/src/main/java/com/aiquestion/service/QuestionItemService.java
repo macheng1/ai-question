@@ -56,6 +56,7 @@ public class QuestionItemService {
     return item;
   }
 
+  @org.springframework.transaction.annotation.Transactional
   public QuestionItem create(
       Long bankId,
       String type,
@@ -71,6 +72,7 @@ public class QuestionItemService {
     if (bankRepository.findOwnedById(bankId, userId) == null) {
       throw new BusinessException(ErrorCode.QUESTION_BANK_NOT_FOUND);
     }
+    answer = QuestionAnswerRules.validate(type, answer, options);
     var item = new QuestionItem();
     item.setBankId(bankId);
     item.setQuestionType(type);
@@ -88,6 +90,7 @@ public class QuestionItemService {
     return get(item.getId(), userId);
   }
 
+  @org.springframework.transaction.annotation.Transactional
   public QuestionItem update(
       Long id,
       String type,
@@ -101,6 +104,10 @@ public class QuestionItemService {
       java.util.List<OptionRequest> options,
       Long userId) {
     var item = get(id, userId);
+    if (repository.countAssessmentReferences(id) > 0) {
+      throw new BusinessException(ErrorCode.BAD_REQUEST, "题目已用于考试，不能修改，请新增题目后重新组卷");
+    }
+    answer = QuestionAnswerRules.validate(type, answer, options);
     item.setQuestionType(type);
     item.setStem(stem);
     item.setAnswerText(answer);
@@ -115,10 +122,13 @@ public class QuestionItemService {
     return get(id, userId);
   }
 
+  @org.springframework.transaction.annotation.Transactional
   public void delete(Long id, Long userId) {
     var item = get(id, userId);
-    if (repository.deleteById(id) == 0) {
-      throw new BusinessException(ErrorCode.NOT_FOUND, "题目不存在");
+    try {
+      if (repository.deleteById(id) == 0) throw new BusinessException(ErrorCode.NOT_FOUND, "题目不存在");
+    } catch (org.springframework.dao.DataIntegrityViolationException e) {
+      throw new BusinessException(ErrorCode.BAD_REQUEST, "题目已被试卷或答题记录引用，不能删除");
     }
     bankRepository.decrementQuestionCount(item.getBankId());
   }

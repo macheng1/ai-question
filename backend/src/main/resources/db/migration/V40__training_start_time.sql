@@ -1,0 +1,1 @@
+ALTER TABLE training ADD COLUMN start_at DATETIME(3) NULL;

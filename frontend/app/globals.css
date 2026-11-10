@@ -1,134 +1,12 @@
-@import "tailwindcss";
 :root { --teal: #2db9b0; --teal-dark: #239f99; --orange: #f97316; --color-teal-50: #effcfb; --color-teal-100: #d9f6f3; --color-teal-200: #b9ece8; --color-teal-300: #82ddd7; --color-teal-400: #52ccc4; --color-teal-500: #35c5bd; --color-teal-600: #239f99; --color-teal-700: #1d817b; --color-teal-800: #17645f; --color-teal-900: #124b48; }
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 body { margin: 0; overflow-x: hidden; background: #f7fbfb; color: #18353d; font-family: Arial, "PingFang SC", "Microsoft YaHei", sans-serif; -webkit-font-smoothing: antialiased; }
 ::selection { background: #b9ece8; color: #124b48; }
 button, a, input, textarea, select { -webkit-tap-highlight-color: transparent; }
-button:focus-visible, a:focus-visible, input:not(.semi-input):focus-visible, textarea:not(.semi-textarea):focus-visible, select:focus-visible { outline: 3px solid rgb(53 197 189 / .25); outline-offset: 2px; }
-.bg-\[\#2db9b0\] { background-color: #2db9b0 !important; }
-.text-\[\#2db9b0\] { color: #2db9b0 !important; }
-.bg-\[\#32bbb4\] { background-color: #2db9b0 !important; }
-.to-\[\#5dcec6\] { --tw-gradient-to: #52ccc4 !important; }
-.text-\[\#21a59e\] { color: #239f99 !important; }
-/* 管理端历史页面仍使用 blue utility，这里统一映射到品牌青色。 */
-.bg-blue-50 { background-color: #effbfb !important; }
-.bg-blue-100 { background-color: #d9f6f3 !important; }
-.bg-blue-400 { background-color: #52ccc4 !important; }
-.bg-blue-500, .bg-blue-600 { background-color: #2db9b0 !important; }
-.text-blue-500, .text-blue-600 { color: #239f99 !important; }
-.border-blue-200, .border-blue-300, .border-blue-400, .border-blue-500 { border-color: #a6e6e2 !important; }
-/* Semi 表单统一为面向企业用户的轻量卡片风格。 */
-.semi-input-wrapper,
-.semi-textarea-wrapper,
-.semi-select,
-.semi-datepicker-input-wrapper,
-.semi-timepicker-input-wrapper {
-  border: 1px solid #d9e7e7 !important;
-  border-radius: 12px !important;
-  background: #fff !important;
-  box-shadow: 0 1px 2px rgb(15 23 42 / .02) !important;
-  transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease !important;
-}
-.semi-input-wrapper:hover,
-.semi-textarea-wrapper:hover,
-.semi-select:hover,
-.semi-datepicker-input-wrapper:hover,
-.semi-timepicker-input-wrapper:hover { border-color: #8edbd5 !important; }
-.semi-input-wrapper:not(:has(.semi-input-prefix)) { padding-left: 0 !important; padding-right: 0 !important; }
-.login-form-panel label { text-indent: 0; }
-.login-form-panel .semi-input-wrapper:not(:has(.semi-input-prefix)) {
-  padding-left: 12px !important;
-  padding-right: 12px !important;
-}
-.login-form-panel .semi-input-wrapper:not(:has(.semi-input-prefix)) .semi-input {
-  padding: 0 !important;
-}
-.semi-input-wrapper-focus,
-.semi-textarea-wrapper-focus,
-.semi-select-focus,
-.semi-datepicker-input-wrapper-focus,
-.semi-timepicker-input-wrapper-focus,
-.semi-input-wrapper:focus-within,
-.semi-textarea-wrapper:focus-within { border-color: #35c5bd !important; box-shadow: 0 0 0 3px rgb(53 197 189 / .14) !important; }
-.semi-input,
-.semi-textarea,
-.semi-select-input,
-.semi-datepicker-input,
-.semi-timepicker-input { background: transparent !important; color: #18353d !important; }
-.semi-input::placeholder,
-.semi-textarea::placeholder { color: #a3afb5 !important; }
-.login-form-panel .semi-input-wrapper-large,
-.login-form-panel .semi-input-large {
-  height: auto !important;
-  min-height: 0 !important;
-}
-.login-form-panel label {
-  font-size: 16px !important;
-  line-height: 22px !important;
-}
-.login-form-panel .semi-input,
-.login-form-panel .semi-input::placeholder {
-  font-size: 16px !important;
-}
-.login-form-panel label > .semi-input-wrapper,
-.login-form-panel label > div > .semi-input-wrapper {
-  display: block !important;
-  margin-top: 10px !important;
-}
-.semi-button { border-radius: 10px !important; font-weight: 600 !important; transition: transform .18s ease, box-shadow .18s ease, background-color .18s ease !important; }
-.semi-button-warning { background: #ff8500 !important; border-color: #ff8500 !important; }
-.semi-button-warning:hover { background: #e97600 !important; border-color: #e97600 !important; box-shadow: 0 5px 14px rgb(255 133 0 / .2) !important; }
-.modal-cancel-button {
-  background: #f4f8f8 !important;
-  border: 1px solid #d9e7e7 !important;
-  color: #547078 !important;
-  box-shadow: none !important;
-}
-.modal-cancel-button:hover {
-  background: #e8f3f2 !important;
-  border-color: #b9d9d7 !important;
-  color: #286d70 !important;
-}
-.assessment-datepicker-dropdown .semi-datepicker-quick-control .semi-button,
-.assessment-datepicker-dropdown .semi-datepicker-navigation .semi-button {
-  background: #f4f8f8 !important;
-  border-color: #d9e7e7 !important;
-  color: #547078 !important;
-  box-shadow: none !important;
-}
-.assessment-datepicker-dropdown .semi-datepicker-quick-control .semi-button:hover,
-.assessment-datepicker-dropdown .semi-datepicker-navigation .semi-button:hover {
-  background: #e8f3f2 !important;
-  border-color: #b9d9d7 !important;
-  color: #286d70 !important;
-}
-.arrange-modal .text-slate-600,
-.arrange-modal .text-slate-700,
-.arrange-modal .text-slate-800 {
-  color: #5a938e !important;
-}
-.arrange-modal .semi-checkbox-checked .semi-checkbox-inner {
-  background: #72c9c0 !important;
-  border-color: #72c9c0 !important;
-}
-.arrange-modal .semi-checkbox:hover .semi-checkbox-inner {
-  border-color: #72c9c0 !important;
-}
-/* 题目标签暂未启用，先从新增/编辑题目表单中隐藏。 */
-input[placeholder="标签（可选）"] { display: none !important; }
+button:not(.semi-button):focus-visible, a:focus-visible, input:not(.semi-input):focus-visible, textarea:not(.semi-textarea):focus-visible, select:focus-visible { outline: 3px solid rgb(53 197 189 / .25); outline-offset: 2px; }
+/* Semi 控件使用组件库默认样式，业务布局单独设置。 */
 /* 统一放宽业务弹窗，手机端仍按屏幕宽度收缩。 */
-.semi-modal-wrap { width: auto !important; }
-.semi-modal-content { width: 680px !important; max-width: calc(100vw - 32px) !important; margin-left: auto; margin-right: auto; }
-.semi-modal-content.compose-modal { width: 80vw !important; max-width: 80vw !important; }
-.semi-modal-content.arrange-modal .arrange-form { display: flex; flex-direction: column; gap: 8px !important; }
-.semi-modal-content.arrange-modal .arrange-advanced-fields { display: flex; flex-direction: column; gap: 6px !important; padding-top: 12px !important; padding-bottom: 12px !important; }
-.semi-modal-content.arrange-modal .arrange-advanced-fields > label { display: flex; flex-direction: column; gap: 4px; margin: 0 !important; }
-.semi-modal-content.arrange-modal .arrange-advanced-fields > label > span { margin: 0 !important; line-height: 18px; }
-.semi-modal-content.arrange-modal .arrange-advanced-fields > .flex { min-height: 24px; height: 24px; align-items: center; gap: 8px; }
-.semi-modal-content.arrange-modal .semi-checkbox { margin: 0 !important; line-height: 20px; }
-.semi-modal-content.arrange-modal .semi-checkbox-inner { margin: 0 !important; }
-.semi-modal-content.arrange-modal label { margin: 0 !important; }
 @media (max-width: 640px) {
   .semi-toast-wrapper { left: 12px !important; right: 12px !important; width: auto !important; max-width: none !important; }
   .semi-toast { max-width: calc(100vw - 24px) !important; }
@@ -144,18 +22,5 @@ input[placeholder="标签（可选）"] { display: none !important; }
   .result-print-question { break-inside: avoid; }
 }
 
-/* 评估表单保持 Semi 控件行为，使用独立样式类统一移动端触摸区域。 */
-.survey-form .survey-rating { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; width: 100%; background: transparent; }
-.survey-form .survey-rating .semi-radio { margin: 0; padding: 0; min-width: 0; }
-.survey-form .survey-rating .semi-radio-addon-buttonRadio { display: flex; width: 100%; height: 46px; min-height: 46px; align-items: center; justify-content: center; padding: 0; line-height: 22px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; color: #64748b; font-size: 14px; }
-.survey-form .survey-rating .semi-radio-addon-buttonRadio-checked { border-color: #35c5bd; background: #effcfb; color: #1d817b; }
-.survey-form .survey-choices { width: 100%; gap: 8px; }
-.survey-form .survey-choices .semi-radio { display: flex; align-items: center; min-height: 46px; margin: 0; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
-.survey-form .survey-choices .semi-radio-checked { border-color: #35c5bd; background: #effcfb; }
-.survey-form .survey-choices .semi-radio-addon { white-space: normal; overflow-wrap: anywhere; line-height: 24px; }
-.survey-form .survey-comment { border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
-.survey-form .survey-comment .semi-input-textarea { min-height: 112px; padding: 12px; background: transparent; line-height: 24px; }
-.survey-form > .semi-button { min-height: 46px; }
-
-.survey-form .survey-rating .semi-radio-content { width: 100%; }
-.survey-form .survey-choices .semi-radio-inner-checked .semi-radio-inner-display { border-color: #35c5bd; background: #35c5bd; }
+.survey-form .survey-rating { width: 100%; }
+.survey-form .survey-choices { width: 100%; }

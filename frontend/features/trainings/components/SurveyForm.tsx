@@ -1,4 +1,5 @@
 "use client";
+import { Typography } from "@douyinfe/semi-ui";
 import { IconComment } from "@douyinfe/semi-icons";
 import { useState } from "react";
 import "@douyinfe/semi-ui/react19-adapter";
@@ -18,8 +19,8 @@ export function SurveyForm({ training, preview = false, h5 = false, returnHref =
     catch (e) { Toast.error(e instanceof Error ? e.message : "提交失败，请重试"); }
     finally { setBusy(false); }
   };
-  if (done) return h5 ? <div className="h5-survey-success" role="status"><div className="h5-success-symbol"><IconComment /></div><span className="h5-eyebrow">THANK YOU</span><h2>反馈已收到</h2><p>感谢你的认真参与。<br />你的建议将帮助我们持续改进培训。</p><div className="h5-success-training"><span className="h5-muted">本次评估</span><h3>{training.name}</h3><p><span>满意度评估</span><b>已提交</b></p></div><p className="mt-5">本次评估无需重复填写</p><Button block size="large" className="h5-secondary mt-8" onClick={() => window.location.assign(returnHref)}>返回考试</Button></div> : <div role="status" className="rounded-2xl border border-teal-100 bg-white px-5 py-9 text-center"><h2 className="text-xl font-bold text-teal-700">感谢你的反馈</h2><p className="mt-3 text-sm leading-6 text-slate-500">本次满意度评估已提交，无需重复填写。</p></div>;
-  return <div className="survey-form space-y-4">
+  if (done) return h5 ? <div className="h5-survey-success" role="status"><div className="h5-success-symbol"><IconComment /></div><span className="h5-eyebrow">THANK YOU</span><Typography.Title heading={2} className="!my-4 !text-2xl">反馈已收到</Typography.Title><p>感谢你的认真参与。<br />你的建议将帮助我们持续改进培训。</p><div className="h5-success-training"><span className="h5-muted">本次评估</span><Typography.Title heading={3} className="!my-3 !text-base !leading-7">{training.name}</Typography.Title><p><span>满意度评估</span><b>已提交</b></p></div><p className="mt-5">本次评估无需重复填写</p><Button block size="large" className="h5-secondary mt-8" onClick={() => window.location.assign(returnHref)}>返回考试</Button></div> : <div role="status" className="rounded-2xl border border-teal-100 bg-white px-5 py-9 text-center"><Typography.Title heading={2} className="!text-xl !font-bold !text-teal-700">感谢你的反馈</Typography.Title><p className="mt-3 text-sm leading-6 text-slate-500">本次满意度评估已提交，无需重复填写。</p></div>;
+  return <div className="flex flex-col survey-form gap-4">
     <div className="survey-notice rounded-xl bg-teal-50 px-4 py-3 text-xs leading-6 text-teal-800">{preview ? "预览模式：可模拟填写，不会提交正式记录。" : "本次评估实名填写，每个账号可提交一次。标记 * 的题目为必填。"}</div>
     {training.questions.map((q, index) => <section tabIndex={-1} id={`question-${q.id}`} aria-labelledby={`question-title-${q.id}`} key={q.id} className="survey-question min-w-0 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
       <h3 id={`question-title-${q.id}`} className="mb-4 text-sm font-semibold leading-6 text-slate-800"><span className="h5-question-index">{String(index + 1).padStart(2, "0")}</span>{q.title} {q.required && <span className="text-red-500">*</span>}</h3>

@@ -64,8 +64,12 @@ public class AliyunOssService {
 
     /** 培训视频使用短对象键和私有 ACL，不受原始文件名长度、字符或桶默认 ACL 影响。 */
     public String uploadTrainingVideo(MultipartFile file, String contentType) {
-        String suffix = "video/mp4".equals(contentType) ? ".mp4" : ".webm";
-        String key = "training-videos/" + UUID.randomUUID() + suffix;
+        return uploadTrainingMaterial(file, contentType, "video/mp4".equals(contentType) ? "mp4" : "webm", "training-videos");
+    }
+
+    public String uploadTrainingMaterial(MultipartFile file, String contentType, String suffix, String folder) {
+        if (!java.util.Set.of("mp4", "webm", "pdf", "png", "jpg").contains(suffix) || !java.util.Set.of("training-videos", "training-materials").contains(folder)) throw new BusinessException(ErrorCode.BAD_REQUEST);
+        String key = folder + "/" + UUID.randomUUID() + "." + suffix;
         OSS client = createClient();
         try (var input = file.getInputStream()) {
             ObjectMetadata metadata = new ObjectMetadata();

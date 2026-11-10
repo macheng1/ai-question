@@ -1,11 +1,14 @@
 "use client";
+import { Typography } from "@douyinfe/semi-ui";
+import { Layout } from "@douyinfe/semi-ui";
 
 import { IconClock, IconList, IconTick, IconArrowRight } from "@douyinfe/semi-icons";
 import { ExamResultView, type QuestionGrade } from "./ExamResultView";
 import { useEffect, useState } from "react";
 import "@douyinfe/semi-ui/react19-adapter";
 import { Button, Input, Toast, Modal, Radio, RadioGroup, Checkbox, CheckboxGroup, Progress } from "@douyinfe/semi-ui";
-import { ExamTrainingVideos, loadExamLearning, type ExamLearning } from "@/features/trainings/components/ExamTrainingVideos";
+import { ExamTrainingMaterials } from "@/features/trainings/components/ExamTrainingMaterials";
+import { loadExamLearning, type ExamLearning } from "@/features/trainings/components/ExamTrainingVideos";
 import type { ExamPaper } from "../types";
 import { loadExamPaper } from "../load-paper";
 import {
@@ -404,7 +407,7 @@ export function ExamRunner({
       // 续考和已用完次数的成绩跳转维持原逻辑；新答题实例必须先完成全部关联视频。
       if (eligibility.canStart && !eligibility.inProgress) {
         const requiredLearning = await loadExamLearning(paper.id, name, phone);
-        if (requiredLearning.videos.some(video => !video.completed)) {
+        if ((requiredLearning.videos.some(video => !video.completed) || requiredLearning.materials?.some(material => !material.completed))) {
           if (learningPage) setLearning(requiredLearning);
           else {
             const query = new URLSearchParams({ name: name.trim(), phone: phone.trim() });
@@ -545,17 +548,17 @@ export function ExamRunner({
     setCardOpen(false); setConfirmOpen(true);
   };
   if (stage === "info" && learningPage) {
-    if (!learning) return <div className="space-y-4 py-8 text-center"><p>{learningError || "正在恢复学习进度…"}</p>{learningError && <Button onClick={() => window.location.reload()}>重新加载</Button>}</div>;
-    return <ExamTrainingVideos key={learning.token} examId={paper.id} data={learning} starting={starting} onBack={() => window.location.assign(`/kaoshi/${paper.id}`)} onContinue={beginExam} />;
+    if (!learning) return <div className="flex flex-col gap-4 py-8 text-center"><p>{learningError || "正在恢复学习进度…"}</p>{learningError && <Button onClick={() => window.location.reload()}>重新加载</Button>}</div>;
+    return <ExamTrainingMaterials key={learning.token} examId={paper.id} data={learning} starting={starting} onBack={() => window.location.assign(`/kaoshi/${paper.id}`)} onContinue={beginExam} />;
   }
-  if (stage === "info") return <section className={compact ? "h5-form" : "h5-form h5-content"}>
-    <h3 className="h5-section-title">填写考生信息</h3><p className="h5-muted">{practice ? "无需登录，答完即可查看解析。" : "用于记录学习与成绩，请准确填写。"}</p>
+  if (stage === "info") return <Layout.Content className={compact ? "h5-form" : "h5-form h5-content"}>
+    <Typography.Title heading={3} className="h5-section-title !text-base !mt-5 !mb-3">填写考生信息</Typography.Title><p className="h5-muted">{practice ? "无需登录，答完即可查看解析。" : "用于记录学习与成绩，请准确填写。"}</p>
     {!practice && <><label>姓名 <span>*</span><Input aria-label="姓名" size="large" maxLength={100} value={name} onChange={setName} placeholder="请输入姓名" /></label><label>手机号 <span>*</span><Input aria-label="手机号" size="large" type="tel" maxLength={11} value={phone} onChange={value => setPhone(value.trim())} placeholder="请输入11位手机号" /></label></>}
-    <div className="h5-hint"><IconClock /><span>如关联培训视频，请完成学习后再参加考试。已完成的学习可直接进入考试。</span></div>
-    <div className="h5-bottom" style={{ margin: "24px -22px -24px" }}><Button block theme="solid" size="large" className="h5-primary" loading={starting} disabled={starting} onClick={beginExam}>{starting ? "正在检查考试记录…" : practice ? "开始自测" : "确认信息，继续"}<IconArrowRight /></Button></div>
-  </section>;
+    <div className="h5-hint"><IconClock /><span>如关联培训材料，请完成学习后再参加考试。已完成的学习可直接进入考试。</span></div>
+    <div className="h5-bottom h5-form-actions"><Button block theme="solid" size="large" className="h5-primary" loading={starting} disabled={starting} onClick={beginExam}>{starting ? "正在检查考试记录…" : practice ? "开始自测" : "确认信息，继续"}<IconArrowRight /></Button></div>
+  </Layout.Content>;
   if (stage === "answer" && !q) return <div className="h5-empty">正在加载本次考试题目…</div>;
-  if (stage === "result") return <ExamResultView paper={paper} score={score} passed={result?.passed ?? score >= paper.passScore} answers={answers} showAnswers={initialShowAnswers} grades={initialGrades} candidateName={initialCandidateName || name} candidatePhone={initialCandidatePhone || phone} attemptNo={initialAttemptNo} startedAt={initialStartedAt} submittedAt={initialSubmittedAt} remainingAttempts={remainingAttempts} attemptId={resultAttemptId} details={details} practice={practice} />;
+  if (stage === "result") return <ExamResultView paper={paper} score={score} passed={result?.passed ?? score >= paper.passScore} answers={answers} showAnswers={initialShowAnswers} grades={initialGrades} candidateName={initialCandidateName || name} candidatePhone={initialCandidatePhone || phone} attemptNo={initialAttemptNo ?? attemptNo ?? undefined} startedAt={initialStartedAt} submittedAt={initialSubmittedAt} remainingAttempts={remainingAttempts} attemptId={resultAttemptId} details={details} practice={practice} />;
   const picked = answers[q.id] || [];
   const options = q.options?.length
     ? q.options
@@ -579,7 +582,10 @@ export function ExamRunner({
   };
   const answeredCount = paper.questions.filter(question => (answers[question.id] || []).length).length;
   const optionBody = (option: (typeof options)[number]) => <span className="h5-option-body"><span className="h5-option-key">{option.key}</span><span>{option.text}</span></span>;
-  return <section>
+  const answerCard = <><p className="h5-muted">已答 {answeredCount} / {paper.questions.length} 题，绿色为已答题目。</p><div className="h5-card-grid">{paper.questions.map((question, i) => <Button key={question.id} aria-label={`第 ${i + 1} 题${(answers[question.id] || []).length ? "，已答" : "，未答"}`} theme={(answers[question.id] || []).length ? "light" : "borderless"} className={`${(answers[question.id] || []).length ? "answered" : ""} ${i === index ? "current" : ""}`} disabled={navigating || submitting} onClick={() => moveTo(i)}>{i + 1}</Button>)}</div><Button block size="large" theme="solid" onClick={requestSubmit} disabled={navigating || submitting}>提交答卷</Button></>;
+  return <Layout.Content className="h5-answer-layout">
+    <aside className="h5-desktop-answer-card"><h2 className="h5-section-title">答题卡</h2>{answerCard}</aside>
+    <div className="h5-answer-main">
     <div className="h5-exam-toolbar"><div className={`h5-timer ${seconds < 60 ? "urgent" : ""}`}><IconClock /><strong>{time}</strong><small>剩余时间</small></div><Button aria-label="打开答题卡" theme="borderless" className="h5-link" icon={<IconList />} onClick={() => setCardOpen(true)}>已答 {answeredCount}/{paper.questions.length}</Button></div>
     <Progress percent={(index + 1) / Math.max(1, paper.questions.length) * 100} showInfo={false} stroke="#60af91" style={{ height: 3 }} />
     <div className="h5-content h5-answer-content"><div className="h5-question-meta"><span className="h5-tag">{q.kind === "multi" ? "多选题" : q.kind === "judge" ? "判断题" : "单选题"}</span><span>本题 {q.score || 0} 分</span><b>{String(index + 1).padStart(2, "0")} <small>/ {String(paper.questions.length).padStart(2, "0")}</small></b></div>
@@ -587,8 +593,9 @@ export function ExamRunner({
       {q.kind === "multi" ? <CheckboxGroup aria-labelledby="exam-question-title" className="h5-answer-options" value={picked} disabled={navigating || submitting} onChange={values => setAnswers(current => ({ ...current, [q.id]: values.map(String) }))}>{options.map(option => <Checkbox key={option.key} value={option.key}>{optionBody(option)}</Checkbox>)}</CheckboxGroup> : <RadioGroup aria-labelledby="exam-question-title" className="h5-answer-options" value={picked[0]} disabled={navigating || submitting} onChange={e => choose(String(e.target.value))}>{options.map(option => <Radio key={option.key} value={option.key}>{optionBody(option)}</Radio>)}</RadioGroup>}
       <p className="h5-save"><IconTick />答案保留在当前会话，切题时同步保存</p>
     </div>
-    <div className="h5-bottom"><div className="h5-actions"><Button size="large" className="h5-secondary" disabled={index === 0 || navigating || submitting} onClick={() => moveTo(Math.max(0, index - 1))}>上一题</Button>{index < paper.questions.length - 1 && (practice || seconds > 0) ? <Button size="large" theme="solid" className="h5-primary" loading={navigating} disabled={submitting} onClick={goNext}>下一题 <IconArrowRight /></Button> : <Button size="large" theme="solid" className="h5-primary" loading={submitting} disabled={navigating} onClick={requestSubmit}>提交答卷</Button>}</div><Button theme="borderless" className="h5-link" onClick={() => setCardOpen(true)}>查看答题卡 · 检查并交卷</Button></div>
-    <Modal title="答题卡" visible={cardOpen} className="h5-modal-root" modalContentClass="h5-modal" style={{ width: "min(440px, calc(100vw - 28px))" }} footer={null} onCancel={() => setCardOpen(false)}><p className="h5-muted">已答 {answeredCount} / {paper.questions.length} 题，绿色为已答题目。</p><div className="h5-card-grid">{paper.questions.map((question, i) => <Button key={question.id} aria-label={`第 ${i + 1} 题${(answers[question.id] || []).length ? "，已答" : "，未答"}`} className={`${(answers[question.id] || []).length ? "answered" : ""} ${i === index ? "current" : ""}`} disabled={navigating || submitting} onClick={() => moveTo(i)}>{i + 1}</Button>)}</div><Button block size="large" theme="solid" onClick={requestSubmit} disabled={navigating || submitting}>提交答卷</Button></Modal>
-    <Modal title="确认提交答卷？" visible={confirmOpen} className="h5-modal-root" modalContentClass="h5-modal" style={{ width: "min(440px, calc(100vw - 28px))" }} okText="确认提交" cancelText="继续检查" confirmLoading={submitting} cancelButtonProps={{ disabled: submitting }} closable={!submitting} maskClosable={!submitting} onCancel={() => { if (!submitting) setConfirmOpen(false); }} onOk={submit}><p className="h5-muted">已完成 {answeredCount} / {paper.questions.length} 道题目。提交后将结束本次考试，无法修改答案。</p>{seconds === 0 && <p className="h5-muted">考试时间已到，请提交当前答卷。</p>}</Modal>
-  </section>;
+    <div className="h5-bottom"><div className="h5-actions"><Button style={{ flex: 1 }} size="large" className="h5-secondary" disabled={index === 0 || navigating || submitting} onClick={() => moveTo(Math.max(0, index - 1))}>上一题</Button>{index < paper.questions.length - 1 && (practice || seconds > 0) ? <Button style={{ flex: 1 }} size="large" theme="solid" className="h5-primary" loading={navigating} disabled={submitting} onClick={goNext}>下一题 <IconArrowRight /></Button> : <Button style={{ flex: 1 }} size="large" theme="solid" className="h5-primary" loading={submitting} disabled={navigating} onClick={requestSubmit}>提交答卷</Button>}</div><Button theme="borderless" className="h5-link" onClick={() => setCardOpen(true)}>查看答题卡 · 检查并交卷</Button></div>
+    </div>
+    <Modal bodyStyle={{ maxHeight: "calc(100dvh - 240px)", overflowY: "auto" }} title="答题卡" visible={cardOpen} className="h5-modal-root" modalContentClass="h5-modal" style={{ width: "min(440px, calc(100vw - 28px))" }} footer={null} onCancel={() => setCardOpen(false)}>{answerCard}</Modal>
+    <Modal bodyStyle={{ maxHeight: "calc(100dvh - 240px)", overflowY: "auto" }} title="确认提交答卷？" visible={confirmOpen} className="h5-modal-root" modalContentClass="h5-modal" style={{ width: "min(440px, calc(100vw - 28px))" }} okText="确认提交" cancelText="继续检查" confirmLoading={submitting} cancelButtonProps={{ disabled: submitting }} closable={!submitting} maskClosable={!submitting} onCancel={() => { if (!submitting) setConfirmOpen(false); }} onOk={submit}><p className="h5-muted">已完成 {answeredCount} / {paper.questions.length} 道题目。提交后将结束本次考试，无法修改答案。</p>{seconds === 0 && <p className="h5-muted">考试时间已到，请提交当前答卷。</p>}</Modal>
+  </Layout.Content>;
 }

@@ -29,7 +29,19 @@ public class TestPaperService {
     public TestPaper create(String name,String description,String mode,BigDecimal total,BigDecimal pass,Integer duration){var p=new TestPaper();p.setCreatedBy(ManagementAccess.userId());p.setName(name);p.setDescription(description);p.setMode(mode);p.setTotalScore(total==null?BigDecimal.ZERO:total);p.setPassScore(pass==null?BigDecimal.valueOf(60):pass);p.setDurationMinutes(duration==null?30:duration);p.setStatus("DRAFT");repository.insert(p);return get(p.getId());}
     public TestPaper update(Long id,String name,String description,String mode,BigDecimal total,BigDecimal pass,Integer duration){var p=get(id);ensureEditable(p);if("PUBLISHED".equals(p.getStatus()))throw new BusinessException(ErrorCode.BAD_REQUEST,"已发布试卷不能直接修改");p.setName(name);p.setDescription(description);p.setMode(mode);p.setTotalScore(total);p.setPassScore(pass);p.setDurationMinutes(duration);repository.update(p);return get(id);}
     public TestPaper changeStatus(Long id,String status){get(id);if(!status.equals("DRAFT")&&!status.equals("PUBLISHED")&&!status.equals("DISABLED"))throw new BusinessException(ErrorCode.BAD_REQUEST,"试卷状态不合法");if("PUBLISHED".equals(status))ensureScoreMatched(id);repository.updateStatus(id,status);return get(id);}
-    public void delete(Long id){get(id);if(repository.deleteById(id)==0)throw new BusinessException(ErrorCode.NOT_FOUND,"试卷不存在");}
+    public void delete(Long id) {
+        var paper = get(id);
+        if (paper.isHasAssessment()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "试卷已有考试任务，不能删除");
+        }
+        try {
+            if (repository.deleteById(id) == 0) {
+                throw new BusinessException(ErrorCode.NOT_FOUND, "试卷不存在");
+            }
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "试卷已被关联，不能删除");
+        }
+    }
     @Transactional(rollbackFor = Exception.class)
     public TestPaper copy(Long id,String name,String description){
         var source=get(id);var target=new TestPaper();target.setCreatedBy(ManagementAccess.userId());

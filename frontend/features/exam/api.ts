@@ -1,19 +1,4 @@
 import { apiClient } from "@/lib/api/client";
-import type { ExamPaper } from "./types";
-export function getPublicExam(id: string) {
-  return apiClient.get<ExamPaper>(`/public/exams/${id}`);
-}
-export function submitPublicExam(
-  id: string,
-  data: { name: string; phone: string; score: number },
-) {
-  return apiClient.post<{
-    score: number;
-    totalScore: number;
-    passScore: number;
-    passed: boolean;
-  }>(`/public/exams/${id}/submit`, data);
-}
 export function startPublicExam(
   id: string,
   data: { name: string; phone: string },
@@ -78,12 +63,6 @@ export function submitPublicAttempt(attemptId: number) {
     maxAttempts?: number;
     remainingAttempts?: number;
   }>(`/public/exams/attempts/${attemptId}/submit`, {});
-}
-export function getExamRecords(id: string, phone: string) {
-  return apiClient.get<Array<Record<string, unknown>>>(
-    `/public/exams/${id}/records`,
-    { phone },
-  );
 }
 export type ProfileExamRecord = {
   attemptId: number;

@@ -1,16 +1,9 @@
 "use client";
 
+
 import { useEffect, useState } from "react";
 import "@douyinfe/semi-ui/react19-adapter";
-import {
-  Button,
-  Checkbox,
-  Input,
-  Modal,
-  Select,
-  Spin,
-  Toast,
-} from "@douyinfe/semi-ui";
+import { Button, Checkbox, DatePicker, Input, Modal, Select, Spin, Toast, InputNumber } from "@douyinfe/semi-ui";
 import { createAssessment } from "@/features/assessments/api";
 import { getPaper, type Paper } from "@/features/papers/api";
 
@@ -39,8 +32,6 @@ export function ArrangeAssessmentModal({
     [start, setStart] = useState(localDateTime(0)),
     [end, setEnd] = useState(localDateTime(24)),
     [duration, setDuration] = useState("60"),
-    [pass, setPass] = useState("60"),
-    [scope, setScope] = useState("ALL"),
     [shuffle, setShuffle] = useState(true),
     [retake, setRetake] = useState(false),
     [attempts, setAttempts] = useState("1"),
@@ -55,7 +46,6 @@ export function ArrangeAssessmentModal({
     }
     setDetail(paper);
     setName("");
-    setPass(String(paper.passScore || 60));
     setDuration(String(paper.durationMinutes || 60));
     setStart(localDateTime(0));
     setEnd(localDateTime(24));
@@ -78,7 +68,6 @@ export function ArrangeAssessmentModal({
         startAt: start,
         endAt: end,
         durationMinutes: Number(duration) || 60,
-        candidateScope: scope,
         allowRetake: retake,
         maxAttempts: retake ? Math.max(1, Number(attempts) || 1) : 1,
         shuffleQuestions: shuffle,
@@ -95,20 +84,20 @@ export function ArrangeAssessmentModal({
     }
   };
   return (
-    <Modal
+    <Modal bodyStyle={{ maxHeight: "calc(100dvh - 240px)", overflowY: "auto" }}
       modalContentClass="arrange-modal"
       visible={visible}
-      width={520}
+      width="min(520px, calc(100vw - 24px))"
       title="安排考试"
       onCancel={onClose}
       footer={
         <div className="flex justify-end gap-8">
-          <Button className="modal-cancel-button" onClick={onClose}>
+          <Button onClick={onClose}>
             取消
           </Button>
           <Button
             theme="solid"
-            type="warning"
+            type="primary"
             loading={loading}
             disabled={!paper || !detail}
             onClick={save}
@@ -118,10 +107,10 @@ export function ArrangeAssessmentModal({
         </div>
       }
     >
-      <div className="arrange-form">
+      <div className="flex flex-col gap-4">
         {!detail ? (
           papers.length ? (
-            <div className="space-y-4">
+            <div className="flex flex-col gap-4">
               <label className="block">
                 <span className="mb-1 block text-xs text-slate-500">
                   选择试卷
@@ -170,23 +159,19 @@ export function ArrangeAssessmentModal({
               onChange={setName}
               placeholder="考试名称，比如XX单位考试"
             />
-            <div className="grid grid-cols-2 gap-3">
-              <label>
+            <div className="grid grid-cols-2 gap-4 ">
+              <div className="min-w-0 col-span-2 sm:col-span-1"><label>
                 <span className="mb-1 block text-xs text-slate-500">
                   开始时间
                 </span>
-                <Input
-                  type="datetime-local"
-                  value={start}
-                  onChange={setStart}
-                />
-              </label>
-              <label>
+                <DatePicker type="dateTime" format="yyyy-MM-dd HH:mm" className="w-full" value={start ? new Date(start) : undefined} onChange={(_, text) => setStart(typeof text === "string" ? text.replace(" ", "T") : "")} />
+              </label></div>
+              <div className="min-w-0 col-span-2 sm:col-span-1"><label>
                 <span className="mb-1 block text-xs text-slate-500">
                   结束时间
                 </span>
-                <Input type="datetime-local" value={end} onChange={setEnd} />
-              </label>
+                <DatePicker type="dateTime" format="yyyy-MM-dd HH:mm" className="w-full" value={end ? new Date(end) : undefined} onChange={(_, text) => setEnd(typeof text === "string" ? text.replace(" ", "T") : "")} />
+              </label></div>
             </div>
             <Checkbox
               checked={shuffle}
@@ -198,29 +183,15 @@ export function ArrangeAssessmentModal({
               <div className="border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-600">
                 高级设置
               </div>
-              <div className="arrange-advanced-fields p-4">
+              <div className="flex flex-col gap-4 p-4">
                 <label>
                   <span className="mb-1 block text-xs text-slate-500">
                     及格分数
                   </span>
-                  <Input type="number" value={pass} onChange={setPass} />
+                  <InputNumber value={detail?.passScore ?? 60} disabled />
+                  <p className="mt-1 text-xs text-slate-500">沿用试卷及格分数，请在组卷前于试卷中设置。</p>
                 </label>
-                <label>
-                  <span className="mb-1 block text-xs text-slate-500">
-                    参考范围
-                  </span>
-                  <Select
-                    value={scope}
-                    onChange={(v) => setScope(String(v))}
-                    optionList={[
-                      { label: "无限制（所有人均可参加）", value: "ALL" },
-                      { label: "指定部门", value: "DEPARTMENT" },
-                      { label: "指定人员", value: "USERS" },
-                    ]}
-                    className="w-full"
-                  />
-                </label>
-                <div className="flex min-h-8 items-center gap-2 whitespace-nowrap">
+                <div className="flex min-h-8 flex-wrap items-center gap-2">
                   <Checkbox
                     checked={retake}
                     onChange={(e) => setRetake(Boolean(e.target.checked))}
@@ -230,11 +201,11 @@ export function ArrangeAssessmentModal({
                   <span className="text-xs text-slate-400">
                     最多答题（含首次）
                   </span>
-                  <Input
-                    type="number"
+                  <InputNumber
+
                     disabled={!retake}
                     value={attempts}
-                    onChange={setAttempts}
+                    onChange={value => setAttempts(String(value ?? ""))}
                     className="w-20 shrink-0"
                     style={{ width: 80 }}
                   />

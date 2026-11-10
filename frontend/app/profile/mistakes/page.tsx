@@ -1,2 +1,2 @@
-import { ProfileRecordsPage } from "@/components/profile/ProfileRecordsPage";
-export default function MyMistakesPage() { return <ProfileRecordsPage mode="mistakes" />; }
+import { redirect } from "next/navigation";
+export default function RetiredPage() { redirect("/profile"); }

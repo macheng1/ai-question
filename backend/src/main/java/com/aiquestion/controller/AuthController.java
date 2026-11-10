@@ -33,13 +33,15 @@ public class AuthController {
   private final PasswordEncoder encoder;
   private final JwtTokenService tokens;
   private final RedisService redis;
+  private final com.aiquestion.service.AccountService accounts;
 
   public AuthController(
-      JdbcTemplate jdbc, PasswordEncoder encoder, JwtTokenService tokens, RedisService redis) {
+      JdbcTemplate jdbc, PasswordEncoder encoder, JwtTokenService tokens, RedisService redis, com.aiquestion.service.AccountService accounts) {
     this.jdbc = jdbc;
     this.encoder = encoder;
     this.tokens = tokens;
     this.redis = redis;
+    this.accounts = accounts;
   }
 
   public record AuthCommand(
@@ -54,7 +56,20 @@ public class AuthController {
       String district,
       String address) {}
 
-  public record AuthResult(Long userId, String name, String phone, TokenPair token) {}
+  public record AuthResult(Long userId, String name, String phone, TokenPair token,
+      com.aiquestion.security.AccountType accountType, long enterpriseId) {
+    public AuthResult(Long id, String name, String phone, TokenPair token) {
+      this(id, name, phone, token, com.aiquestion.security.AccountType.ADMIN, id);
+    }
+  }
+
+  @PostMapping("/employee/login")
+  public ApiResponse<AuthResult> employeeLogin(@Valid @RequestBody AuthCommand command) {
+    var employee = accounts.loginEmployee(command.phone(), command.password());
+    return ApiResponse.ok(new AuthResult(employee.userId(), employee.name(), employee.phone(),
+        tokens.issue(new com.aiquestion.security.AccountIdentity(employee.userId(), employee.accountType(), employee.enterpriseId())),
+        employee.accountType(), employee.enterpriseId()));
+  }
 
   public record UserProfile(
       Long userId,
@@ -65,7 +80,10 @@ public class AuthController {
       String city,
       String district,
       String address,
-      String roleCode) {}
+      String roleCode) {
+    public com.aiquestion.security.AccountType getAccountType() { return com.aiquestion.security.AccountType.ADMIN; }
+    public Long getEnterpriseId() { return userId; }
+  }
 
   public record ProfileUpdateCommand(
       @NotBlank @Size(max = 80) String name,
@@ -133,34 +151,20 @@ public class AuthController {
   @Operation(summary = "登录")
   @PostMapping("/login")
   public ApiResponse<AuthResult> login(@Valid @RequestBody AuthCommand command) {
-    var users =
-        jdbc.query(
-            "SELECT id,name,phone,password_hash FROM app_user WHERE phone=? AND status='ACTIVE'",
-            (rs, row) ->
-                new Object[] {
-                  rs.getLong("id"),
-                  rs.getString("name"),
-                  rs.getString("phone"),
-                  rs.getString("password_hash")
-                },
-            command.phone());
-    if (users.isEmpty() || !encoder.matches(command.password(), (String) users.get(0)[3])) {
-      throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
-    }
-    Object[] user = users.get(0);
-    return ApiResponse.ok(
-        new AuthResult(
-            (Long) user[0],
-            (String) user[1],
-            (String) user[2],
-            tokens.issue(String.valueOf(user[0]))));
+    var user = accounts.loginAdministrator(command.phone(), command.password());
+    return ApiResponse.ok(new AuthResult(user.userId(), user.name(), user.phone(),
+        tokens.issue(new com.aiquestion.security.AccountIdentity(user.userId(), user.accountType(), user.enterpriseId())),
+        user.accountType(), user.enterpriseId()));
   }
 
   @Operation(summary = "获取当前用户信息")
   @GetMapping("/me")
-  public ApiResponse<UserProfile> me(
+  public ApiResponse<?> me(
       @RequestHeader(value = "Authorization", required = false) String authorization) {
-    String userId = currentUserId(authorization);
+    var identity = accounts.current(authorization);
+    if (identity.accountType() == com.aiquestion.security.AccountType.EMPLOYEE)
+      return ApiResponse.ok(accounts.employee(identity.accountId()));
+    String userId = String.valueOf(identity.accountId());
     var users =
         jdbc.query(
             "SELECT id,name,phone,unit_name,province,city,district,address,role_code FROM app_user WHERE id=? AND status='ACTIVE'",
@@ -184,7 +188,7 @@ public class AuthController {
 
   @Operation(summary = "修改当前用户信息")
   @PutMapping("/me/profile")
-  public ApiResponse<UserProfile> updateProfile(
+  public ApiResponse<?> updateProfile(
       @RequestHeader(value = "Authorization", required = false) String authorization,
       @Valid @RequestBody ProfileUpdateCommand command) {
     String userId = currentUserId(authorization);
@@ -210,10 +214,15 @@ public class AuthController {
   public ApiResponse<Void> changePassword(
       @RequestHeader(value = "Authorization", required = false) String authorization,
       @Valid @RequestBody PasswordChangeCommand command) {
-    String userId = currentUserId(authorization);
+    var identity = accounts.current(authorization);
     if (!command.newPassword().equals(command.confirmPassword())) {
       throw new BusinessException(ErrorCode.PASSWORD_NOT_MATCH);
     }
+    if (identity.accountType() == com.aiquestion.security.AccountType.EMPLOYEE) {
+      accounts.changeEmployeePassword(identity, command.currentPassword(), command.newPassword());
+      return ApiResponse.ok(null);
+    }
+    String userId = String.valueOf(identity.accountId());
     String passwordHash =
         jdbc.queryForObject(
             "SELECT password_hash FROM app_user WHERE id=? AND status='ACTIVE'",
@@ -231,14 +240,10 @@ public class AuthController {
   }
 
   private String currentUserId(String authorization) {
-    if (authorization == null || !authorization.startsWith("Bearer ")) {
-      throw new BusinessException(ErrorCode.UNAUTHORIZED);
-    }
-    try {
-      return tokens.subject(authorization.substring(7), false);
-    } catch (RuntimeException exception) {
-      throw new BusinessException(ErrorCode.INVALID_TOKEN);
-    }
+    var identity = accounts.current(authorization);
+    if (identity.accountType() != com.aiquestion.security.AccountType.ADMIN)
+      throw new BusinessException(ErrorCode.FORBIDDEN);
+    return String.valueOf(identity.accountId());
   }
 
   private String blankToNull(String value) {

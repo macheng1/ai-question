@@ -247,4 +247,7 @@ public interface QuestionItemRepository {
    * @return 数据访问结果
    */
   long countByBankIdAndStem(@Param("bankId") Long bankId, @Param("stem") String stem);
+  /** 已安排考试或形成答题快照的题目不能修改，避免历史答案与判分漂移。 */
+  @org.apache.ibatis.annotations.Select("SELECT (SELECT COUNT(*) FROM test_paper_question q JOIN assessment_task t ON t.paper_id=q.paper_id WHERE q.question_id=#{id}) + (SELECT COUNT(*) FROM assessment_attempt_question WHERE question_id=#{id}) + (SELECT COUNT(*) FROM test_paper_random_bank r JOIN assessment_task t ON t.paper_id=r.paper_id JOIN question_item q ON q.bank_id=r.bank_id WHERE q.id=#{id})")
+  long countAssessmentReferences(@Param("id") Long id);
 }

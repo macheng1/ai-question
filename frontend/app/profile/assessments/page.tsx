@@ -1,12 +1,13 @@
 "use client";
-import { IconPlus } from "@/features/exam/components/ExamIcons";
+import { Typography, Space } from "@douyinfe/semi-ui";
+import { Card } from "@douyinfe/semi-ui";
+import { IconPlus } from "@douyinfe/semi-icons";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import "@douyinfe/semi-ui/react19-adapter";
 import { Button, DatePicker, Input, Modal, Spin, Toast } from "@douyinfe/semi-ui";
-import { PageShell } from "@/components/layout/PageShell";
-import { ProfileSidebar } from "@/components/layout/ProfileSidebar";
+import { ProfileShell } from "@/components/layout/ProfileShell";
 import {
   deleteAssessment,
   getAssessment,
@@ -17,6 +18,7 @@ import {
 } from "@/features/assessments/api";
 import { getPapers, type Paper } from "@/features/papers/api";
 import { ArrangeAssessmentModal } from "@/features/assessments/components/ArrangeAssessmentModal";
+
 
 const dateText = (value?: string) =>
   value ? value.replace("T", " ").slice(0, 16) : "-";
@@ -104,13 +106,10 @@ export default function AssessmentManagementPage() {
     Toast.success("考试链接已复制");
   };
   return (
-    <PageShell>
-      <main className="mx-auto flex min-h-[720px] w-[92%] max-w-[1160px] flex-col gap-6 py-10 sm:py-14 md:flex-row">
-        <ProfileSidebar />
-        <section className="min-w-0 flex-1">
-          <div className="flex items-center justify-between">
+    <ProfileShell>
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-slate-800">考试管理</h1>
+              <Typography.Title heading={1} className="!m-0 !text-[28px] !font-semibold !text-[#183f35]">考试管理</Typography.Title>
               <p className="mt-2 text-sm text-slate-500">
                 管理已发布的考试任务、成绩和考生入口
               </p>
@@ -122,7 +121,7 @@ export default function AssessmentManagementPage() {
               <IconPlus aria-hidden="true" /> 安排考试
             </Button>
           </div>
-          <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 lg:flex-row lg:items-center">
+          <Card bodyStyle={{ padding: 0 }} className="!mt-5"><div className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center">
             <div className="flex flex-1 items-center gap-3">
               <DatePicker
                 type="date"
@@ -154,32 +153,32 @@ export default function AssessmentManagementPage() {
             <Button theme="solid" type="warning" onClick={load}>
               立即搜索
             </Button>
-          </div>
+          </div></Card>
           {loading ? (
             <div className="grid min-h-64 place-items-center">
               <Spin size="large" />
             </div>
           ) : (
-            <div className="mt-5 space-y-4">
+            <div className="flex flex-col mt-5 gap-4">
               {items.map((item) => {
                 const [label, tone] = stateOf(item);
                 return (
-                  <article
+                  <Card bodyStyle={{ padding: 0 }}
                     key={item.id}
-                    className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-                  >
+                    className=""
+                  ><div className="p-5">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                       <div>
-                        <div className="flex items-center gap-3">
+                        <Space wrap >
                           <span
                             className={`rounded-full px-3 py-1 text-xs ${tone}`}
                           >
                             {label}
                           </span>
-                          <h2 className="text-base font-bold text-slate-800">
+                          <Typography.Title heading={2} className="!text-base !font-bold !text-slate-800">
                             {item.name}
-                          </h2>
-                        </div>
+                          </Typography.Title>
+                        </Space>
                         <p className="mt-1 text-xs text-slate-400">
                           试卷：{item.paperName || item.paperId}（
                           {item.paperMode === "RANDOM" ? "随机" : "固定"}）
@@ -240,18 +239,17 @@ export default function AssessmentManagementPage() {
                         </Button>
                       </div>
                     </div>
-                  </article>
+                  </div></Card>
                 );
               })}
               {!items.length && (
-                <div className="rounded-2xl border border-slate-200 bg-white py-24 text-center text-sm text-slate-400">
+                <Card bodyStyle={{ padding: 0 }} className="text-sm text-slate-400"><div className="py-24 text-center">
                   暂无考试任务
-                </div>
+                </div></Card>
               )}
             </div>
           )}
-        </section>
-      </main>
+
       <ExamInfoModal
         item={selected}
         onClose={() => setSelected(null)}
@@ -280,12 +278,12 @@ export default function AssessmentManagementPage() {
         }}
         onSelectPaper={setArrangePaper}
       />
-      <Modal
+      <Modal bodyStyle={{ maxHeight: "calc(100dvh - 240px)", overflowY: "auto" }} width="min(480px, calc(100vw - 24px))"
         visible={Boolean(confirm)}
         title={confirm?.type === "end" ? "强制结束考试" : "删除考试"}
         onCancel={() => setConfirm(null)}
         footer={
-          <div className="flex justify-end gap-3">
+          <Space wrap >
             <Button theme="borderless" onClick={() => setConfirm(null)}>
               取消
             </Button>
@@ -297,7 +295,7 @@ export default function AssessmentManagementPage() {
             >
               确定
             </Button>
-          </div>
+          </Space>
         }
       >
         <p className="text-sm leading-7 text-slate-600">
@@ -306,7 +304,7 @@ export default function AssessmentManagementPage() {
             : `确定删除考试“${confirm?.item.name}”吗？删除后不可恢复。`}
         </p>
       </Modal>
-    </PageShell>
+    </ProfileShell>
   );
 }
 
@@ -323,12 +321,12 @@ function ExamInfoModal({
   const link = `${typeof window !== "undefined" ? window.location.origin : ""}/kaoshi/${item.id}`;
   const qr = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(link)}`;
   return (
-    <Modal
+    <Modal bodyStyle={{ maxHeight: "calc(100dvh - 240px)", overflowY: "auto" }} width="min(480px, calc(100vw - 24px))"
       visible
       title="考试信息"
       onCancel={onClose}
       footer={
-        <div className="flex justify-end gap-4">
+        <Space wrap >
           <Button theme="borderless" onClick={onClose}>
             关闭
           </Button>
@@ -339,7 +337,7 @@ function ExamInfoModal({
           >
             保存图片
           </Button>
-        </div>
+        </Space>
       }
     >
       <p className="mb-5 text-sm text-slate-500">可扫码或复制链接参加考试。</p>
@@ -362,9 +360,15 @@ function ExamInfoModal({
           alt="考试二维码"
         />
       </div>
-      <div className="flex items-center gap-3">
-        <Input value={link} readOnly className="flex-1" />
-        <Button theme="borderless" onClick={() => onCopy(item)}>
+      <div className="flex w-full items-center gap-2">
+        <Input
+          aria-label="考试链接"
+          value={link}
+          readOnly
+          onFocus={event => event.target.select()}
+          style={{ flex: 1, minWidth: 0 }}
+        />
+        <Button className="shrink-0" theme="borderless" onClick={() => onCopy(item)}>
           复制链接
         </Button>
       </div>
@@ -381,16 +385,29 @@ function EditAssessmentModal({
   onClose: () => void;
   onDone: () => void;
 }) {
-  const [name, setName] = useState(""),
-    [start, setStart] = useState(""),
-    [end, setEnd] = useState(""),
-    [saving, setSaving] = useState(false);
+  const [name, setName] = useState("");
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [detail, setDetail] = useState<Assessment | null>(null);
+
   useEffect(() => {
-    if (item) {
-      setName(item.name);
-      setStart(item.startAt?.slice(0, 16) || "");
-      setEnd(item.endAt?.slice(0, 16) || "");
-    }
+    if (!item) return;
+    let active = true;
+    setName(item.name);
+    setStart(item.startAt?.slice(0, 16) || "");
+    setEnd(item.endAt?.slice(0, 16) || "");
+    setDetail(null);
+    setError("");
+    setLoading(true);
+    getAssessment(item.id).then(data => {
+      if (!active) return;
+      setDetail(data);
+    }).catch(e => { if (active) setError(e instanceof Error ? e.message : "考试信息加载失败，请重新打开"); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, [item]);
   if (!item) return null;
   const save = async () => {
@@ -400,14 +417,13 @@ function EditAssessmentModal({
     }
     setSaving(true);
     try {
-      const detail = await getAssessment(item.id);
+      if (!detail) return;
       await updateAssessment(item.id, {
         name: name.trim(),
         paperId: detail.paperId,
         startAt: start,
         endAt: end,
         durationMinutes: detail.durationMinutes,
-        candidateScope: detail.candidateScope,
         allowRetake: detail.allowRetake,
         maxAttempts: detail.maxAttempts,
         shuffleQuestions: detail.shuffleQuestions,
@@ -423,24 +439,26 @@ function EditAssessmentModal({
     }
   };
   return (
-    <Modal
+    <Modal bodyStyle={{ maxHeight: "calc(100dvh - 240px)", overflowY: "auto" }} width="min(480px, calc(100vw - 24px))"
       visible
       title="编辑考试"
       onCancel={onClose}
       footer={
-        <div className="flex justify-end gap-3">
-          <Button className="modal-cancel-button" onClick={onClose}>取消</Button>
-          <Button theme="solid" type="warning" loading={saving} onClick={save}>
+        <Space wrap >
+          <Button onClick={onClose}>取消</Button>
+          <Button theme="solid" type="primary" loading={saving} disabled={loading || !detail} onClick={save}>
             保存
           </Button>
-        </div>
+        </Space>
       }
     >
-      <div className="space-y-4">
+      <div className="flex flex-col gap-4">
+        {loading && <Spin />}
+        {error && <p role="alert" className="text-red-600">{error}</p>}
         <Input value={name} onChange={setName} placeholder="考试名称" />
-        <div className="grid grid-cols-2 gap-3">
-          <Input type="datetime-local" value={start} onChange={setStart} />
-          <Input type="datetime-local" value={end} onChange={setEnd} />
+        <div className="grid grid-cols-2 gap-4 ">
+          <div className="min-w-0 col-span-2 sm:col-span-1"><DatePicker type="dateTime" format="yyyy-MM-dd HH:mm" className="w-full" aria-label="开始时间" placeholder="开始时间" value={start ? new Date(start) : undefined} onChange={(_, text) => setStart(typeof text === "string" ? text.replace(" ", "T") : "")} /></div>
+          <div className="min-w-0 col-span-2 sm:col-span-1"><DatePicker type="dateTime" format="yyyy-MM-dd HH:mm" className="w-full" aria-label="结束时间" placeholder="结束时间" value={end ? new Date(end) : undefined} onChange={(_, text) => setEnd(typeof text === "string" ? text.replace(" ", "T") : "")} /></div>
         </div>
       </div>
     </Modal>

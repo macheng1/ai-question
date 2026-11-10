@@ -1,0 +1,2 @@
+ALTER TABLE training ADD COLUMN purpose VARCHAR(20) NOT NULL DEFAULT 'STANDALONE';
+UPDATE training SET purpose='EXAM' WHERE assessment_id IS NOT NULL;

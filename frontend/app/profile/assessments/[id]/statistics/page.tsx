@@ -1,22 +1,26 @@
 "use client";
+import { Typography, Space } from "@douyinfe/semi-ui";
+import { Layout, Card } from "@douyinfe/semi-ui";
 
-import { IconArrowLeft } from "@/features/exam/components/ExamIcons";
+import { IconArrowLeft } from "@douyinfe/semi-icons";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import "@douyinfe/semi-ui/react19-adapter";
 import { Button, Checkbox, Spin, Tag, Toast } from "@douyinfe/semi-ui";
-import { PageShell } from "@/components/layout/PageShell";
-import { ProfileSidebar } from "@/components/layout/ProfileSidebar";
+import { ProfileShell } from "@/components/layout/ProfileShell";
 import {
   getAssessmentStatisticsDetail,
   type AssessmentStatisticsDetail,
 } from "@/features/assessments/api";
+import { AssessmentRoster } from "@/features/assessments/components/AssessmentRoster";
 import { StatisticsCharts } from "@/features/assessments/components/StatisticsCharts";
 
 const dateText = (value?: string) =>
-  value ? value.replace("T", " ").slice(0, 16) : "-";
+  value && Number.isFinite(Date.parse(value))
+    ? new Date(value).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false })
+    : "-";
 
 const durationText = (seconds?: number) => {
   const total = Math.max(0, Number(seconds || 0));
@@ -69,10 +73,7 @@ export default function AssessmentStatisticsPage() {
   );
 
   return (
-    <PageShell>
-      <main className="mx-auto flex min-h-[720px] w-[92%] max-w-[1160px] flex-col gap-6 py-10 sm:py-14 md:flex-row">
-        <ProfileSidebar />
-        <section className="min-w-0 flex-1">
+    <ProfileShell>
           <div className="flex items-center justify-between gap-4">
             <div>
               <Link
@@ -81,7 +82,7 @@ export default function AssessmentStatisticsPage() {
               >
                 <IconArrowLeft aria-hidden="true" /> 返回考试管理
               </Link>
-              <h1 className="mt-5 text-2xl font-bold text-slate-800">考试统计</h1>
+              <Typography.Title heading={1} className="!mt-5 !m-0 !text-[28px] !font-semibold !text-[#183f35]">考试统计</Typography.Title>
             </div>
             <Button theme="borderless" onClick={() => load()} loading={loading}>
               刷新数据
@@ -94,13 +95,13 @@ export default function AssessmentStatisticsPage() {
             </div>
           ) : data ? (
             <>
-              <section className="mt-5 rounded-2xl border border-blue-200 bg-white p-5 shadow-sm">
+              <Layout.Content className="mt-5 rounded-2xl border border-blue-200 bg-white p-5 shadow-sm">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <h2 className="text-lg font-bold text-slate-800">{data.task.name}</h2>
+                    <Space wrap >
+                      <Typography.Title heading={2} className="!text-lg !font-bold !text-slate-800">{data.task.name}</Typography.Title>
                       <Tag type="light">{data.task.status === "ENDED" || (data.task.endAt && Date.parse(data.task.endAt) <= Date.now()) ? "已结束" : data.task.status === "DISABLED" ? "已停用" : data.task.status === "DRAFT" ? "草稿" : data.task.startAt && Date.parse(data.task.startAt) > Date.now() ? "未开始" : "进行中"}</Tag>
-                    </div>
+                    </Space>
                     <p className="mt-2 text-sm text-slate-500">
                       试卷：{data.task.paperName || data.task.paperId} · {dateText(data.task.startAt)} ～ {dateText(data.task.endAt)} · 时长 {data.task.durationMinutes} 分钟 · 满分 {data.overview.totalScore} 分 · 及格 {data.overview.passScore} 分
                     </p>
@@ -109,14 +110,15 @@ export default function AssessmentStatisticsPage() {
                     包含重考记录
                   </Checkbox>
                 </div>
-              </section>
+              </Layout.Content>
 
+              <AssessmentRoster taskId={taskId} scope={data.task.candidateScope} />
               <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
                 {cards.map(([label, value, tone]) => (
-                  <div key={label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <Card bodyStyle={{ padding: 0 }} key={label} className=""><div className="p-4">
                     <p className="text-xs text-slate-400">{label}</p>
                     <p className={`mt-2 text-xl font-bold ${cardToneClass[tone]}`}>{value}</p>
-                  </div>
+                  </div></Card>
                 ))}
               </div>
 
@@ -124,10 +126,10 @@ export default function AssessmentStatisticsPage() {
                 <StatisticsCharts data={data} />
               </div>
 
-              <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h2 className="text-base font-bold text-slate-800">易错题 TOP 5</h2>
+              <Layout.Content className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <Typography.Title heading={2} className="!text-base !font-bold !text-slate-800">易错题 TOP 5</Typography.Title>
                 <p className="mt-1 text-xs text-slate-400">正确率最低的题目</p>
-                <div className="mt-4 space-y-5">
+                <div className="flex flex-col mt-4 gap-5">
                   {data.difficultQuestions.map((question, index) => (
                     <div key={question.questionId}>
                       <div className="flex items-start justify-between gap-3 text-sm">
@@ -145,11 +147,10 @@ export default function AssessmentStatisticsPage() {
                   ))}
                   {!data.difficultQuestions.length && <p className="py-10 text-center text-sm text-slate-400">暂无题目统计数据</p>}
                 </div>
-              </section>
+              </Layout.Content>
             </>
           ) : null}
-        </section>
-      </main>
-    </PageShell>
+
+    </ProfileShell>
   );
 }

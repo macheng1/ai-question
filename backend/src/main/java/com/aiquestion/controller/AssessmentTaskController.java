@@ -56,7 +56,6 @@ public class AssessmentTaskController {
             r.startAt(),
             r.endAt(),
             r.durationMinutes(),
-            r.candidateScope(),
             r.allowRetake(),
             r.maxAttempts(),
             r.shuffleQuestions(),
@@ -75,7 +74,6 @@ public class AssessmentTaskController {
             r.startAt(),
             r.endAt(),
             r.durationMinutes(),
-            r.candidateScope(),
             r.allowRetake(),
             r.maxAttempts(),
             r.shuffleQuestions(),
@@ -110,6 +108,8 @@ public class AssessmentTaskController {
     return ApiResponse.ok(service.records(id, includeRetake));
   }
 
+  @GetMapping("/{id}/roster") public ApiResponse<?> roster(@PathVariable Long id){return ApiResponse.ok(service.roster(id));}
+
   @Operation(summary = "删除考试任务")
   @DeleteMapping("/{id}")
   public ApiResponse<Void> delete(@PathVariable Long id) {
@@ -123,7 +123,6 @@ public class AssessmentTaskController {
       @NotNull LocalDateTime startAt,
       @NotNull LocalDateTime endAt,
       Integer durationMinutes,
-      String candidateScope,
       Boolean allowRetake,
       Integer maxAttempts,
       Boolean shuffleQuestions,
@@ -135,7 +134,6 @@ public class AssessmentTaskController {
       @NotNull LocalDateTime startAt,
       @NotNull LocalDateTime endAt,
       Integer durationMinutes,
-      String candidateScope,
       Boolean allowRetake,
       Integer maxAttempts,
       Boolean shuffleQuestions,

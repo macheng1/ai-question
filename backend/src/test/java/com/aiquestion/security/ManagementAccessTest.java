@@ -15,11 +15,20 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class ManagementAccessTest {
+  @Test void employeeTokenIsForbiddenEvenWhenAdminIdExists() {
+    var tokens = mock(JwtTokenService.class);
+    var jdbc = mock(JdbcTemplate.class);
+    when(tokens.subject("employee", false)).thenReturn("employee:7");
+    var request = new MockHttpServletRequest();
+    request.addHeader("Authorization", "Bearer employee");
+    assertThrows(BusinessException.class, () -> new ManagementAccess(new com.aiquestion.service.AccountService(jdbc, tokens, mock(org.springframework.security.crypto.password.PasswordEncoder.class))).preHandle(request, new MockHttpServletResponse(), new Object()));
+    verify(jdbc, never()).queryForObject(anyString(), eq(Integer.class), anyLong());
+  }
   @AfterEach void clear() { RequestContextHolder.resetRequestAttributes(); }
   @Test void missingAndInvalidTokensAreRejected() {
     var tokens=mock(JwtTokenService.class);
     var jdbc=mock(JdbcTemplate.class);
-    var access=new ManagementAccess(tokens,jdbc);
+    var access=new ManagementAccess(new com.aiquestion.service.AccountService(jdbc, tokens, mock(org.springframework.security.crypto.password.PasswordEncoder.class)));
     var request=new MockHttpServletRequest();
     assertThrows(BusinessException.class,()->access.preHandle(request,new MockHttpServletResponse(),new Object()));
     request.addHeader("Authorization","Bearer broken");
@@ -30,7 +39,7 @@ class ManagementAccessTest {
   @Test void inactiveUsersAreRejectedAndActiveIdentityIsExposed() {
     var tokens=mock(JwtTokenService.class);
     var jdbc=mock(JdbcTemplate.class);
-    var access=new ManagementAccess(tokens,jdbc);
+    var access=new ManagementAccess(new com.aiquestion.service.AccountService(jdbc, tokens, mock(org.springframework.security.crypto.password.PasswordEncoder.class)));
     var request=new MockHttpServletRequest();
     request.addHeader("Authorization","Bearer token");
     when(tokens.subject("token",false)).thenReturn("7");

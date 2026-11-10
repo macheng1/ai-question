@@ -38,6 +38,11 @@ public class PublicExamController {
             if (attempts.isEmpty()) throw new BusinessException(ErrorCode.NOT_FOUND, "答题记录不存在");
             submitted = "SUBMITTED".equals(String.valueOf(attempts.get(0).get("status")));
         }
+        if(new com.aiquestion.service.AssessmentRosterService(jdbc).hasTraining(id)) {
+            if(attemptId==null) { task.put("questions",List.of()); task.put("showAnswers",false); return ApiResponse.ok(task); }
+            var identity=jdbc.queryForMap("SELECT p.candidate_name,p.phone FROM assessment_participant p JOIN assessment_attempt a ON a.participant_id=p.id WHERE a.id=? AND p.task_id=?",attemptId,id);
+            new com.aiquestion.service.AssessmentRosterService(jdbc).requireEligible(id,String.valueOf(identity.get("candidate_name")),String.valueOf(identity.get("phone")));
+        }
         boolean reviewEnabled = revealAnswers && submitted && flag(task.get("reviewEnabled"));
         List<Map<String, Object>> questions = questionRows(id, attemptId);
         questions.forEach(q -> {
@@ -59,13 +64,16 @@ public class PublicExamController {
     }
 
     @Operation(summary = "开始或恢复考试")
+    @org.springframework.transaction.annotation.Transactional
     @PostMapping("/{id}/start")
     public ApiResponse<Map<String, Object>> start(@PathVariable Long id, @RequestBody CandidateCommand command) {
+        new com.aiquestion.service.AssessmentRosterService(jdbc).lockTask(id);
         Map<String, Object> task = task(id);
         ensureTaskOpen(task);
         com.aiquestion.service.CandidateLearningService.validate(command.name(), command.phone());
         String phone = command.phone().trim();
         String name = command.name().trim();
+        new com.aiquestion.service.AssessmentRosterService(jdbc).requireEligible(id,name,phone);
         List<Map<String, Object>> participants = jdbc.queryForList("SELECT id,attempt_count FROM assessment_participant WHERE task_id=? AND candidate_name=? AND phone=? ORDER BY id DESC LIMIT 1", id, name, phone);
         long participantId;
         int attemptCount;
@@ -74,6 +82,8 @@ public class PublicExamController {
             participantId = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
             attemptCount = 0;
         } else { participantId = ((Number) participants.get(0).get("id")).longValue(); attemptCount = ((Number) participants.get(0).get("attempt_count")).intValue(); }
+        jdbc.update("UPDATE assessment_participant p JOIN assessment_task t ON t.id=p.task_id LEFT JOIN training tr ON tr.assessment_id=t.id LEFT JOIN training_audience ta ON ta.training_id=tr.id AND ta.candidate_name=p.candidate_name AND ta.phone=p.phone LEFT JOIN organization_employee e ON e.created_by=t.created_by AND e.name=p.candidate_name AND e.phone=p.phone SET p.employee_id=COALESCE(ta.employee_id,e.id) WHERE p.id=? AND p.employee_id IS NULL",participantId);
+
         List<Map<String, Object>> active = jdbc.queryForList("SELECT id,attempt_no,started_at FROM assessment_attempt WHERE task_id=? AND participant_id=? AND status='IN_PROGRESS' ORDER BY id DESC LIMIT 1", id, participantId);
         long attemptId;
         Object startedAt;
@@ -134,6 +144,7 @@ public class PublicExamController {
                                                          @RequestParam String phone) {
         Map<String, Object> task = task(id);
         com.aiquestion.service.CandidateLearningService.validate(name, phone);
+        new com.aiquestion.service.AssessmentRosterService(jdbc).requireEligible(id,name,phone);
         int configuredMaxAttempts = maxAttempts(task);
         List<Map<String, Object>> participants = jdbc.queryForList(
                 "SELECT id,attempt_count FROM assessment_participant WHERE task_id=? AND candidate_name=? AND phone=? ORDER BY id DESC LIMIT 1",
@@ -165,6 +176,7 @@ public class PublicExamController {
                                                       @RequestParam String phone) {
         task(id);
         com.aiquestion.service.CandidateLearningService.validate(name, phone);
+        new com.aiquestion.service.AssessmentRosterService(jdbc).requireEligible(id, name, phone);
         List<Map<String, Object>> active = jdbc.queryForList(
                         "SELECT aa.id attempt_id,aa.started_at " +
                         "FROM assessment_attempt aa " +
@@ -181,10 +193,16 @@ public class PublicExamController {
     }
 
     @Operation(summary = "保存单题答案")
+    @org.springframework.transaction.annotation.Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     @PutMapping("/attempts/{attemptId}/answers/{questionId}")
     public ApiResponse<Void> answer(@PathVariable Long attemptId, @PathVariable Long questionId, @RequestBody AnswerCommand command) {
         ensureAttemptOpen(attemptId, false);
-        Map<String, Object> question = jdbc.queryForMap("SELECT q.question_type,q.answer_text,aq.score FROM assessment_attempt_question aq JOIN question_item q ON q.id=aq.question_id WHERE aq.attempt_id=? AND aq.question_id=?", attemptId, questionId);
+        Map<String, Object> question;
+        try {
+            question = jdbc.queryForMap("SELECT q.question_type,q.answer_text,aq.score FROM assessment_attempt_question aq JOIN question_item q ON q.id=aq.question_id WHERE aq.attempt_id=? AND aq.question_id=?", attemptId, questionId);
+        } catch (org.springframework.dao.EmptyResultDataAccessException exception) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "题目不属于本次考试");
+        }
         String answer = command.answer() == null ? "" : command.answer().trim().toUpperCase(Locale.ROOT);
         String correct = String.valueOf(question.getOrDefault("answer_text", "")).trim().toUpperCase(Locale.ROOT);
         if ("TRUE_FALSE".equals(question.get("question_type"))) answer = "A".equals(answer) ? "TRUE" : "B".equals(answer) ? "FALSE" : answer;
@@ -195,6 +213,7 @@ public class PublicExamController {
     }
 
     @Operation(summary = "交卷并计算成绩")
+    @org.springframework.transaction.annotation.Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     @PostMapping("/attempts/{attemptId}/submit")
     public ApiResponse<Map<String, Object>> submit(@PathVariable Long attemptId) {
         Map<String, Object> openAttempt = ensureAttemptOpen(attemptId, true);
@@ -305,7 +324,11 @@ public class PublicExamController {
     private Map<String, Object> ensureAttemptOpen(Long attemptId, boolean submitting) {
         Map<String, Object> attempt;
         try {
-            attempt = jdbc.queryForMap("SELECT a.id,a.status,a.started_at startedAt,t.duration_minutes duration,t.status taskStatus,t.start_at startAt,t.end_at endAt FROM assessment_attempt a JOIN assessment_task t ON t.id=a.task_id WHERE a.id=?", attemptId);
+        var identity=jdbc.queryForMap("SELECT p.task_id,p.candidate_name,p.phone FROM assessment_participant p JOIN assessment_attempt a ON a.participant_id=p.id WHERE a.id=?",attemptId);
+        // Use the same task-first lock order as start/retake to serialize answer writes and submission.
+        new com.aiquestion.service.AssessmentRosterService(jdbc).lockTask(((Number)identity.get("task_id")).longValue());
+        new com.aiquestion.service.AssessmentRosterService(jdbc).requireEligible(((Number)identity.get("task_id")).longValue(),String.valueOf(identity.get("candidate_name")),String.valueOf(identity.get("phone")));
+            attempt = jdbc.queryForMap("SELECT a.id,a.status,a.started_at startedAt,t.duration_minutes duration,t.status taskStatus,t.start_at startAt,t.end_at endAt FROM assessment_attempt a JOIN assessment_task t ON t.id=a.task_id WHERE a.id=? FOR UPDATE", attemptId);
         } catch (org.springframework.dao.EmptyResultDataAccessException exception) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "答题记录不存在");
         }

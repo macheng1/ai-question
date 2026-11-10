@@ -1,5 +1,2 @@
-import { AppIcon } from "@/components/ui/AppIcon";
-import { PageShell } from "@/components/layout/PageShell";
-import { BankList } from "@/features/banks/components/BankList";
-
-export default function BanksPage(){return <PageShell><main className="min-h-[760px] bg-white"><section className="border-b border-slate-200 bg-gradient-to-r from-[#effbfb] to-[#fffaf5]"><div className="mx-auto flex min-h-[230px] w-[92%] max-w-[1240px] items-center justify-between"><div><span className="rounded-full bg-[#d9f6f3] px-4 py-2 text-xs font-semibold text-[#239f99]"><AppIcon name="grid" /> 企业题库</span><h1 className="mt-6 text-4xl font-bold text-slate-800">企业题库</h1><p className="mt-3 text-sm text-slate-500">沉淀岗位知识和培训内容，随时组卷用于员工练习与考核</p></div><div className="mr-8 text-8xl text-[#8fe1dc] opacity-70"><AppIcon name="book" /></div></div></section><div className="mx-auto w-[92%] max-w-[1200px] py-14"><BankList/></div></main></PageShell>}
+import { redirect } from "next/navigation";
+export default function RetiredPage() { redirect("/workspace"); }

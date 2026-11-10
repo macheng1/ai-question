@@ -6,7 +6,6 @@ export type SaveAssessment = {
   startAt: string;
   endAt: string;
   durationMinutes: number;
-  candidateScope?: string;
   allowRetake?: boolean;
   maxAttempts?: number;
   shuffleQuestions?: boolean;
@@ -114,6 +113,8 @@ export function getAssessmentRecords(id: number, includeRetake = false) {
       id: number;
       candidateName: string;
       phone?: string;
+      departmentId?: number;
+      departmentName?: string;
       score: number;
       totalScore: number;
       passed: boolean;
@@ -123,4 +124,18 @@ export function getAssessmentRecords(id: number, includeRetake = false) {
       status: string;
     }>
   >(`/management/assessments/${id}/records`, { includeRetake });
+}
+
+export type AssessmentRosterRow = {
+  employeeId: number;
+  departmentId: number;
+  departmentName: string;
+  candidateName: string;
+  phone: string;
+  submitted: boolean;
+};
+export function getAssessmentRoster(id: number) {
+  return apiClient.get<AssessmentRosterRow[]>(
+    `/management/assessments/${id}/roster`,
+  );
 }

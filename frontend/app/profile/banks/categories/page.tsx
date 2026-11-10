@@ -1,13 +1,14 @@
 "use client";
+import { Typography, Space } from "@douyinfe/semi-ui";
+import { Card } from "@douyinfe/semi-ui";
 
-import { IconArrowLeft, IconPlus } from "@/features/exam/components/ExamIcons";
+import { IconArrowLeft, IconPlus } from "@douyinfe/semi-icons";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import "@douyinfe/semi-ui/react19-adapter";
-import { Table,  Button, Input as SemiInput, Modal, Select, TextArea as SemiTextArea, Toast  } from "@douyinfe/semi-ui";
-import { PageShell } from "@/components/layout/PageShell";
-import { ProfileSidebar } from "@/components/layout/ProfileSidebar";
+import { Table, Button, Input as SemiInput, Modal, Select, TextArea as SemiTextArea, Toast, InputNumber } from "@douyinfe/semi-ui";
+import { ProfileShell } from "@/components/layout/ProfileShell";
 import {
   createBankCategory,
   deleteBankCategory,
@@ -118,10 +119,7 @@ export default function CategoriesPage() {
     });
   };
   return (
-    <PageShell>
-      <main className="mx-auto flex min-h-[720px] w-[92%] max-w-[1160px] flex-col gap-6 py-10 sm:py-14 md:flex-row">
-        <ProfileSidebar />
-        <section className="min-w-0 flex-1">
+    <ProfileShell>
           <Link
             href="/profile/banks"
             className="text-sm font-semibold text-blue-600 no-underline"
@@ -129,14 +127,14 @@ export default function CategoriesPage() {
             <IconArrowLeft aria-hidden="true" /> 返回题库管理
           </Link>
           <div className="mt-5 flex items-center justify-between gap-3">
-            <h1 className="text-2xl font-bold text-slate-800">
+            <Typography.Title heading={1} className="!m-0 !text-[28px] !font-semibold !text-[#183f35]">
               题库管理 - 分类管理
-            </h1>
+            </Typography.Title>
             <Button theme="solid" type="warning" onClick={() => openCreate()}>
               <IconPlus aria-hidden="true" /> 新建根分类
             </Button>
           </div>
-          <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          <Card bodyStyle={{ padding: 0 }} className="!mt-6 overflow-hidden">
             <Table rowKey="id" pagination={false} scroll={{x: 720}} dataSource={roots.flatMap(root => [{...root, child: false}, ...childrenOf(root.id).map(item => ({...item, child: true}))])} columns={[{ title: "分类名称", render: (_value: unknown, item: Category & {child: boolean}) => (<span className={item.child ? "pl-6" : "font-medium"}>
         {item.child && <span className="mr-2 inline-block h-3 w-3 border-b border-l border-slate-300" aria-hidden="true" />}
         {item.name}
@@ -154,22 +152,16 @@ export default function CategoriesPage() {
           删除
         </Button>
       </span>) }]} />
-            {!categories.length && (
-              <div className="py-12 text-center text-sm text-slate-400">
-                暂无数据
-              </div>
-            )}
-          </div>
-        </section>
-      </main>
-      <Modal
+          </Card>
+
+      <Modal bodyStyle={{ maxHeight: "calc(100dvh - 240px)", overflowY: "auto" }} width="min(480px, calc(100vw - 24px))"
         title={
           editingId ? "编辑分类" : form.parentId ? "新建子分类" : "新建根分类"
         }
         visible={open}
         onCancel={close}
         footer={
-          <div className="flex justify-end gap-3">
+          <Space wrap >
             <Button className="modal-cancel-button" onClick={close}>取消</Button>
             <Button
               theme="solid"
@@ -179,10 +171,10 @@ export default function CategoriesPage() {
             >
               保存
             </Button>
-          </div>
+          </Space>
         }
       >
-        <div className="space-y-4 py-2">
+        <div className="flex flex-col gap-4 py-2">
           <Input
             value={form.name}
             onChange={(value) => setForm({ ...form, name: value })}
@@ -204,14 +196,14 @@ export default function CategoriesPage() {
             onChange={(value) => setForm({ ...form, description: value })}
             placeholder="描述（可选）"
           />
-          <Input
-            type="number"
+          <InputNumber
+
             value={form.sortNo}
-            onChange={(value) => setForm({ ...form, sortNo: value })}
+            onChange={(value) => setForm({ ...form, sortNo: String(value ?? "") })}
             placeholder="排序"
           />
         </div>
       </Modal>
-    </PageShell>
+    </ProfileShell>
   );
 }

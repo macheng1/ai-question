@@ -1,10 +1,10 @@
 package com.aiquestion.service;
 
 import com.aiquestion.common.*;
-import com.aiquestion.security.ManagementAccess;
 import com.aiquestion.domain.AssessmentTask;
 import com.aiquestion.repository.AssessmentTaskRepository;
 import com.aiquestion.repository.TestPaperRepository;
+import com.aiquestion.security.ManagementAccess;
 import java.time.LocalDateTime;
 import java.util.Map;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 public class AssessmentTaskService {
   private final AssessmentTaskRepository repository;
   private final TestPaperRepository paperRepository;
+  @org.springframework.beans.factory.annotation.Autowired private AssessmentRosterService roster;
 
   public AssessmentTaskService(AssessmentTaskRepository r, TestPaperRepository p) {
     repository = r;
@@ -37,6 +38,7 @@ public class AssessmentTaskService {
     if (t == null || !ManagementAccess.userId().equals(t.getCreatedBy())) {
       throw new BusinessException(ErrorCode.NOT_FOUND, "考试任务不存在");
     }
+    if (roster != null) t.setCandidateScope(roster.hasTraining(id) ? "TRAINING" : "ALL");
     return t;
   }
 
@@ -46,13 +48,13 @@ public class AssessmentTaskService {
     repository.markExpiredAsEnded();
   }
 
+  @org.springframework.transaction.annotation.Transactional
   public AssessmentTask create(
       String name,
       Long paperId,
       LocalDateTime start,
       LocalDateTime end,
       Integer duration,
-      String scope,
       Boolean retake,
       Integer max,
       Boolean sq,
@@ -65,27 +67,28 @@ public class AssessmentTaskService {
     validateTime(start, end);
     var t = new AssessmentTask();
     t.setCreatedBy(ManagementAccess.userId());
-    apply(t, name, paperId, start, end, duration, scope, retake, max, sq, so, show);
+    apply(t, name, paperId, start, end, duration, retake, max, sq, so, show);
     t.setStatus(statusForTime(start, end));
     repository.insert(t);
     return get(t.getId());
   }
 
+  @org.springframework.transaction.annotation.Transactional
   public AssessmentTask update(
       Long id,
       String name,
       LocalDateTime start,
       LocalDateTime end,
       Integer duration,
-      String scope,
       Boolean retake,
       Integer max,
       Boolean sq,
       Boolean so,
       Boolean show) {
+    roster.lockTask(id);
     var t = get(id);
     validateTime(start, end);
-    apply(t, name, t.getPaperId(), start, end, duration, scope, retake, max, sq, so, show);
+    apply(t, name, t.getPaperId(), start, end, duration, retake, max, sq, so, show);
     if (!"DISABLED".equals(t.getStatus())) {
       t.setStatus(statusForTime(start, end));
     }
@@ -100,7 +103,6 @@ public class AssessmentTaskService {
       LocalDateTime start,
       LocalDateTime end,
       Integer duration,
-      String scope,
       Boolean retake,
       Integer max,
       Boolean sq,
@@ -111,7 +113,7 @@ public class AssessmentTaskService {
     t.setStartAt(start);
     t.setEndAt(end);
     t.setDurationMinutes(duration == null ? 30 : duration);
-    t.setCandidateScope(scope == null ? "ALL" : scope);
+    t.setCandidateScope("ALL");
     t.setAllowRetake(Boolean.TRUE.equals(retake));
     t.setMaxAttempts(max == null ? 1 : Math.max(1, max));
     t.setShuffleQuestions(Boolean.TRUE.equals(sq));
@@ -168,9 +170,15 @@ public class AssessmentTaskService {
     return result;
   }
 
+  public java.util.List<Map<String, Object>> roster(Long id) {
+    get(id);
+    return roster.roster(id);
+  }
+
   public void delete(Long id) {
     get(id);
-    if (repository.countTrainingReferences(id) > 0) throw new BusinessException(ErrorCode.BAD_REQUEST, "该考试已关联培训，请先解除关联");
+    if (repository.countTrainingReferences(id) > 0)
+      throw new BusinessException(ErrorCode.BAD_REQUEST, "该考试已关联培训，请先解除关联");
     if (repository.deleteById(id) == 0) {
       throw new BusinessException(ErrorCode.NOT_FOUND, "考试任务不存在");
     }

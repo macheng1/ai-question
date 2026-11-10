@@ -1,0 +1,332 @@
+{
+  "dashboard": {
+    "overview": {
+      "trainingCount": 1,
+      "assigned": 3,
+      "completed": 1,
+      "notStarted": 2,
+      "inProgress": 0,
+      "studiedHours": 0.0027787222222321563,
+      "examAssigned": 3,
+      "passed": 1,
+      "overdue": 0,
+      "missingDuration": 0,
+      "completionRate": 33.3,
+      "passRate": 33.3
+    },
+    "departments": [
+      {
+        "id": 6,
+        "name": "【用户验收】质量部",
+        "assigned": 1,
+        "completed": 1,
+        "rate": 100.0
+      },
+      {
+        "id": 5,
+        "name": "生产安全部",
+        "assigned": 2,
+        "completed": 0,
+        "rate": 0.0
+      }
+    ],
+    "trend": [
+      {
+        "date": "2026-10-11",
+        "count": 0
+      },
+      {
+        "date": "2026-10-12",
+        "count": 0
+      },
+      {
+        "date": "2026-10-13",
+        "count": 0
+      },
+      {
+        "date": "2026-10-14",
+        "count": 0
+      },
+      {
+        "date": "2026-10-15",
+        "count": 0
+      },
+      {
+        "date": "2026-10-16",
+        "count": 0
+      },
+      {
+        "date": "2026-10-17",
+        "count": 0
+      },
+      {
+        "date": "2026-10-18",
+        "count": 0
+      },
+      {
+        "date": "2026-10-19",
+        "count": 0
+      },
+      {
+        "date": "2026-10-20",
+        "count": 0
+      },
+      {
+        "date": "2026-10-21",
+        "count": 0
+      },
+      {
+        "date": "2026-10-22",
+        "count": 0
+      },
+      {
+        "date": "2026-10-23",
+        "count": 0
+      },
+      {
+        "date": "2026-10-24",
+        "count": 0
+      },
+      {
+        "date": "2026-10-25",
+        "count": 0
+      },
+      {
+        "date": "2026-10-26",
+        "count": 0
+      },
+      {
+        "date": "2026-10-27",
+        "count": 0
+      },
+      {
+        "date": "2026-10-28",
+        "count": 0
+      },
+      {
+        "date": "2026-10-29",
+        "count": 0
+      },
+      {
+        "date": "2026-10-30",
+        "count": 0
+      },
+      {
+        "date": "2026-10-31",
+        "count": 0
+      },
+      {
+        "date": "2026-11-01",
+        "count": 0
+      },
+      {
+        "date": "2026-11-02",
+        "count": 0
+      },
+      {
+        "date": "2026-11-03",
+        "count": 0
+      },
+      {
+        "date": "2026-11-04",
+        "count": 0
+      },
+      {
+        "date": "2026-11-05",
+        "count": 0
+      },
+      {
+        "date": "2026-11-06",
+        "count": 0
+      },
+      {
+        "date": "2026-11-07",
+        "count": 0
+      },
+      {
+        "date": "2026-11-08",
+        "count": 0
+      },
+      {
+        "date": "2026-11-09",
+        "count": 1
+      }
+    ],
+    "rows": [
+      {
+        "trainingId": 43,
+        "trainingName": "【用户验收】消防培训全流程",
+        "assessmentId": 40,
+        "trainingEnd": null,
+        "employeeId": 6,
+        "name": "张明",
+        "phone": "13900001001",
+        "departmentId": 5,
+        "departmentName": "生产安全部",
+        "sessionId": null,
+        "startedAt": null,
+        "confirmedAt": null,
+        "totalUnits": 2,
+        "completedUnits": 0,
+        "studiedSeconds": 0.0,
+        "missingDuration": 0,
+        "videoCompletedAt": null,
+        "readingCompletedAt": null,
+        "examEnd": "2026-11-10T05:35:00.000+00:00",
+        "examName": "【用户验收】消防考试",
+        "attemptId": null,
+        "attemptStatus": null,
+        "score": null,
+        "totalScore": null,
+        "passed": null,
+        "submittedAt": null,
+        "durationSeconds": null,
+        "attemptCount": 0,
+        "learningStatus": "NOT_STARTED",
+        "examPassed": false,
+        "completed": false,
+        "overdue": false,
+        "overdueReasons": [],
+        "status": "NOT_STARTED",
+        "examStatus": "NOT_STARTED",
+        "progress": 0,
+        "completedAt": null,
+        "studiedHours": 0.0
+      },
+      {
+        "trainingId": 43,
+        "trainingName": "【用户验收】消防培训全流程",
+        "assessmentId": 40,
+        "trainingEnd": null,
+        "employeeId": 7,
+        "name": "提醒验收无邮箱",
+        "phone": "13900001009",
+        "departmentId": 5,
+        "departmentName": "生产安全部",
+        "sessionId": null,
+        "startedAt": null,
+        "confirmedAt": null,
+        "totalUnits": 2,
+        "completedUnits": 0,
+        "studiedSeconds": 0.0,
+        "missingDuration": 0,
+        "videoCompletedAt": null,
+        "readingCompletedAt": null,
+        "examEnd": "2026-11-10T05:35:00.000+00:00",
+        "examName": "【用户验收】消防考试",
+        "attemptId": null,
+        "attemptStatus": null,
+        "score": null,
+        "totalScore": null,
+        "passed": null,
+        "submittedAt": null,
+        "durationSeconds": null,
+        "attemptCount": 0,
+        "learningStatus": "NOT_STARTED",
+        "examPassed": false,
+        "completed": false,
+        "overdue": false,
+        "overdueReasons": [],
+        "status": "NOT_STARTED",
+        "examStatus": "NOT_STARTED",
+        "progress": 0,
+        "completedAt": null,
+        "studiedHours": 0.0
+      },
+      {
+        "trainingId": 43,
+        "trainingName": "【用户验收】消防培训全流程",
+        "assessmentId": 40,
+        "trainingEnd": null,
+        "employeeId": 8,
+        "name": "验收员工",
+        "phone": "13900001109",
+        "departmentId": 6,
+        "departmentName": "【用户验收】质量部",
+        "sessionId": 82,
+        "startedAt": "2026-11-09T05:44:45.774+00:00",
+        "confirmedAt": "2026-11-09T05:45:10.505+00:00",
+        "totalUnits": 2,
+        "completedUnits": 2,
+        "studiedSeconds": 10.003400000035763,
+        "missingDuration": 0,
+        "videoCompletedAt": null,
+        "readingCompletedAt": "2026-11-09T05:45:10.365+00:00",
+        "examEnd": "2026-11-10T05:35:00.000+00:00",
+        "examName": "【用户验收】消防考试",
+        "attemptId": 47,
+        "attemptStatus": "SUBMITTED",
+        "score": 30.0,
+        "totalScore": 30.0,
+        "passed": true,
+        "submittedAt": "2026-11-09T05:50:21.953+00:00",
+        "durationSeconds": 26,
+        "attemptCount": 2,
+        "learningStatus": "COMPLETED",
+        "examPassed": true,
+        "completed": true,
+        "overdue": false,
+        "overdueReasons": [],
+        "status": "COMPLETED",
+        "examStatus": "PASSED",
+        "progress": 100,
+        "completedAt": "2026-11-09T05:50:21.953Z",
+        "studiedHours": 0.0027787222222321563
+      }
+    ],
+    "total": 3,
+    "page": 1,
+    "pageSize": 10,
+    "updatedAt": "2026-11-09T05:51:35.673597Z"
+  },
+  "scores": "HTTP Error 500: ",
+  "statistics": {
+    "passedCount": 1,
+    "totalCount": 1,
+    "totalScore": 30.0,
+    "averageScore": 30.0
+  },
+  "statisticsAll": {
+    "passedCount": 1,
+    "totalCount": 2,
+    "totalScore": 30.0,
+    "averageScore": 20.0
+  },
+  "feedback": [
+    {
+      "id": 10,
+      "respondentName": "验收员工",
+      "submittedAt": "2026-11-09T05:51:23.065+00:00",
+      "answers": {
+        "372e3eea-c56d-440b-a0fa-ea48f284a671": "建议增加灭火器操作演示和现场疏散演练。",
+        "75226926-9f60-4abc-85d7-38de7632c739": "5"
+      }
+    }
+  ],
+  "roster": [
+    {
+      "employeeId": 6,
+      "departmentId": 5,
+      "departmentName": "生产安全部",
+      "candidateName": "张明",
+      "phone": "13900001001",
+      "submitted": false
+    },
+    {
+      "employeeId": 7,
+      "departmentId": 5,
+      "departmentName": "生产安全部",
+      "candidateName": "提醒验收无邮箱",
+      "phone": "13900001009",
+      "submitted": false
+    },
+    {
+      "employeeId": 8,
+      "departmentId": 6,
+      "departmentName": "【用户验收】质量部",
+      "candidateName": "验收员工",
+      "phone": "13900001109",
+      "submitted": true
+    }
+  ]
+}

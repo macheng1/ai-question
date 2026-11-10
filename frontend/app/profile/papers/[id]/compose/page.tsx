@@ -1,13 +1,15 @@
 "use client";
 
-import { IconArrowLeft, IconLock } from "@/features/exam/components/ExamIcons";
+import { Layout, Card } from "@douyinfe/semi-ui";
+
+import { IconArrowLeft, IconLock } from "@douyinfe/semi-icons";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import "@douyinfe/semi-ui/react19-adapter";
-import { Button, Input, Select, Spin, Toast } from "@douyinfe/semi-ui";
-import { PageShell } from "@/components/layout/PageShell";
+import { Button, Input, Select, Spin, Toast, InputNumber } from "@douyinfe/semi-ui";
+import { ProfileShell } from "@/components/layout/ProfileShell";
 import { RandomComposePanel } from "@/features/papers/components/RandomComposePanel";
 import {
   getManagedBanks,
@@ -54,7 +56,6 @@ const getDisplayOptions = (item: QuestionItem) => {
 
 export default function ComposePaperPage() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
   const paperId = Number(params.id);
   const [paper, setPaper] = useState<Paper | null>(null);
   const [banks, setBanks] = useState<{ id: number; name: string }[]>([]);
@@ -257,42 +258,42 @@ export default function ComposePaperPage() {
 
   if (loading)
     return (
-      <PageShell>
+      <ProfileShell>
         <div className="grid min-h-[720px] place-items-center">
           <Spin size="large" />
         </div>
-      </PageShell>
+      </ProfileShell>
     );
   const isRandomPaper = paper?.mode?.toUpperCase() === "RANDOM";
 
   if (isRandomPaper) {
     return (
-      <PageShell>
+      <ProfileShell>
         <RandomComposePanel
           paper={paper}
           locked={Boolean(paper.hasAssessment)}
           onCompleted={() => { window.location.href = "/profile/papers"; }}
         />
-      </PageShell>
+      </ProfileShell>
     );
   }
   return (
-    <PageShell>
-      <main className="min-h-[720px] bg-slate-100 pb-10">
+    <ProfileShell>
+      <Layout.Content className="min-w-0">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-white px-5 py-3 sm:px-8">
-          <div className="flex items-center gap-3 text-sm">
-            <Link href="/profile/papers" className="text-slate-500 no-underline">
+          <div className="flex min-w-0 flex-wrap items-center gap-3 text-sm">
+            <Link href="/profile/papers" className="shrink-0 whitespace-nowrap text-slate-500 no-underline">
               <IconArrowLeft aria-hidden="true" /> 返回
             </Link>
             <strong className="text-lg text-slate-800">{paper?.name}</strong>
-            <span className="rounded bg-blue-50 px-2 py-1 text-blue-600">
+            <span className="shrink-0 whitespace-nowrap rounded bg-blue-50 px-2 py-1 text-blue-600">
               {isRandomPaper ? "随机组卷" : "固定组卷"}
             </span>
-            <span className="rounded bg-orange-50 px-2 py-1 text-orange-600">
+            <span className="shrink-0 whitespace-nowrap rounded bg-orange-50 px-2 py-1 text-orange-600">
               {paper?.status === "PUBLISHED" ? "已完成组卷" : "未完成组卷"}
             </span>
             {locked && (
-              <span className="rounded bg-slate-200 px-2 py-1 text-slate-600">
+              <span className="shrink-0 whitespace-nowrap rounded bg-slate-200 px-2 py-1 text-slate-600">
                 <IconLock aria-hidden="true" /> 已锁定
               </span>
             )}
@@ -330,8 +331,8 @@ export default function ComposePaperPage() {
             </Button>
           </div>
         </div>
-        <div className="mx-auto grid min-h-[650px] max-w-[1440px] gap-4 p-4 lg:grid-cols-2 lg:p-5">
-          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        <div className="grid grid-cols-2 gap-4 mt-5">
+          <div className="min-w-0 col-span-2 lg:col-span-1"><Layout.Content className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
             <div className="flex flex-wrap gap-5 border-b border-slate-100 px-5 pt-4 text-sm font-semibold">
               <Button theme="borderless"
                 className={`pb-3 ${bankSource === "owned" ? "border-b-2 border-blue-500 text-blue-500" : "text-slate-500"}`}
@@ -400,7 +401,7 @@ export default function ComposePaperPage() {
                 判断
               </Button>
             </div>
-            <div className="max-h-[720px] space-y-2 overflow-y-auto bg-slate-50/40 p-2">
+            <div className="flex flex-col max-h-[720px] gap-2 overflow-y-auto bg-slate-50/40 p-2">
               {visibleQuestions.map((item, index) => (
                 <Button theme="borderless"
                   key={item.id}
@@ -438,8 +439,8 @@ export default function ComposePaperPage() {
                 </div>
               )}
             </div>
-          </section>
-          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          </Layout.Content></div>
+          <div className="min-w-0 col-span-2 lg:col-span-1"><Layout.Content className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
             <div className="border-b border-slate-100 px-5 py-4 text-base font-semibold text-slate-800">
               已选题目 ({selected.length})
             </div>
@@ -448,10 +449,10 @@ export default function ComposePaperPage() {
             </div>
             <div className="max-h-[720px] overflow-y-auto bg-slate-50/40 p-3">
               {selected.map((item, index) => (
-                <div
+                <Card bodyStyle={{ padding: 0 }}
                   key={item.id}
-                  className="mb-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm last:mb-0"
-                >
+                  className="!mb-3 last:!mb-0"
+                ><div className="p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 text-sm font-medium leading-6 text-slate-800">
                       <span className="mr-1 text-slate-400">#{index + 1}</span>
@@ -474,8 +475,8 @@ export default function ComposePaperPage() {
                   <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
                     <div className="flex items-center gap-2 text-xs text-slate-400">
                       <span>分值</span>
-                      <Input
-                        type="number"
+                      <InputNumber
+
                         value={String(item.score || 5)}
                         onChange={(value) =>
                           setSelected((current) =>
@@ -501,7 +502,7 @@ export default function ComposePaperPage() {
                       移除
                     </Button>
                   </div>
-                </div>
+                </div></Card>
               ))}
               {!selected.length && (
                 <div className="py-24 text-center text-sm text-slate-400">
@@ -509,9 +510,9 @@ export default function ComposePaperPage() {
                 </div>
               )}
             </div>
-          </section>
+          </Layout.Content></div>
         </div>
-      </main>
-    </PageShell>
+      </Layout.Content>
+    </ProfileShell>
   );
 }

@@ -3,6 +3,19 @@ server:
   servlet:
     context-path: /api
 spring:
+  mail:
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${MAIL_SMTP_AUTH:true}
+      mail.smtp.starttls.enable: ${MAIL_STARTTLS:true}
+      mail.smtp.starttls.required: ${MAIL_STARTTLS:true}
+      mail.smtp.ssl.enable: ${MAIL_SSL:false}
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 5000
+      mail.smtp.writetimeout: 5000
   application:
     name: aiquestion-api
   datasource:
@@ -43,6 +56,9 @@ management:
       exposure:
         include: health,info
 app:
+  reminder:
+    from: ${MAIL_FROM:}
+    public-url: ${APP_PUBLIC_URL:}
   cors-origins: http://localhost:13000,http://localhost:3000,http://localhost:3001,http://47.93.46.138:13000,http://shopai.org.cn,http://www.shopai.org.cn
   trace-header: X-Trace-Id
   redis-key-prefix: ${REDIS_KEY_PREFIX:aiquestion:}

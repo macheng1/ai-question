@@ -1,18 +1,12 @@
 "use client";
+import { Typography, Space } from "@douyinfe/semi-ui";
+import { Layout, Card } from "@douyinfe/semi-ui";
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import "@douyinfe/semi-ui/react19-adapter";
-import {
-  Button,
-  Checkbox,
-  Input,
-  Modal,
-  Select,
-  Spin,
-  Toast,
-} from "@douyinfe/semi-ui";
-import { PageShell } from "@/components/layout/PageShell";
+import { Button, Checkbox, DatePicker, Input, Modal, Spin, Toast, InputNumber } from "@douyinfe/semi-ui";
+import { ProfileShell } from "@/components/layout/ProfileShell";
 import { createAssessment } from "@/features/assessments/api";
 import { getPaper, type Paper } from "@/features/papers/api";
 
@@ -31,8 +25,6 @@ export default function NewAssessmentPage() {
   const [startAt, setStartAt] = useState(localDateTime(0));
   const [endAt, setEndAt] = useState(localDateTime(24));
   const [duration, setDuration] = useState("60");
-  const [passScore, setPassScore] = useState("60");
-  const [scope, setScope] = useState("ALL");
   const [allowRetake, setAllowRetake] = useState(false);
   const [maxAttempts, setMaxAttempts] = useState("1");
   const [shuffle, setShuffle] = useState(true);
@@ -44,7 +36,6 @@ export default function NewAssessmentPage() {
     getPaper(Number(paperId))
       .then((data) => {
         setPaper(data);
-        setPassScore(String(data.passScore || 60));
         setDuration(String(data.durationMinutes || 60));
       })
       .catch((e) =>
@@ -69,7 +60,6 @@ export default function NewAssessmentPage() {
         startAt,
         endAt,
         durationMinutes: Number(duration) || 60,
-        candidateScope: scope,
         allowRetake,
         maxAttempts: allowRetake ? Math.max(1, Number(maxAttempts) || 1) : 1,
         shuffleQuestions: shuffle,
@@ -86,27 +76,27 @@ export default function NewAssessmentPage() {
   };
   if (loading)
     return (
-      <PageShell>
+      <ProfileShell>
         <div className="grid min-h-[720px] place-items-center">
           <Spin size="large" />
         </div>
-      </PageShell>
+      </ProfileShell>
     );
   return (
-    <PageShell>
-      <main className="min-h-[720px] bg-slate-100 py-10">
-        <div className="mx-auto min-h-[650px] w-[92%] max-w-[1160px] rounded-2xl bg-white/70 p-8">
-          <h1 className="text-2xl font-bold text-slate-800">试卷管理</h1>
+    <ProfileShell>
+      <Layout.Content className="min-w-0">
+        <Card bodyStyle={{ padding: 0 }} className="w-full"><div className="p-4 sm:p-6">
+          <Typography.Title heading={1} className="!m-0 !text-[28px] !font-semibold !text-[#183f35]">试卷管理</Typography.Title>
           <div className="mt-6 h-14 rounded-xl border border-slate-200 bg-white" />
-          <div className="mt-5 h-64 rounded-2xl border border-slate-200 bg-white p-6">
+          <Card bodyStyle={{ padding: 0 }} className="!mt-5 h-64"><div className="p-6">
             <div className="h-5 w-40 rounded bg-slate-100" />
             <div className="mt-6 h-4 w-64 rounded bg-slate-100" />
-          </div>
-        </div>
-        <Modal
+          </div></Card>
+        </div></Card>
+        <Modal bodyStyle={{ maxHeight: "calc(100dvh - 240px)", overflowY: "auto" }}
           visible
           title="安排考试"
-          width={520}
+          width="min(520px, calc(100vw - 24px))"
           onCancel={() => router.back()}
           footer={
             <div className="flex justify-end gap-8">
@@ -124,7 +114,7 @@ export default function NewAssessmentPage() {
             </div>
           }
         >
-          <div className="space-y-3">
+          <div className="flex flex-col gap-3">
             <div className="flex items-start justify-between rounded-xl bg-slate-50 px-4 py-3">
               <div>
                 <p className="text-xs text-slate-400">试卷</p>
@@ -147,27 +137,19 @@ export default function NewAssessmentPage() {
               onChange={setName}
               placeholder="考试名称，比如XX单位考试"
             />
-            <div className="grid grid-cols-2 gap-3">
-              <label>
+            <div className="grid grid-cols-2 gap-4 ">
+              <div className="min-w-0 col-span-2 sm:col-span-1"><label>
                 <span className="mb-1 block text-xs text-slate-500">
                   开始时间
                 </span>
-                <Input
-                  type="datetime-local"
-                  value={startAt}
-                  onChange={setStartAt}
-                />
-              </label>
-              <label>
+                <DatePicker type="dateTime" format="yyyy-MM-dd HH:mm" className="w-full" value={startAt ? new Date(startAt) : undefined} onChange={(_, text) => setStartAt(typeof text === "string" ? text.replace(" ", "T") : "")} />
+              </label></div>
+              <div className="min-w-0 col-span-2 sm:col-span-1"><label>
                 <span className="mb-1 block text-xs text-slate-500">
                   结束时间
                 </span>
-                <Input
-                  type="datetime-local"
-                  value={endAt}
-                  onChange={setEndAt}
-                />
-              </label>
+                <DatePicker type="dateTime" format="yyyy-MM-dd HH:mm" className="w-full" value={endAt ? new Date(endAt) : undefined} onChange={(_, text) => setEndAt(typeof text === "string" ? text.replace(" ", "T") : "")} />
+              </label></div>
             </div>
             <div className="text-xs text-slate-400">
               考试时间：{displayDate(startAt)} ～ {displayDate(endAt)}
@@ -182,33 +164,18 @@ export default function NewAssessmentPage() {
               <div className="border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-600">
                 高级设置
               </div>
-              <div className="space-y-4 p-4">
+              <div className="flex flex-col gap-4 p-4">
                 <label>
                   <span className="mb-1 block text-xs text-slate-500">
                     及格分数
                   </span>
-                  <Input
-                    type="number"
-                    value={passScore}
-                    onChange={setPassScore}
+                  <InputNumber
+
+                    value={paper?.passScore ?? 60}
+                    disabled
                   />
                 </label>
-                <label>
-                  <span className="mb-1 block text-xs text-slate-500">
-                    参考范围
-                  </span>
-                  <Select
-                    value={scope}
-                    onChange={(value) => setScope(String(value))}
-                    optionList={[
-                      { label: "无限制（所有人均可参加）", value: "ALL" },
-                      { label: "指定部门", value: "DEPARTMENT" },
-                      { label: "指定人员", value: "USERS" },
-                    ]}
-                    className="w-full"
-                  />
-                </label>
-                <div className="flex flex-wrap items-center gap-2">
+                <Space wrap >
                   <Checkbox
                     checked={allowRetake}
                     onChange={(event) =>
@@ -220,15 +187,15 @@ export default function NewAssessmentPage() {
                   <span className="text-xs text-slate-400">
                     最多答题（含首次）
                   </span>
-                  <Input
-                    type="number"
+                  <InputNumber
+
                     value={maxAttempts}
                     disabled={!allowRetake}
-                    onChange={setMaxAttempts}
+                    onChange={value => setMaxAttempts(String(value ?? ""))}
                     className="w-20"
                   />
                   <span className="text-xs text-slate-400">次</span>
-                </div>
+                </Space>
                 <Checkbox
                   checked={showResult}
                   onChange={(event) =>
@@ -241,7 +208,7 @@ export default function NewAssessmentPage() {
             </div>
           </div>
         </Modal>
-      </main>
-    </PageShell>
+      </Layout.Content>
+    </ProfileShell>
   );
 }

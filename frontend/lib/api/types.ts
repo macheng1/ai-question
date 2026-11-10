@@ -1,7 +1,6 @@
 import type { AxiosRequestConfig, AxiosProgressEvent } from "axios";
 
 export type ApiResponse<T> = { success: boolean; data: T; message: string; traceId?: string };
-export type RequestConfig = AxiosRequestConfig;
 export type UploadOptions = {
   scene?: string;
   maxSizeMb?: number;

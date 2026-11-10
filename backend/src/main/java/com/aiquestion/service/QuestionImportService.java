@@ -39,7 +39,7 @@ public class QuestionImportService {
         try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             Sheet sheet = workbook.createSheet("试题导入");
             String[] headers = {"题型", "题干", "选项A", "选项B", "选项C", "选项D", "正确答案", "解析", "标签", "难度", "出处"};
-            String[] sample = {"单选题", "示例：安全生产的方针是什么（请替换）", "安全第一", "预防为主", "综合治理", "以上都是", "ABCD", "填写解析（可选）", "安全生产", "中", "安全生产法"};
+            String[] sample = {"单选题", "示例：安全生产的方针是什么（请替换）", "安全第一", "预防为主", "综合治理", "以上都是", "D", "填写解析（可选）", "安全生产", "中", "安全生产法"};
             Row header = sheet.createRow(0); Row example = sheet.createRow(1);
             CellStyle headerStyle = workbook.createCellStyle(); headerStyle.setFillForegroundColor(IndexedColors.ORANGE.getIndex()); headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
             for (int i = 0; i < headers.length; i++) { Cell h = header.createCell(i); h.setCellValue(headers[i]); h.setCellStyle(headerStyle); example.createCell(i).setCellValue(sample[i]); sheet.setColumnWidth(i, i == 1 || i == 7 ? 36 * 256 : 18 * 256); }
@@ -77,10 +77,11 @@ public class QuestionImportService {
                         if (options.size() < 2 || options.stream().noneMatch(OptionRequest::correct)) { throw new IllegalArgumentException("选项至少填写两项且必须包含正确答案"); }
                         answer = normalizedAnswer;
                     }
+                    answer = QuestionAnswerRules.validate(type, answer, options);
                     QuestionItem item = new QuestionItem(); item.setBankId(bankId); item.setQuestionType(type); item.setStem(stem); item.setAnswerText(answer); item.setAnalysis(value(formatter,row,7)); item.setTags(value(formatter,row,8)); item.setDifficulty(normalizeDifficulty(value(formatter,row,9))); item.setScore(BigDecimal.ONE); item.setSource(value(formatter,row,10)); item.setStatus("ENABLED"); itemRepository.insert(item);
                     for (OptionRequest request : options) { QuestionOption option = new QuestionOption(); option.setQuestionId(item.getId()); option.setOptionKey(request.optionKey()); option.setOptionText(request.optionText()); option.setCorrect(Boolean.TRUE.equals(request.correct())); option.setSortNo(request.sortNo()); optionRepository.insert(option); }
                     bankRepository.incrementQuestionCount(bankId); imported++;
-                } catch (IllegalArgumentException e) { errors.add("第" + line + "行：" + e.getMessage()); }
+                } catch (IllegalArgumentException | BusinessException e) { errors.add("第" + line + "行：" + e.getMessage()); }
             }
             return new ImportResult(imported, skipped, errors);
         } catch (Exception e) { if (e instanceof BusinessException be) throw be; throw new BusinessException(ErrorCode.BAD_REQUEST, "Excel 文件解析失败，请确认使用标准模板"); }

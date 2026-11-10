@@ -1,4 +1,5 @@
 "use client";
+import { Layout } from "@douyinfe/semi-ui";
 
 import { useEffect, useState } from "react";
 import { getPublicAttemptResult } from "@/features/exam/api";
@@ -88,17 +89,17 @@ export function ResultLoader({ paper, attemptId, details = false }: ResultLoader
 
   if (error) {
     return (
-      <section className="mx-auto mt-8 max-w-3xl rounded-2xl border border-red-100 bg-white p-8 text-center text-sm text-red-500 shadow-sm">
+      <Layout.Content className="mx-auto mt-8 max-w-3xl rounded-2xl border border-red-100 bg-white p-8 text-center text-sm text-red-500 shadow-sm">
         {error}
-      </section>
+      </Layout.Content>
     );
   }
 
   if (!data) {
     return (
-      <section className="mx-auto mt-8 max-w-3xl rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-400 shadow-sm">
+      <Layout.Content className="mx-auto mt-8 max-w-3xl rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-400 shadow-sm">
         正在加载成绩详情…
-      </section>
+      </Layout.Content>
     );
   }
 

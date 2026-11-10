@@ -10,10 +10,13 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 public class TrainingController {
   private final TrainingService service;
+  private final com.aiquestion.service.AccountService accounts;
+  private final com.aiquestion.service.TrainingLogService logs;
+  private final com.aiquestion.service.TrainingMaterialService materials;
   private final JwtTokenService tokens;
   private final JdbcTemplate jdbc;
   private final com.aiquestion.service.TrainingVideoStorage storage;
-  public TrainingController(TrainingService service, JwtTokenService tokens, JdbcTemplate jdbc, com.aiquestion.service.TrainingVideoStorage storage) { this.service = service; this.tokens = tokens; this.jdbc = jdbc; this.storage = storage; }
+  public TrainingController(com.aiquestion.service.AccountService accounts, TrainingService service, JwtTokenService tokens, JdbcTemplate jdbc, com.aiquestion.service.TrainingVideoStorage storage, com.aiquestion.service.TrainingMaterialService materials, com.aiquestion.service.TrainingLogService logs) { this.accounts=accounts; this.logs=logs; this.materials=materials; this.service = service; this.tokens = tokens; this.jdbc = jdbc; this.storage = storage; }
   private long user(String authorization) {
     if (authorization == null || !authorization.startsWith("Bearer ")) throw new BusinessException(ErrorCode.UNAUTHORIZED);
     long id;
@@ -22,6 +25,21 @@ public class TrainingController {
     if (jdbc.queryForObject("SELECT COUNT(*) FROM app_user WHERE id=? AND status='ACTIVE'", Integer.class, id) == 0) throw new BusinessException(ErrorCode.UNAUTHORIZED);
     return id;
   }
+  @GetMapping("/management/trainings/{id}/learning-records")
+  public ApiResponse<?> learningRecords(@PathVariable long id,@RequestHeader(value="Authorization",required=false) String auth){return ApiResponse.ok(logs.list(id,user(auth)));}
+
+  @GetMapping("/management/trainings/{id}/materials")
+  public ApiResponse<?> materials(@PathVariable long id,@RequestHeader(value="Authorization",required=false) String auth) {service.get(id,user(auth));return ApiResponse.ok(materials.list(id));}
+  @PutMapping("/management/trainings/{id}/materials/order")
+  public ApiResponse<?> reorderMaterials(@PathVariable long id,@RequestBody List<Long> ids,@RequestHeader(value="Authorization",required=false) String auth){materials.reorder(id,user(auth),ids);return ApiResponse.ok(null);}
+  @PostMapping("/management/trainings/{id}/materials")
+  public ApiResponse<?> uploadMaterial(@PathVariable long id,@RequestParam org.springframework.web.multipart.MultipartFile file,@RequestHeader(value="Authorization",required=false) String auth) throws java.io.IOException {materials.upload(id,user(auth),file);return ApiResponse.ok(materials.list(id));}
+  @GetMapping(value="/management/trainings/{id}/materials/{material}/pages/{page}",produces="image/png")
+  public org.springframework.http.ResponseEntity<byte[]> materialPage(@PathVariable long id,@PathVariable long material,@PathVariable int page,@RequestHeader(value="Authorization",required=false) String auth) throws java.io.IOException {service.get(id,user(auth));return org.springframework.http.ResponseEntity.ok().header("Cache-Control","private, no-store").body(materials.page(id,material,page));}
+  @PutMapping("/management/trainings/{id}/materials/{material}/timings")
+  public ApiResponse<?> materialTimings(@PathVariable long id,@PathVariable long material,@RequestBody List<com.aiquestion.service.TrainingMaterialService.PageTime> times,@RequestHeader(value="Authorization",required=false) String auth) {materials.timings(id,material,user(auth),times);return ApiResponse.ok(null);}
+  @DeleteMapping("/management/trainings/{id}/materials/{material}")
+  public ApiResponse<?> deleteMaterial(@PathVariable long id,@PathVariable long material,@RequestHeader(value="Authorization",required=false) String auth) {materials.delete(id,material,user(auth));return ApiResponse.ok(null);}
   public record QuestionDraftRequest(String type) {}
   @PostMapping("/management/trainings/question-drafts")
   public ApiResponse<?> createQuestionDraft(@RequestBody QuestionDraftRequest command, @RequestHeader(value="Authorization", required=false) String auth) {
@@ -41,9 +59,15 @@ public class TrainingController {
   @GetMapping("/management/trainings/{id}/responses")
   public ApiResponse<?> responses(@PathVariable long id, @RequestHeader(value="Authorization", required=false) String auth) { return ApiResponse.ok(service.responses(id, user(auth))); }
   @GetMapping("/trainings/{id}/survey")
-  public ApiResponse<?> survey(@PathVariable long id, @RequestHeader(value="Authorization", required=false) String auth) { return ApiResponse.ok(service.survey(id, user(auth))); }
+  public ApiResponse<?> survey(@PathVariable long id, @RequestHeader(value="Authorization", required=false) String auth) { var identity = accounts.current(auth);
+    return ApiResponse.ok(identity.accountType() == com.aiquestion.security.AccountType.EMPLOYEE
+        ? service.employeeSurvey(id, accounts.employee(identity.accountId())) : service.survey(id, identity.accountId())); }
   @PostMapping("/trainings/{id}/survey")
-  public ApiResponse<?> submit(@PathVariable long id, @RequestBody TrainingService.Submission command, @RequestHeader(value="Authorization", required=false) String auth) { service.submit(id, command, user(auth)); return ApiResponse.ok(null); }
+  public ApiResponse<?> submit(@PathVariable long id, @RequestBody TrainingService.Submission command, @RequestHeader(value="Authorization", required=false) String auth) { var identity = accounts.current(auth);
+    if (identity.accountType() == com.aiquestion.security.AccountType.EMPLOYEE)
+      service.submitEmployee(id, command, accounts.employee(identity.accountId()));
+    else service.submit(id, command, identity.accountId());
+    return ApiResponse.ok(null); }
   @GetMapping("/trainings/{id}")
   public ApiResponse<?> learning(@PathVariable long id,@RequestHeader(value="Authorization",required=false) String auth) { return ApiResponse.ok(service.learning(id,user(auth))); }
   public record Progress(double position,boolean completed) {}

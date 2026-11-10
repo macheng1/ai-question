@@ -1,13 +1,14 @@
 "use client";
+import { Typography, Space } from "@douyinfe/semi-ui";
+import { Card } from "@douyinfe/semi-ui";
 
-import { IconLock, IconList, IconClock, IconStar, IconPlus } from "@/features/exam/components/ExamIcons";
+import { IconLock, IconList, IconClock, IconStar, IconPlus } from "@douyinfe/semi-icons";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import "@douyinfe/semi-ui/react19-adapter";
-import { Button, Input, Modal, Select, Toast } from "@douyinfe/semi-ui";
-import { PageShell } from "@/components/layout/PageShell";
-import { ProfileSidebar } from "@/components/layout/ProfileSidebar";
+import { Button, Input, Modal, Select, Toast, InputNumber } from "@douyinfe/semi-ui";
+import { ProfileShell } from "@/components/layout/ProfileShell";
 import { ArrangeAssessmentModal } from "@/features/assessments/components/ArrangeAssessmentModal";
 import {
   copyPaper,
@@ -152,29 +153,26 @@ export default function PapersPage() {
   };
 
   return (
-    <PageShell>
-      <main className="mx-auto flex min-h-[720px] w-[92%] max-w-[1160px] flex-col gap-6 py-10 sm:py-14 md:flex-row">
-        <ProfileSidebar />
-        <section className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-4">
+    <ProfileShell>
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-slate-800">试卷管理</h1>
+              <Typography.Title heading={1} className="!m-0 !text-[28px] !font-semibold !text-[#183f35]">试卷管理</Typography.Title>
               <p className="mt-2 text-sm text-slate-400">创建固定或随机试卷，并安排考试。</p>
             </div>
             <Button theme="solid" type="warning" onClick={openCreate}><IconPlus aria-hidden="true" /> 创建试卷</Button>
           </div>
-          <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4">
+          <Card bodyStyle={{ padding: 0 }} className="!mt-5"><div className="p-4">
             <Input value={keyword} onChange={setKeyword} onEnterPress={load} showClear placeholder="搜索试卷名称..." />
-          </div>
+          </div></Card>
           <div className="mt-5 grid gap-4 lg:grid-cols-2">
             {visible.map((paper) => {
               const locked = Boolean(paper.hasAssessment);
               const completed = paper.status === "PUBLISHED";
               return (
-                <article key={paper.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <Card bodyStyle={{ padding: 0 }} key={paper.id} className=""><div className="p-5">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <h2 className="text-lg font-bold text-slate-800">{paper.name}</h2>
+                      <Typography.Title heading={2} className="!text-lg !font-bold !text-slate-800">{paper.name}</Typography.Title>
                       <p className="mt-2 text-sm text-slate-500">{paper.description || "暂无描述"}</p>
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-2 text-xs">
@@ -204,18 +202,17 @@ export default function PapersPage() {
                     <Button theme="borderless" className="text-slate-600" onClick={() => openCopy(paper)}>复制</Button>
                     <Button theme="borderless" className="text-red-500" onClick={() => remove(paper)}>删除</Button>
                   </div>
-                </article>
+                </div></Card>
               );
             })}
             {!visible.length && <div className="col-span-full py-20 text-center text-sm text-slate-400">暂无试卷</div>}
           </div>
-        </section>
-      </main>
-      <Modal title={editing ? "编辑试卷" : "创建试卷"} visible={formOpen} onCancel={() => setFormOpen(false)} footer={<div className="flex justify-end gap-3"><Button className="modal-cancel-button" onClick={() => setFormOpen(false)}>取消</Button><Button theme="solid" type="warning" loading={saving} onClick={save}>保存</Button></div>}>
-        <div className="space-y-4 py-2"><Input value={name} onChange={setName} placeholder="试卷名称" /><Input value={description} onChange={setDescription} placeholder="描述（可选）" /><Select value={mode} onChange={(value) => setMode(String(value))} optionList={modeOptions} className="w-full" /><div className="grid grid-cols-3 gap-3"><Input type="number" value={totalScore} onChange={setTotalScore} prefix="总分" /><Input type="number" value={duration} onChange={setDuration} prefix="时长" /><Input type="number" value={passScore} onChange={setPassScore} prefix="及格" /></div></div>
+
+      <Modal bodyStyle={{ maxHeight: "calc(100dvh - 240px)", overflowY: "auto" }} width="min(480px, calc(100vw - 24px))" title={editing ? "编辑试卷" : "创建试卷"} visible={formOpen} onCancel={() => setFormOpen(false)} footer={<Space wrap ><Button className="modal-cancel-button" onClick={() => setFormOpen(false)}>取消</Button><Button theme="solid" type="warning" loading={saving} onClick={save}>保存</Button></Space>}>
+        <div className="flex flex-col gap-4 py-2"><Input value={name} onChange={setName} placeholder="试卷名称" /><Input value={description} onChange={setDescription} placeholder="描述（可选）" /><Select value={mode} onChange={(value) => setMode(String(value))} optionList={modeOptions} className="w-full" /><div className="grid grid-cols-3 gap-4 "><div className="min-w-0 col-span-1"><InputNumber value={totalScore} onChange={value => setTotalScore(String(value ?? ""))} prefix="总分" /></div><div className="min-w-0 col-span-1"><InputNumber value={duration} onChange={value => setDuration(String(value ?? ""))} prefix="时长" /></div><div className="min-w-0 col-span-1"><InputNumber value={passScore} onChange={value => setPassScore(String(value ?? ""))} prefix="及格" /></div></div></div>
       </Modal>
-      <Modal title="复制试卷" visible={copyOpen} onCancel={() => setCopyOpen(false)} footer={<div className="flex justify-end gap-3"><Button className="modal-cancel-button" onClick={() => setCopyOpen(false)}>取消</Button><Button theme="solid" type="warning" loading={saving} onClick={copy}>复制</Button></div>}><div className="space-y-4 py-2"><p className="text-sm text-slate-500">来源：{copying?.name}</p><Input value={name} onChange={setName} placeholder="副本名称" /><Input value={description} onChange={setDescription} placeholder="描述（可选）" /></div></Modal>
+      <Modal bodyStyle={{ maxHeight: "calc(100dvh - 240px)", overflowY: "auto" }} width="min(480px, calc(100vw - 24px))" title="复制试卷" visible={copyOpen} onCancel={() => setCopyOpen(false)} footer={<Space wrap ><Button className="modal-cancel-button" onClick={() => setCopyOpen(false)}>取消</Button><Button theme="solid" type="warning" loading={saving} onClick={copy}>复制</Button></Space>}><div className="flex flex-col gap-4 py-2"><p className="text-sm text-slate-500">来源：{copying?.name}</p><Input value={name} onChange={setName} placeholder="副本名称" /><Input value={description} onChange={setDescription} placeholder="描述（可选）" /></div></Modal>
       <ArrangeAssessmentModal paper={arrange} visible={Boolean(arrange)} onClose={() => setArrange(null)} onDone={load} />
-    </PageShell>
+    </ProfileShell>
   );
 }

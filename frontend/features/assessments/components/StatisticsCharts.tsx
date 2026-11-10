@@ -1,4 +1,6 @@
 "use client";
+import { Typography } from "@douyinfe/semi-ui";
+import { Layout } from "@douyinfe/semi-ui";
 
 import dynamic from "next/dynamic";
 import { Empty } from "@douyinfe/semi-ui";
@@ -23,11 +25,11 @@ function ChartCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 className="text-base font-bold text-slate-800">{title}</h2>
+    <Layout.Content className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <Typography.Title heading={2} className="!text-base !font-bold !text-slate-800">{title}</Typography.Title>
       <p className="mt-1 text-xs text-slate-400">{description}</p>
       <div className="mt-4 h-[280px]">{children}</div>
-    </section>
+    </Layout.Content>
   );
 }
 
@@ -54,8 +56,8 @@ export function StatisticsCharts({ data }: ChartProps) {
   }));
 
   return (
-    <div className="grid gap-5 lg:grid-cols-2">
-      <ChartCard title="成绩分布" description="各分数段人数统计（按最高分计）">
+    <div className="grid grid-cols-2 gap-4 ">
+      <div className="min-w-0 col-span-2 lg:col-span-1"><ChartCard title="成绩分布" description="各分数段人数统计（按最后一次成绩计）">
         {scoreValues.length ? (
           <VChart
             spec={{
@@ -77,9 +79,9 @@ export function StatisticsCharts({ data }: ChartProps) {
         ) : (
           <EmptyChart />
         )}
-      </ChartCard>
+      </ChartCard></div>
 
-      <ChartCard title="及格情况" description={`及格线 ${data.overview.passScore || 0} 分`}>
+      <div className="min-w-0 col-span-2 lg:col-span-1"><ChartCard title="及格情况" description={`及格线 ${data.overview.passScore || 0} 分`}>
         {passValues.length ? (
           <VChart
             spec={{
@@ -98,9 +100,9 @@ export function StatisticsCharts({ data }: ChartProps) {
         ) : (
           <EmptyChart />
         )}
-      </ChartCard>
+      </ChartCard></div>
 
-      <ChartCard title="交卷时间分布" description="考生交卷时间趋势">
+      <div className="min-w-0 col-span-2 lg:col-span-1"><ChartCard title="交卷时间分布" description="考生交卷时间趋势">
         {trendValues.length ? (
           <VChart
             spec={{
@@ -121,9 +123,9 @@ export function StatisticsCharts({ data }: ChartProps) {
         ) : (
           <EmptyChart />
         )}
-      </ChartCard>
+      </ChartCard></div>
 
-      <ChartCard title="题型得分率" description="各题型平均正确率">
+      <div className="min-w-0 col-span-2 lg:col-span-1"><ChartCard title="题型得分率" description="各题型平均正确率">
         {typeValues.length ? (
           <VChart
             spec={{
@@ -145,7 +147,7 @@ export function StatisticsCharts({ data }: ChartProps) {
         ) : (
           <EmptyChart />
         )}
-      </ChartCard>
+      </ChartCard></div>
     </div>
   );
 }

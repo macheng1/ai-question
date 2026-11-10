@@ -1,4 +1,6 @@
 "use client";
+import { Typography } from "@douyinfe/semi-ui";
+import { Layout } from "@douyinfe/semi-ui";
 import { useState } from "react";
 import { Button, Banner } from "@douyinfe/semi-ui";
 import { IconTickCircle, IconAlertCircle, IconArrowLeft, IconArrowRight } from "@douyinfe/semi-icons";
@@ -42,11 +44,11 @@ export function ExamResultView(props: ExamResultViewProps) {
   </div>;
   return <div className="result-print-root">
     <div className="h5-content">
-      {reviewing ? <><h1 className="h5-detail-title">{paper.title}</h1><p className="h5-muted">{candidateName || "考生"} · 第 {attemptNo || 1} 次答题</p><p className="h5-muted">{dateLabel(submittedAt)} 提交</p></> : <section className="h5-result-hero">
+      {reviewing ? <><Typography.Title heading={1} className="h5-detail-title !text-[21px] !leading-normal !mb-3">{paper.title}</Typography.Title><p className="h5-muted">{candidateName || "考生"} · 第 {attemptNo || 1} 次答题</p><p className="h5-muted">{dateLabel(submittedAt)} 提交</p></> : <Layout.Content className="h5-result-hero">
         <div className={`h5-result-badge ${passed ? "" : "failed"}`}>{passed ? <IconTickCircle /> : <IconAlertCircle />}{passed ? "考试通过" : "暂未通过"}</div>
         <div className="h5-score">{score}<small>分</small></div><p className="h5-muted">满分 {paper.totalScore} 分 · 及格分 {paper.passScore} 分</p>
-        <h1 className="h5-result-title">{passed ? "每一次认真，都有收获" : "再巩固一下，继续进步"}</h1><p className="h5-muted">{paper.title}</p>
-      </section>}
+        <Typography.Title heading={1} className="h5-result-title !text-[19px] !mt-6 !mb-2">{passed ? "每一次认真，都有收获" : "再巩固一下，继续进步"}</Typography.Title><p className="h5-muted">{paper.title}</p>
+      </Layout.Content>}
       {stats}
       {!reviewing && <>
         <dl className="h5-result-meta"><div><dt>考生</dt><dd>{candidateName || "—"}{candidatePhone ? ` · ${candidatePhone}` : ""}</dd></div><div><dt>提交时间</dt><dd>{dateLabel(submittedAt)}</dd></div><div><dt>试卷</dt><dd>{paper.questions.length} 题 · 限时 {paper.duration} 分钟</dd></div><div><dt>答题次数</dt><dd>第 {attemptNo || 1} 次</dd></div></dl>
@@ -61,7 +63,7 @@ export function ExamResultView(props: ExamResultViewProps) {
           const questionIndex = paper.questions.findIndex(q => q.id === question.id);
           return <article className="h5-review-question result-print-question" key={question.id}>
             <div className="h5-review-meta"><span className="h5-tag">{String(questionIndex + 1).padStart(2, "0")} · {question.kind === "multi" ? "多选题" : question.kind === "judge" ? "判断题" : "单选题"}</span><b className={grade.isCorrect ? "" : "incorrect"}>{grades ? grade.score : grade.isCorrect ? question.score || 0 : 0} / {question.score || 0} 分</b></div>
-            <h3>{question.title}</h3><div className="h5-review-options">{optionsFor(question).map(option => {
+            <Typography.Title heading={3} className="!my-3 !text-base !leading-7">{question.title}</Typography.Title><div className="h5-review-options">{optionsFor(question).map(option => {
               const correct = question.answer.includes(option.key), mine = picked.includes(option.key);
               return <div key={option.key} className={`h5-review-option ${correct ? "correct" : mine ? "wrong" : ""}`}><span>{option.key}</span><p>{option.text}</p>{(correct || mine) && <small>{correct ? "正确答案" : "我的选择"}</small>}</div>;
             })}</div>

@@ -1,0 +1,29 @@
+/* Scoped standalone training presentation, sharing the exam palette. */
+.course-learning .semi-button { min-height: 44px; }
+.course-learning .h5-content { padding: 24px; }
+.course-learning .h5-bottom { background: white; border-top: 1px solid var(--semi-color-border); padding: 16px 24px max(16px, env(safe-area-inset-bottom)); }
+.course-learning .h5-bottom > p { color: var(--semi-color-text-2); margin-bottom: 12px; font-size: 13px; }
+.course-learning .h5-primary { margin-bottom: 8px; }
+.course-learning .h5-muted { color: var(--semi-color-text-2); line-height: 1.8; font-size: 13px; }
+.course-learning .h5-video-resume { margin: 16px 0; padding: 12px; background: var(--semi-color-fill-0); border-radius: 6px; font-size: 13px; }
+.course-learning .h5-lesson-progress { display: flex; justify-content: space-between; margin: 20px 0 12px; }
+.course-learning .h5-lesson-list { display: none; }
+@media (max-width: 767px) {
+  .course-learning .h5-content { padding: 16px; }
+  .course-learning .h5-bottom { position: sticky; bottom: 0; z-index: 5; padding-left: 16px; padding-right: 16px; }
+}
+
+.course-learning { --semi-color-primary:#178772; --semi-color-primary-hover:#107561; --semi-color-primary-active:#0c6452; --semi-color-primary-light-default:#edf7f0; --semi-color-primary-light-hover:#e0f1e7; --semi-color-primary-light-active:#cde8da; --semi-color-text-0:#193431; --semi-color-border:#e0e8e2; background:#eef3ef; color:#193431; }
+.course-learning .semi-card { border-radius:16px; border-color:#e0e8e2; box-shadow:0 8px 28px #183f3505; }
+.course-learning .course-overview { background:#e7f3ed; }
+.course-learning .semi-button { border-radius:8px; }
+.course-learning .semi-progress-track-inner { background:#178772; }
+.course-learning .semi-input-wrapper { min-height:40px; }
+.course-learning .course-identity { position:sticky; top:24px; }
+@media(max-width:767px) { .course-learning .course-identity { position:static; } .course-learning .semi-card-body { padding:16px; } }
+.course-learning { min-height:100dvh; }
+.course-learning .semi-card { color:#193431; }
+.course-learning .course-overview h1 { color:#193431; }
+.course-learning .course-overview p,.course-learning .course-overview ol { color:#58756a; }
+
+.course-directory { --semi-color-primary:#178772; --semi-color-primary-hover:#107561; --semi-color-primary-active:#0c6452; --semi-color-primary-light-default:#edf7f0; --semi-color-primary-light-hover:#e0f1e7; --semi-color-primary-light-active:#cde8da; }

@@ -69,8 +69,10 @@ public class QuestionBankService {
   }
 
   public void delete(Long id, Long userId) {
-    if (userId == null || repository.deleteOwned(id, userId) == 0) {
-      throw new BusinessException(ErrorCode.QUESTION_BANK_NOT_FOUND);
+    try {
+      if (userId == null || repository.deleteOwned(id, userId) == 0) throw new BusinessException(ErrorCode.QUESTION_BANK_NOT_FOUND);
+    } catch (org.springframework.dao.DataIntegrityViolationException e) {
+      throw new BusinessException(ErrorCode.BAD_REQUEST, "题库仍有题目或关联试卷，不能删除");
     }
   }
   /** 统一处理题库不存在的场景，由全局异常处理器转换为 404。 */
