@@ -1,12 +1,11 @@
 package com.aiquestion.upload;
 
 import cn.hutool.core.io.file.FileNameUtil;
-import cn.hutool.core.util.ReUtil;
 import cn.hutool.core.util.StrUtil;
 import com.aiquestion.common.BusinessException;
 import com.aiquestion.common.ErrorCode;
 import com.aiquestion.config.UploadProperties;
-import com.aiquestion.integration.AliyunOssService;
+import com.aiquestion.storage.FileStorageService;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -22,11 +21,11 @@ import org.springframework.web.multipart.MultipartFile;
  */
 public class UploadService {
   private final UploadProperties properties;
-  private final AliyunOssService ossService;
+  private final FileStorageService storageService;
 
-  public UploadService(UploadProperties properties, AliyunOssService ossService) {
+  public UploadService(UploadProperties properties, FileStorageService storageService) {
     this.properties = properties;
-    this.ossService = ossService;
+    this.storageService = storageService;
   }
 
   public List<UploadFileResult> upload(
@@ -50,7 +49,7 @@ public class UploadService {
         .map(
             file -> {
               validate(file, sizeLimit, extensions);
-              var result = ossService.upload(file, safeScene(scene));
+              var result = storageService.upload(file);
               return new UploadFileResult(
                   result.objectKey(),
                   result.originalName(),
@@ -99,8 +98,4 @@ public class UploadService {
     return value;
   }
 
-  private String safeScene(String scene) {
-    String value = StrUtil.blankToDefault(scene, "common");
-    return ReUtil.replaceAll(value, "[^a-zA-Z0-9/_-]", "_");
-  }
 }

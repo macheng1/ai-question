@@ -14,10 +14,10 @@ class TrainingOssLiveTest {
   var env=System.getenv();
   var service=new AliyunOssService(new AliyunOssProperties(env.get("ALIYUN_OSS_ACCESS_KEY_ID"),env.get("ALIYUN_OSS_ACCESS_KEY_SECRET"),env.get("ALIYUN_OSS_ENDPOINT"),env.get("ALIYUN_OSS_BUCKET"),env.get("ALIYUN_OSS_REGION")));
   byte[] bytes=Files.readAllBytes(Path.of(env.get("OSS_TEST_VIDEO")));
-  String key=service.uploadTrainingVideo(new MockMultipartFile("file","oss-verification.mp4","video/mp4",bytes),"video/mp4");
+  String key="training-videos/"+java.util.UUID.randomUUID()+".mp4"; service.put(new MockMultipartFile("file","oss-verification.mp4","video/mp4",bytes),"video/mp4",key);
   try {
-   var object=service.openTrainingVideo(key);
+   var object=service.open(key);
    try(var input=object.stream()) { assertEquals(bytes.length,object.length());assertArrayEquals(bytes,input.readAllBytes()); }
-  } finally { service.deleteTrainingVideo(key); }
+  } finally { service.delete(key); }
  }
 }

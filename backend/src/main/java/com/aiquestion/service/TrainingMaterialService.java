@@ -1,7 +1,7 @@
 package com.aiquestion.service;
 
 import com.aiquestion.common.*;
-import com.aiquestion.integration.AliyunOssService;
+import com.aiquestion.storage.FileStorageService;
 import java.util.*;
 import java.io.*;
 import javax.imageio.ImageIO;
@@ -15,9 +15,9 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 public class TrainingMaterialService {
  private final JdbcTemplate jdbc;
- private final AliyunOssService oss;
+ private final FileStorageService oss;
  private final TrainingService trainings;
- public TrainingMaterialService(JdbcTemplate jdbc, AliyunOssService oss, TrainingService trainings) { this.jdbc=jdbc; this.oss=oss; this.trainings=trainings; }
+ public TrainingMaterialService(JdbcTemplate jdbc, FileStorageService oss, TrainingService trainings) { this.jdbc=jdbc; this.oss=oss; this.trainings=trainings; }
  public List<Map<String,Object>> list(long training) {
   return jdbc.queryForList("SELECT id,title,material_type materialType,page_count pageCount,sort_order sortOrder FROM training_material WHERE training_id=? ORDER BY sort_order,id",training).stream().map(r->{r.put("pages",jdbc.queryForList("SELECT page_number pageNumber,required_seconds requiredSeconds FROM training_material_page WHERE material_id=? ORDER BY page_number",r.get("id")));return r;}).toList();
  }
@@ -46,16 +46,16 @@ public class TrainingMaterialService {
    }
    type="IMAGE";mime="png".equals(extension)?"image/png":"image/jpeg";
   }
-  String key=oss.uploadTrainingMaterial(file,mime,extension,"training-materials");
+  String key=oss.uploadMaterial(file,mime,extension,"training-materials");
   try {
    jdbc.update("INSERT INTO training_material(training_id,title,material_type,storage_key,page_count) VALUES(?,?,?,?,?)",training,title,type,key,pages);
    Long id=jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
    for(int page=1;page<=pages;page++) jdbc.update("INSERT INTO training_material_page(material_id,page_number) VALUES(?,?)",id,page);
-  } catch(RuntimeException e) {try {oss.deleteTrainingVideo(key);} catch(RuntimeException ignored) {} throw e;}
+  } catch(RuntimeException e) {try {oss.delete(key);} catch(RuntimeException ignored) {} throw e;}
  }
  public byte[] page(long training,long id,int page) throws IOException {
   var row=material(training,id); if(page<1||page>((Number)row.get("page_count")).intValue()) throw new BusinessException(ErrorCode.BAD_REQUEST,"页码无效");
-  var object=oss.openTrainingVideo(String.valueOf(row.get("storage_key")));
+  var object=oss.open(String.valueOf(row.get("storage_key")));
   byte[] bytes; try(var input=object.stream()) {bytes=input.readAllBytes();}
   if("PDF".equals(row.get("material_type"))) {
    try(var document=Loader.loadPDF(bytes);var out=new ByteArrayOutputStream()) {
@@ -86,6 +86,6 @@ public class TrainingMaterialService {
   trainings.get(training,user);jdbc.queryForMap("SELECT id FROM training_material WHERE id=? AND training_id=? FOR UPDATE",id,training);var row=material(training,id);
   if(jdbc.queryForObject("SELECT COUNT(*) FROM candidate_material_progress WHERE material_id=?",Integer.class,id)>0) throw new BusinessException(ErrorCode.BAD_REQUEST,"已有学习记录，不能删除材料");
   jdbc.update("DELETE FROM training_material WHERE id=?",id);
-  org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization(){public void afterCommit(){try{oss.deleteTrainingVideo(String.valueOf(row.get("storage_key")));}catch(RuntimeException e){org.slf4j.LoggerFactory.getLogger(TrainingMaterialService.class).warn("材料对象清理失败 id={}",id,e);}}});
+  org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization(){public void afterCommit(){try{oss.delete(String.valueOf(row.get("storage_key")));}catch(RuntimeException e){org.slf4j.LoggerFactory.getLogger(TrainingMaterialService.class).warn("材料对象清理失败 id={}",id,e);}}});
  }
 }

@@ -86,3 +86,13 @@ aliyun:
     endpoint: ${ALIYUN_OSS_ENDPOINT:oss-cn-hangzhou.aliyuncs.com}
     bucket: ${ALIYUN_OSS_BUCKET:}
     region: ${ALIYUN_OSS_REGION:oss-cn-hangzhou}
+
+storage:
+  public-base-url: ${STORAGE_PUBLIC_BASE_URL:}
+  provider: ${STORAGE_PROVIDER:eds}
+  eds:
+    endpoint: ${EDS_ENDPOINT:}
+    bucket: ${EDS_BUCKET:}
+    access-key-id: ${EDS_ACCESS_KEY_ID:}
+    secret-key: ${EDS_SECRET_KEY:}
+    region: ${EDS_REGION:us-east-1}

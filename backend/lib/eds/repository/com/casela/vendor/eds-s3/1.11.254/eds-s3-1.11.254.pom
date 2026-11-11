@@ -1,0 +1,8 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion>
+<groupId>com.casela.vendor</groupId><artifactId>eds-s3</artifactId><version>1.11.254</version>
+<description>Supplier-provided EDS S3 module; original binary preserved.</description>
+<dependencies>
+<dependency><groupId>com.amazonaws</groupId><artifactId>aws-java-sdk-core</artifactId><version>1.11.254</version></dependency>
+<dependency><groupId>com.amazonaws</groupId><artifactId>aws-java-sdk-kms</artifactId><version>1.11.254</version></dependency>
+<dependency><groupId>com.amazonaws</groupId><artifactId>jmespath-java</artifactId><version>1.11.254</version></dependency>
+</dependencies></project>

@@ -5,6 +5,7 @@ WORKDIR /build
 # separate layer so source-only changes can reuse the Maven dependency cache.
 COPY docker/maven-settings.xml /root/.m2/settings.xml
 COPY pom.xml .
+COPY lib/eds/repository ./lib/eds/repository
 RUN --mount=type=cache,target=/root/.m2/repository \
     mvn -q -s /root/.m2/settings.xml -DskipTests dependency:go-offline
 
@@ -15,6 +16,9 @@ RUN --mount=type=cache,target=/root/.m2/repository \
 
 FROM m.daocloud.io/docker.io/library/eclipse-temurin:17-jre-jammy
 WORKDIR /app
+
+# Runtime default; override with -e STORAGE_PROVIDER=aliyun when needed.
+ENV STORAGE_PROVIDER=eds
 
 # Do not run the application as root inside the container.
 RUN groupadd --system --gid 10001 app && \
