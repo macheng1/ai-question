@@ -1,0 +1,23 @@
+.card :global(.semi-card-body) {
+  padding: 32px;
+}
+
+.form :global(.semi-form-field) {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.form :global(.semi-input-wrapper) {
+  height: 44px;
+}
+
+.form :global(.semi-input) {
+  height: 42px;
+  line-height: 42px;
+}
+
+@media (max-width: 639px) {
+  .card :global(.semi-card-body) {
+    padding: 24px 20px;
+  }
+}

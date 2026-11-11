@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import styles from "./login.module.css";
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
@@ -51,23 +52,23 @@ function LoginForm() {
     }
   };
   return (
-    <main className="relative isolate flex min-h-dvh items-center justify-center overflow-hidden bg-[#3949a3] px-4 py-10">
+    <main className="relative isolate flex min-h-screen items-center justify-center bg-slate-50 px-5 py-8 sm:bg-[#3949a3] sm:py-10">
       <Image
         src="/images/login-training.webp"
         alt=""
         fill
         priority
         sizes="100vw"
-        className="pointer-events-none -z-20 object-cover object-center"
+        className="pointer-events-none -z-20 hidden object-cover object-center sm:block"
       />
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 hidden bg-[#14204a]/20 sm:block" />
       <Card
-        className="w-full max-w-[460px] !rounded-2xl !border-white/80 !bg-white shadow-[0_24px_80px_-20px_rgba(15,45,75,0.3)]"
-        bodyStyle={{ padding: 28 }}
+        className={`w-full max-w-[460px] !rounded-2xl !border-white/80 !bg-white shadow-[0_12px_40px_-16px_rgba(15,45,75,0.25)] ${styles.card}`}
       >
-        <div className="mb-6 flex items-center gap-3">
-          <Image src="/brand-logo.png" alt="智企云考" width={48} height={48} />
+        <div className="mb-6 flex flex-col items-center gap-4 text-center">
+          <Image src="/casela-logo.png" alt="CASELA Technologies" width={200} height={53} className="h-auto max-w-full object-contain" priority />
           <div>
-            <Typography.Title heading={3}>智企云考</Typography.Title>
+            <Typography.Title heading={3} style={{ margin: "0 0 4px", fontSize: 24 }}>e-learning</Typography.Title>
             <Typography.Text type="secondary">
               企业培训与考试平台
             </Typography.Text>
@@ -84,6 +85,7 @@ function LoginForm() {
           <TabPane tab="员工登录" itemKey="EMPLOYEE" />
         </Tabs>
         <Form
+          className={styles.form}
           key={`${type}-${creating}`}
           onSubmit={async (values) => {
             setBusy(true);
@@ -129,6 +131,8 @@ function LoginForm() {
           <Form.Input
             field="phone"
             label="手机号"
+            placeholder="请输入手机号"
+            autoComplete="username"
             maxLength={11}
             size="large"
             onChange={setPhone}
@@ -170,6 +174,8 @@ function LoginForm() {
           <Form.Input
             field="password"
             label="密码"
+            placeholder="请输入密码"
+            autoComplete={creating ? "new-password" : "current-password"}
             mode="password"
             size="large"
             maxLength={64}
@@ -193,22 +199,18 @@ function LoginForm() {
             block
             size="large"
             loading={busy}
-            className="!mt-5"
+            className="!mt-5 !h-11"
           >
             {creating ? "创建企业账号" : "登录"}
           </Button>
         </Form>
-        <div className="mt-5 text-center">
-          {type === "ADMIN" ? (
-            <Button theme="borderless" onClick={() => setCreating((v) => !v)}>
-              {creating ? "返回管理员登录" : "创建企业账号"}
-            </Button>
-          ) : (
+        {type === "EMPLOYEE" && (
+          <div className="mt-5 text-center">
             <Typography.Text type="secondary">
               员工账号由企业管理员创建，忘记密码请联系管理员。
             </Typography.Text>
-          )}
-        </div>
+          </div>
+        )}
       </Card>
     </main>
   );

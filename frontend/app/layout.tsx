@@ -6,7 +6,8 @@ import "./interaction.css";
 import "./h5.css";
 
 export const metadata: Metadata = {
-  title: "智企云考 | 企业考试平台",
+  title: "e-learning | 企业考试平台",
+  icons: { icon: [{ url: "/e-learning-logo.svg", type: "image/svg+xml" }] },
   description: "面向企业培训与人才测评的题库、组卷、考试、判分和数据分析平台。",
 };
 

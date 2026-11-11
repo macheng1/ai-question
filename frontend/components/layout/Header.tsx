@@ -29,9 +29,9 @@ export function Header() {
   return (
     <Layout.Header className="border-b border-slate-200 bg-white">
       <div className="mx-auto flex min-h-16 w-[96%] max-w-[1800px] items-center justify-between gap-3">
-        <Link href={home} className="flex items-center gap-2 no-underline">
-          <Image src="/brand-logo.png" alt="智企云考" width={36} height={36} />
-          <Typography.Text strong>智企云考</Typography.Text>
+        <Link href={home} className="flex shrink-0 flex-col items-start gap-1 py-2 no-underline sm:flex-row sm:items-center sm:gap-3">
+          <Image src="/casela-logo.png" alt="CASELA Technologies" width={151} height={40} className="h-auto w-[121px] object-contain sm:w-[151px]" />
+          <Typography.Text strong>e-learning</Typography.Text>
         </Link>
         {identity ? (
           <Space>
