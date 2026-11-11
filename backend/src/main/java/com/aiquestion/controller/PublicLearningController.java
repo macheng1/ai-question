@@ -31,7 +31,7 @@ public class PublicLearningController {
  public ApiResponse<List<Map<String,Object>>> trainings(@PathVariable long id) { return ApiResponse.ok(service.trainings(id)); }
  @GetMapping("/trainings/{id}/exam")
  public ApiResponse<Map<String,Object>> exam(@PathVariable long id) {
-  var rows=jdbc.queryForList("SELECT purpose,assessment_id assessmentId,name,description,category,requirement_type requirementType,survey_enabled surveyEnabled FROM training WHERE id=?",id);
+  var rows=jdbc.queryForList("SELECT CASE WHEN assessment_id IS NULL THEN 'STANDALONE' ELSE 'EXAM' END purpose,assessment_id assessmentId,name,description,category,requirement_type requirementType,survey_enabled surveyEnabled FROM training WHERE id=?",id);
   if(rows.isEmpty()) throw new BusinessException(ErrorCode.NOT_FOUND,"培训不存在");
   return ApiResponse.ok(rows.get(0));
  }

@@ -19,6 +19,10 @@
 - [手动培训提醒方案](superpowers/plans/2026-11-06-manual-training-reminder.md)
 - [数据驾驶舱方案](superpowers/plans/2026-11-09-dashboard.md)
 
+## 数据库检查
+
+- [2026-11-11 数据库结构与初始化检查](reviews/2026-11-11-database-initialization-audit.md)
+
 ## 页面与代码检查
 
 - [页面布局检查](ui/page-layout-audit.md)

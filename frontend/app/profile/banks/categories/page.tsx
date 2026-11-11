@@ -5,7 +5,6 @@ import { Card } from "@douyinfe/semi-ui";
 import { IconArrowLeft, IconPlus } from "@douyinfe/semi-icons";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import "@douyinfe/semi-ui/react19-adapter";
 import { Table, Button, Input as SemiInput, Modal, Select, TextArea as SemiTextArea, Toast, InputNumber } from "@douyinfe/semi-ui";
 import { ProfileShell } from "@/components/layout/ProfileShell";
@@ -120,12 +119,7 @@ export default function CategoriesPage() {
   };
   return (
     <ProfileShell>
-          <Link
-            href="/profile/banks"
-            className="text-sm font-semibold text-blue-600 no-underline"
-          >
-            <IconArrowLeft aria-hidden="true" /> 返回题库管理
-          </Link>
+          <Typography.Text link={{ href: "/profile/banks" }} icon={<IconArrowLeft size="small" />} className="!inline-flex !min-h-8 !items-center !text-sm">返回题库管理</Typography.Text>
           <div className="mt-5 flex items-center justify-between gap-3">
             <Typography.Title heading={1} className="!m-0 !text-[28px] !font-semibold !text-[#183f35]">
               题库管理 - 分类管理

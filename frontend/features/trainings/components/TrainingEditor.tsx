@@ -9,7 +9,6 @@ import {
 } from "@douyinfe/semi-icons";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import {
   Button,
   DatePicker,
@@ -200,9 +199,7 @@ export function TrainingEditor({ id }: { id?: string }) {
   };
   return (
     <ProfileShell>
-      <Link href="/profile/trainings" className="text-sm text-teal-700">
-        {<IconArrowLeft />} 返回培训列表
-      </Link>
+      <Typography.Text link={{ href: "/profile/trainings" }} icon={<IconArrowLeft size="small" />} className="!inline-flex !min-h-8 !items-center !text-sm">返回培训列表</Typography.Text>
       <div className="my-5 flex flex-wrap items-center justify-between gap-3">
         <Typography.Title
           heading={1}

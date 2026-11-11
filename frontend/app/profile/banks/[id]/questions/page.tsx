@@ -1,14 +1,13 @@
 "use client";
-import { Typography, Space } from "@douyinfe/semi-ui";
+import { Typography, Space, Tag, Banner } from "@douyinfe/semi-ui";
 import { Layout, Card } from "@douyinfe/semi-ui";
 
-import { IconArrowLeft, IconPlus } from "@douyinfe/semi-icons";
+import { IconArrowLeft, IconPlus, IconDownload, IconUpload } from "@douyinfe/semi-icons";
 
-import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { useEffect, useCallback, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import "@douyinfe/semi-ui/react19-adapter";
-import { Table, Button, Input as SemiInput, Modal, Select, TextArea as SemiTextArea, Toast, Upload, InputNumber } from "@douyinfe/semi-ui";
+import { Table, Button, Input, Modal, Select, TextArea, Toast, Upload, InputNumber } from "@douyinfe/semi-ui";
 import { ProfileShell } from "@/components/layout/ProfileShell";
 import {
   createQuestion,
@@ -20,9 +19,8 @@ import {
   importQuestions,
   getQuestionImportTemplate,
   type QuestionItem,
+  type QuestionImportResult,
 } from "@/features/banks/management-api";
-
-const Input = Object.assign(SemiInput, { TextArea: SemiTextArea });
 
 type OptionForm = { optionKey: string; optionText: string; correct: boolean };
 const defaultOptions = (): OptionForm[] =>
@@ -59,23 +57,31 @@ export default function QuestionsPage() {
     [score, setScore] = useState("1"),
     [options, setOptions] = useState<OptionForm[]>(defaultOptions()),
     [loading, setLoading] = useState(false);
-  const load = () =>
-    getBankQuestions(bankId)
-      .then((page) =>
-        setQuestions(
-          page.records.map((item) => ({
-            ...item,
-            difficulty: difficultyLabel(item.difficulty),
-            answerText: answerLabel(item.answerText),
-          })),
-        ),
-      )
-      .catch((e) =>
-        Toast.error(e instanceof Error ? e.message : "题目加载失败"),
-      );
+  const [pageNo, setPageNo] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [listLoading, setListLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const [uploadVersion, setUploadVersion] = useState(0);
+  const [importResult, setImportResult] = useState<QuestionImportResult | null>(null);
+  const requestId = useRef(0);
+  const load = useCallback(async () => {
+    const currentRequest = ++requestId.current;
+    setListLoading(true);
+    try {
+      const page = await getBankQuestions(bankId, pageNo, pageSize, search);
+      if (currentRequest !== requestId.current) return;
+      if (pageNo > 1 && !page.records.length) { setPageNo(pageNo - 1); return; }
+      setQuestions(page.records);
+      setTotal(page.total);
+    } catch (e) {
+      if (currentRequest === requestId.current) Toast.error(e instanceof Error ? e.message : "题目加载失败");
+    } finally {
+      if (currentRequest === requestId.current) setListLoading(false);
+    }
+  }, [bankId, pageNo, pageSize, search]);
   useEffect(() => {
     if (!bankId) return;
-    load();
     getManagedBanks()
       .then((page) =>
         setBankName(
@@ -84,10 +90,8 @@ export default function QuestionsPage() {
       )
       .catch(() => undefined);
   }, [bankId]);
-  const visible = useMemo(
-    () => questions.filter((item) => !keyword || item.stem.includes(keyword)),
-    [questions, keyword],
-  );
+  useEffect(() => { if (bankId) void load(); }, [bankId, load]);
+  const runSearch = () => { setPageNo(1); setSearch(keyword.trim()); };
   const reset = () => {
     setEditingId(null);
     setType("SINGLE");
@@ -195,12 +199,7 @@ export default function QuestionsPage() {
     );
   return (
     <ProfileShell>
-          <Link
-            href="/profile/banks"
-            className="text-sm font-semibold text-blue-600 no-underline"
-          >
-            <IconArrowLeft aria-hidden="true" /> 返回题库管理
-          </Link>
+          <Typography.Text link={{ href: "/profile/banks" }} icon={<IconArrowLeft size="small" />} className="!inline-flex !min-h-8 !items-center !text-sm">返回题库管理</Typography.Text>
           <Typography.Title heading={1} className="!mt-5 !m-0 !text-[28px] !font-semibold !text-[#183f35]">
             题库管理 -- 题目管理
           </Typography.Title>
@@ -208,35 +207,25 @@ export default function QuestionsPage() {
             <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 pb-4 text-sm text-slate-500">
               当前题库：<b className="text-slate-800">{bankName}</b>
               <span className="rounded-full bg-slate-100 px-3 py-1">
-                共 {questions.length} 题
+                共 {total} 题
               </span>
             </div>
             <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
               <Input
                 value={keyword}
                 onChange={setKeyword}
+                onEnterPress={runSearch}
+                showClear
                 placeholder="搜索题干..."
-                className="sm:w-80"
+                className="w-full sm:!w-80"
               />
+              <Button onClick={runSearch}>查询</Button>
               <span className="flex-1" />
-              <Button
-                theme="borderless"
-                onClick={() => Toast.info("智能出题功能即将开放")}
-              >
-                智能生题
-              </Button>
-              <Button
-                theme="borderless"
-                onClick={() => Toast.info("AI 导入试题功能即将开放")}
-              >
-                AI导入试题
-              </Button>
-              <Button theme="borderless" onClick={() => setImportOpen(true)}>
+              <Button theme="borderless" onClick={() => { setImportResult(null); setImportFile(null); setImportOpen(true); }}>
                 模板导入试题
               </Button>
               <Button
                 theme="solid"
-                type="warning"
                 onClick={() => setOpen(true)}
               >
                 <IconPlus aria-hidden="true" /> 新增题目
@@ -244,33 +233,28 @@ export default function QuestionsPage() {
             </div>
           </Layout.Content>
           <Card bodyStyle={{ padding: 0 }} className="!mt-5 overflow-hidden">
-            <Table empty="暂无题目，点击右上角新增" dataSource={visible} rowKey="id" pagination={false} scroll={{x: 850}} columns={[{title: "ID", render: (_value: unknown, item: (typeof visible)[number]) => (<span>{item.id}</span>)},
-{title: "题型", render: (_value: unknown, item: (typeof visible)[number]) => (<span>
-                  <b className="rounded-full bg-blue-50 px-2 py-1 text-xs text-blue-600">
-                    {item.questionType === "MULTIPLE"
-                      ? "多选"
-                      : item.questionType === "TRUE_FALSE"
-                        ? "判断"
-                        : "单选"}
-                  </b>
-                </span>)},
-{title: "题干", render: (_value: unknown, item: (typeof visible)[number]) => (<span className="truncate">{item.stem}</span>)},
-{title: "难度", render: (_value: unknown, item: (typeof visible)[number]) => (<span>{item.difficulty || "-"}</span>)},
-{title: "答案", render: (_value: unknown, item: (typeof visible)[number]) => (<span>{item.answerText || "-"}</span>)},
-{title: "操作", render: (_value: unknown, item: (typeof visible)[number]) => (<span className="flex gap-3">
-                  <Button theme="borderless"
-                    onClick={() => edit(item.id)}
-                    className="text-blue-500"
-                  >
-                    编辑
-                  </Button>
-                  <Button theme="borderless"
-                    onClick={() => remove(item.id)}
-                    className="text-red-500"
-                  >
-                    删除
-                  </Button>
-                </span>)}]} />
+            <Table
+              style={{ width: "100%" }} loading={listLoading}
+              empty={search ? "没有匹配的题目" : "暂无题目，点击右上角新增或导入"}
+              dataSource={questions} rowKey="id"
+              pagination={{ currentPage: pageNo, pageSize, total, showSizeChanger: true, pageSizeOpts: [10, 20, 50],
+                onPageChange: setPageNo,
+                onPageSizeChange: (size) => { setPageSize(size); setPageNo(1); } }}
+              scroll={{ x: 960 }}
+              columns={[
+                { title: "ID", dataIndex: "id", width: 90 },
+                { title: "题型", dataIndex: "questionType", width: 100,
+                  render: (value: string) => <Tag color={value === "MULTIPLE" ? "violet" : value === "TRUE_FALSE" ? "cyan" : "blue"}>{value === "MULTIPLE" ? "多选" : value === "TRUE_FALSE" ? "判断" : "单选"}</Tag> },
+                { title: "题干", dataIndex: "stem", render: (value: string) => <div className="whitespace-normal break-words leading-6">{value}</div> },
+                { title: "难度", dataIndex: "difficulty", width: 90, render: difficultyLabel },
+                { title: "答案", dataIndex: "answerText", width: 120, render: (value: string) => <span className="break-words">{answerLabel(value)}</span> },
+                { title: "操作", width: 160, fixed: "right",
+                  render: (_value: unknown, item: QuestionItem) => <Space spacing={4}>
+                    <Button theme="borderless" onClick={() => edit(item.id)}>编辑</Button>
+                    <Button theme="borderless" type="danger" onClick={() => remove(item.id)}>删除</Button>
+                  </Space> },
+              ]}
+            />
           </Card>
 
       <Modal bodyStyle={{ maxHeight: "calc(100dvh - 240px)", overflowY: "auto" }}
@@ -322,7 +306,7 @@ export default function QuestionsPage() {
               className="w-full"
             /></div>
           </div>
-          <Input.TextArea
+          <TextArea
             value={stem}
             onChange={setStem}
             autosize={{ minRows: 3, maxRows: 6 }}
@@ -412,7 +396,7 @@ export default function QuestionsPage() {
               </Space>
             )}
           </div>
-          <Input.TextArea
+          <TextArea
             value={analysis}
             onChange={setAnalysis}
             autosize={{ minRows: 2, maxRows: 4 }}
@@ -428,7 +412,7 @@ export default function QuestionsPage() {
           </div>
         </div>
       </Modal>
-      <Modal bodyStyle={{ maxHeight: "calc(100dvh - 240px)", overflowY: "auto" }} width="min(480px, calc(100vw - 24px))"
+      <Modal bodyStyle={{ maxHeight: "calc(100dvh - 240px)", overflowY: "auto" }} width="min(560px, calc(100vw - 24px))"
         title="模板导入试题"
         visible={importOpen}
         onCancel={() => {
@@ -436,9 +420,12 @@ export default function QuestionsPage() {
           setImportFile(null);
         }}
         okText="确定导入"
-        cancelText="取消"
+        cancelText={importResult ? "关闭" : "取消"}
         confirmLoading={importLoading}
-        okButtonProps={{ disabled: !importFile }}
+        okButtonProps={{ disabled: !importFile || importLoading }}
+        cancelButtonProps={{ disabled: importLoading }}
+        closable={!importLoading}
+        maskClosable={!importLoading}
         onOk={async () => {
           if (!importFile) {
             Toast.error("请选择 .xlsx 文件");
@@ -450,9 +437,8 @@ export default function QuestionsPage() {
             Toast.success(
               `导入完成：新增 ${result.imported} 题，跳过 ${result.skipped} 题`,
             );
-            if (result.errors.length)
-              Toast.warning(`有 ${result.errors.length} 行未导入，请查看提示`);
-            setImportOpen(false);
+            setImportResult(result);
+            setUploadVersion((version) => version + 1);
             setImportFile(null);
             load();
           } catch (e) {
@@ -462,18 +448,43 @@ export default function QuestionsPage() {
           }
         }}
       >
-        <div className="flex flex-col gap-3 py-2">
-          <p className="text-sm text-slate-500">
-            请先下载模板，按模板填写后上传 .xlsx 文件。
-          </p>
-          <Button
-            theme="borderless"
-            type="primary"
-            onClick={() => getQuestionImportTemplate()}
-          >
-            下载导入模板
-          </Button>
-          <Upload accept=".xlsx" limit={1} action="" uploadTrigger="custom" onChange={({ fileList }) => setImportFile(fileList[0]?.fileInstance || null)} onRemove={() => setImportFile(null)}><Button>选择导入文件</Button></Upload>
+        <div className="flex flex-col gap-5 py-2">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 p-4">
+            <div className="min-w-0">
+              <Typography.Text strong>1. 下载并填写模板</Typography.Text>
+              <div className="mt-1 text-xs leading-5 text-slate-500">支持单选、多选、判断题，请先替换示例题。</div>
+            </div>
+            <Button icon={<IconDownload />} disabled={importLoading}
+              onClick={() => { getQuestionImportTemplate().catch((e) => Toast.error(e instanceof Error ? e.message : "模板下载失败")); }}>
+              下载模板
+            </Button>
+          </div>
+          <div className="min-w-0">
+            <div className="mb-3"><Typography.Text strong>2. 上传题目文件</Typography.Text></div>
+            <Upload
+              key={`${importOpen}-${uploadVersion}`}
+              style={{ width: "100%" }}
+              disabled={importLoading}
+              accept=".xlsx"
+              limit={1}
+              action=""
+              uploadTrigger="custom"
+              draggable
+              dragIcon={<IconUpload size="extra-large" />}
+              dragMainText="点击选择文件，或拖拽文件到此处"
+              dragSubText="仅支持 .xlsx 格式，每次导入一个文件"
+              onAcceptInvalid={() => Toast.error("请选择 .xlsx 格式的文件")}
+              onExceed={() => Toast.warning("每次只能导入一个文件，请先移除已选文件")}
+              onChange={({ fileList }) => setImportFile(fileList[0]?.fileInstance || null)}
+              onRemove={() => setImportFile(null)}
+            />
+            <div className="mt-3 text-xs leading-5 text-slate-500">
+              重复题干自动跳过；有效行正常导入，失败行会显示原因，修正后可再次导入。
+            </div>
+          </div>
+          {importResult && <Banner type={importResult.errors.length ? "warning" : "success"}
+            title={`新增 ${importResult.imported} 题，重复跳过 ${importResult.skipped} 题，失败 ${importResult.errors.length} 行`}
+            description={importResult.errors.length ? <div className="max-h-48 overflow-y-auto">{importResult.errors.map((error, index) => <div key={index}>{error}</div>)}</div> : "导入完成，可关闭窗口查看题目。"} />}
         </div>
       </Modal>
     </ProfileShell>

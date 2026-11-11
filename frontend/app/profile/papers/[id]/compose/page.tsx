@@ -1,11 +1,10 @@
 "use client";
 
-import { Layout, Card } from "@douyinfe/semi-ui";
+import { Layout, Card, Typography } from "@douyinfe/semi-ui";
 
 import { IconArrowLeft, IconLock } from "@douyinfe/semi-icons";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import "@douyinfe/semi-ui/react19-adapter";
 import { Button, Input, Select, Spin, Toast, InputNumber } from "@douyinfe/semi-ui";
@@ -282,9 +281,7 @@ export default function ComposePaperPage() {
       <Layout.Content className="min-w-0">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-white px-5 py-3 sm:px-8">
           <div className="flex min-w-0 flex-wrap items-center gap-3 text-sm">
-            <Link href="/profile/papers" className="shrink-0 whitespace-nowrap text-slate-500 no-underline">
-              <IconArrowLeft aria-hidden="true" /> 返回
-            </Link>
+            <Typography.Text link={{ href: "/profile/papers" }} icon={<IconArrowLeft size="small" />} className="!inline-flex !min-h-8 !items-center !text-sm">返回</Typography.Text>
             <strong className="text-lg text-slate-800">{paper?.name}</strong>
             <span className="shrink-0 whitespace-nowrap rounded bg-blue-50 px-2 py-1 text-blue-600">
               {isRandomPaper ? "随机组卷" : "固定组卷"}

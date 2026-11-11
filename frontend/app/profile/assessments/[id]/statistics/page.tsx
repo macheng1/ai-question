@@ -5,7 +5,6 @@ import { Layout, Card } from "@douyinfe/semi-ui";
 import { IconArrowLeft } from "@douyinfe/semi-icons";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import "@douyinfe/semi-ui/react19-adapter";
 import { Button, Checkbox, Spin, Tag, Toast } from "@douyinfe/semi-ui";
@@ -76,12 +75,7 @@ export default function AssessmentStatisticsPage() {
     <ProfileShell>
           <div className="flex items-center justify-between gap-4">
             <div>
-              <Link
-                href={`/profile/assessments`}
-                className="text-sm font-semibold text-blue-600 no-underline"
-              >
-                <IconArrowLeft aria-hidden="true" /> 返回考试管理
-              </Link>
+              <Typography.Text link={{ href: "/profile/assessments" }} icon={<IconArrowLeft size="small" />} className="!inline-flex !min-h-8 !items-center !text-sm">返回考试管理</Typography.Text>
               <Typography.Title heading={1} className="!mt-5 !m-0 !text-[28px] !font-semibold !text-[#183f35]">考试统计</Typography.Title>
             </div>
             <Button theme="borderless" onClick={() => load()} loading={loading}>

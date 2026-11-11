@@ -120,12 +120,7 @@ export default function AssessmentScoresPage() {
   const visibleRecords = records.filter(r => department == null || r.departmentId === department);
   return (
     <ProfileShell>
-          <Link
-            href="/profile/assessments"
-            className="text-sm font-semibold text-blue-600 no-underline"
-          >
-            <IconArrowLeft aria-hidden="true" /> 返回考试管理
-          </Link>
+          <Typography.Text link={{ href: "/profile/assessments" }} icon={<IconArrowLeft size="small" />} className="!inline-flex !min-h-8 !items-center !text-sm">返回考试管理</Typography.Text>
           <div className="mt-5">
             <Typography.Title heading={1} className="!m-0 !text-[28px] !font-semibold !text-[#183f35]">成绩统计</Typography.Title>
             <p className="mt-2 text-sm text-slate-500">

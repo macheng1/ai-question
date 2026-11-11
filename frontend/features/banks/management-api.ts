@@ -13,7 +13,7 @@ export function updateBankCategory(id:number,data:Omit<Category,"id">){ return a
 export function deleteBankCategory(id:number){ return apiClient.delete<void>(`/management/bank-categories/${id}`); }
 export type QuestionOption = { id?:number; optionKey:string; optionText:string; correct?:boolean; sortNo?:number };
 export type QuestionItem = { id:number; bankId:number; questionType:string; stem:string; answerText?:string; analysis?:string; tags?:string; source?:string; difficulty?:string; score?:number; options?:QuestionOption[] };
-export function getBankQuestions(bankId:number){ return apiClient.get<{records:QuestionItem[];total:number}>("/management/questions", { bankId, pageNo:1, pageSize:50 }); }
+export function getBankQuestions(bankId:number, pageNo = 1, pageSize = 50, keyword?:string){ return apiClient.get<{records:QuestionItem[];total:number}>("/management/questions", { bankId, pageNo, pageSize, keyword }); }
 export type SaveQuestion = { bankId:number; questionType:string; stem:string; answerText?:string; analysis?:string; tags?:string; source?:string; difficulty?:string; score?:number; options?:QuestionOption[] };
 export function getQuestion(id:number){ return apiClient.get<QuestionItem>(`/management/questions/${id}`); }
 export function createQuestion(data:SaveQuestion){ return apiClient.post<QuestionItem>("/management/questions", data); }
