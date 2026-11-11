@@ -133,6 +133,25 @@ class DashboardServiceTest {
     assertEquals(23, empty.overview().completed());
   }
 
+  @Test
+  void exportIncludesAllFilteredLogs() {
+    var repo = mock(DashboardRepository.class);
+    var rows = new ArrayList<Map<String, Object>>();
+    for (int i = 0; i < 55; i++) rows.add(row());
+    var unfinished = row();
+    unfinished.put("completedUnits", 0L);
+    rows.add(unfinished);
+    var notStarted = row();
+    notStarted.remove("sessionId");
+    rows.add(notStarted);
+    when(repo.rows(eq(7L), any())).thenReturn(rows);
+    when(repo.trainings(eq(7L), any())).thenReturn(List.of());
+    var service = new DashboardService(repo);
+    assertEquals(10, service.load(7, null, null, 2L, 4L, null, "logs", "COMPLETED", 1, 10).rows().size());
+    assertEquals(55, service.exportLogs(7, null, null, 2L, 4L, null, "COMPLETED").size());
+    assertEquals(56, service.exportLogs(7, null, null, 2L, 4L, null, "ALL").size());
+  }
+
   private Map<String, Object> row() {
     var row = new HashMap<String, Object>();
     row.put("trainingId", 2L);

@@ -4,3 +4,11 @@ export const getDashboardOptions = () =>
   apiClient.get<DashboardOptions>("/management/dashboard/options");
 export const getDashboard = (query: DashboardQuery) =>
   apiClient.get<DashboardData>("/management/dashboard", query);
+
+export const exportDashboardLogs = (query: DashboardQuery) => {
+  const { start, end, trainingId, departmentId, category, status } = query;
+  return apiClient.download("/management/dashboard/logs/export", {
+    params: { start, end, trainingId, departmentId, category, status },
+    filename: "学习日志.xlsx",
+  });
+};

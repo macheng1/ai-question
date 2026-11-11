@@ -1,4 +1,7 @@
 "use client";
+import { useState } from "react";
+import { IconDownload } from "@douyinfe/semi-icons";
+import { exportDashboardLogs } from "../api";
 import { useCompactViewport } from "@/lib/hooks/useCompactViewport";
 import { formatStudyHours } from "../format";
 import {
@@ -9,6 +12,7 @@ import {
   Table,
   Tag,
   Tooltip,
+  Toast,
 } from "@douyinfe/semi-ui";
 import type { ColumnProps } from "@douyinfe/semi-ui/lib/es/table/interface";
 import type {
@@ -62,6 +66,17 @@ export function DashboardDetails({
   hideTraining?: boolean;
 }) {
   const compact = useCompactViewport();
+  const [exporting, setExporting] = useState(false);
+  async function handleExport() {
+    setExporting(true);
+    try {
+      await exportDashboardLogs(query);
+    } catch (error) {
+      Toast.error(error instanceof Error ? error.message : "导出失败，请重试");
+    } finally {
+      setExporting(false);
+    }
+  }
   const training: ColumnProps<DashboardRow> = {
     title: "培训名称",
     dataIndex: "trainingName",
@@ -265,6 +280,12 @@ export function DashboardDetails({
               : "同一员工参加多场培训，分别统计"}
           </span>
         </div>
+        <Space wrap>
+        {query.tab === "logs" && (
+          <Button icon={<IconDownload />} loading={exporting} disabled={loading || data.total === 0} onClick={handleExport}>
+            导出 Excel
+          </Button>
+        )}
         {query.tab !== "trainings" && (
           <Select
             aria-label="明细状态"
@@ -284,6 +305,7 @@ export function DashboardDetails({
             ]}
           />
         )}
+        </Space>
       </div>
       <Table<DashboardRow>
         className="[&_.semi-table-pagination-outer]:!m-0 [&_.semi-table-pagination-outer]:flex-wrap [&_.semi-table-pagination-outer]:gap-3 [&_.semi-table-pagination-outer]:!px-4 [&_.semi-table-pagination-outer]:!py-4"

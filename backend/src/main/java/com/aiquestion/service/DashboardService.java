@@ -57,6 +57,18 @@ public class DashboardService {
       String status,
       int page,
       int pageSize) {
+    return loadDetails(owner, start, end, trainingId, departmentId, category, tab, status, page, pageSize, true);
+  }
+
+  @Transactional(readOnly = true)
+  public List<Map<String, Object>> exportLogs(long owner, LocalDate start, LocalDate end,
+      Long trainingId, Long departmentId, String category, String status) {
+    return loadDetails(owner, start, end, trainingId, departmentId, category, "logs", status, 1, 10, false).rows();
+  }
+
+  private Result loadDetails(long owner, LocalDate start, LocalDate end, Long trainingId,
+      Long departmentId, String category, String tab, String status, int page, int pageSize,
+      boolean paginate) {
     if (start != null && end != null && start.isAfter(end)) fail("开始日期不能晚于结束日期");
     if (page < 1 || page > 1000000 || !Set.of(10, 20, 50).contains(pageSize)) fail("分页参数无效");
     if (!Set.of("trainings", "learners", "incomplete", "exams", "logs").contains(tab))
@@ -158,7 +170,7 @@ public class DashboardService {
         overview,
         departments,
         trend,
-        List.copyOf(detail.subList(offset, Math.min(total, offset + pageSize))),
+        List.copyOf(paginate ? detail.subList(offset, Math.min(total, offset + pageSize)) : detail),
         total,
         actualPage,
         pageSize,
