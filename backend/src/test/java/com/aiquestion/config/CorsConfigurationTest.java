@@ -27,6 +27,7 @@ class CorsConfigurationTest {
   @EnableWebSecurity
   @Import({WebConfig.class, SecurityConfig.class})
   static class TestConfig {
+    @Bean com.aiquestion.security.LearnerAccess learnerAccess() { return mock(com.aiquestion.security.LearnerAccess.class); }
     @Bean TraceIdInterceptor traceIdInterceptor() { return mock(TraceIdInterceptor.class); }
     @Bean TestEndpoints testEndpoints() { return new TestEndpoints(); }
   }

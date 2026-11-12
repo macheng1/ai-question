@@ -1,4 +1,4 @@
 import { AccountSettings } from "@/features/auth/components/AccountSettings";
 export default function Settings() {
-  return <AccountSettings />;
+  return <AccountSettings employee />;
 }

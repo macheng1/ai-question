@@ -15,23 +15,24 @@ import {
   updateProfile,
   type UserProfile,
 } from "../api";
+import { getLearnerProfile } from "../learner-session";
 import { useAuthStore } from "../store";
 
 import type { FormApi } from "@douyinfe/semi-ui/lib/es/form/interface";
 
-export function AccountSettings() {
+export function AccountSettings({ employee = false }: { employee?: boolean }) {
   const passwordForm = useRef<FormApi | null>(null);
   const [profile, setProfile] = useState<UserProfile>();
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   useEffect(() => {
-    getCurrentUser()
+    (employee ? getLearnerProfile() : getCurrentUser())
       .then(setProfile)
       .catch((e) => setError(e.message));
-  }, []);
+  }, [employee]);
   return (
     <div className="flex flex-col gap-6">
-      <Typography.Title heading={2} style={{ color: "#183f35", margin: 0 }}>账号资料与密码</Typography.Title>
+      <Typography.Title heading={2} style={{ color: "#183f35", margin: 0 }}>{employee ? "员工资料" : "账号资料与密码"}</Typography.Title>
       {error && <Banner type="danger" description={error} />}
       {profile && (
         <Card title="账号资料">
@@ -93,7 +94,7 @@ export function AccountSettings() {
           )}
         </Card>
       )}
-      <Card title="修改密码">
+      {!employee && <Card title="修改密码">
         <Form
           getFormApi={(api) => {
             passwordForm.current = api;
@@ -139,7 +140,7 @@ export function AccountSettings() {
             修改密码
           </Button>
         </Form>
-      </Card>
+      </Card>}
     </div>
   );
 }

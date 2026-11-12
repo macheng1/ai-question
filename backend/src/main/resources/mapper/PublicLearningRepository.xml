@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiquestion.repository.PublicLearningRepository">
+  <select id="findTrainingEntry" resultType="java.util.LinkedHashMap">
+    SELECT CASE WHEN assessment_id IS NULL THEN 'STANDALONE' ELSE 'EXAM' END purpose,assessment_id assessmentId,name,description,category,requirement_type requirementType,survey_enabled surveyEnabled FROM training WHERE id=#{trainingId}
+  </select>
+  <select id="findMaterialTraining" resultType="java.lang.Long">
+    SELECT training_id FROM training_material WHERE id=#{materialId}
+  </select>
+</mapper>

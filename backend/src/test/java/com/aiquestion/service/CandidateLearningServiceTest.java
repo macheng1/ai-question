@@ -12,9 +12,14 @@ class CandidateLearningServiceTest {
   assertDoesNotThrow(()->CandidateLearningService.validateProgress(100,100,90,10,true));
  }
  @Test void noLinkedVideosAllowStarting() {
-  var jdbc=org.mockito.Mockito.mock(org.springframework.jdbc.core.JdbcTemplate.class);
-  org.mockito.Mockito.when(jdbc.queryForObject(org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.eq(Integer.class),org.mockito.ArgumentMatchers.eq(1L),org.mockito.ArgumentMatchers.eq(1L),org.mockito.ArgumentMatchers.eq("A"),org.mockito.ArgumentMatchers.eq("1"))).thenReturn(0);
-  assertDoesNotThrow(()->new CandidateLearningService(jdbc).requireComplete(1,"A","1"));
+  var repository = org.mockito.Mockito.mock(com.aiquestion.repository.CandidateLearningRepository.class);
+  var audience = org.mockito.Mockito.mock(TrainingAudienceService.class);
+  org.mockito.Mockito.when(repository.countIncompleteVideos(1L,1L,"A","1",true)).thenReturn(java.util.List.of(0));
+  org.mockito.Mockito.when(repository.countIncompletePages(1L,1L,"A","1",true)).thenReturn(java.util.List.of(0));
+  var service = new CandidateLearningService(repository, org.mockito.Mockito.mock(AssessmentRosterService.class), org.mockito.Mockito.mock(LearningClock.class), org.mockito.Mockito.mock(MaterialLearningService.class), audience);
+  assertDoesNotThrow(()->service.requireComplete(1,"A","1"));
+  org.mockito.Mockito.verify(audience).requireTask(1L,"A","1");
+  org.mockito.Mockito.verify(repository).confirmSessionsCompleted(1L,"A","1",true);
  }
  @Test void repeatedRequestsDoNotReceiveRepeatedTolerance() {
   // Both requests retain the same persisted baseline, even after the first save.

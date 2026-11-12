@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiquestion.repository.DashboardRepository">
+  <sql id="conditions"> WHERE t.created_by=#{owner}
+    <if test="filters.containsKey('start')">AND COALESCE(t.start_at,t.created_at)&gt;=#{filters.start}</if>
+    <if test="filters.containsKey('end')">AND COALESCE(t.start_at,t.created_at)&lt;#{filters.end}</if>
+    <if test="filters.containsKey('trainingId')">AND t.id=#{filters.trainingId}</if>
+    <if test="filters.containsKey('category')">AND t.category=#{filters.category}</if>
+    <if test="filters.containsKey('departmentId')">AND EXISTS(SELECT 1 FROM training_audience scope WHERE scope.training_id=t.id AND scope.department_id=#{filters.departmentId})</if>
+</sql>
+  <select id="trainings" resultType="java.util.LinkedHashMap">
+    SELECT t.id,t.name,t.assessment_id assessmentId FROM training t
+    <include refid="conditions"/> ORDER BY t.id DESC
+  </select>
+  <select id="trainingOptions" resultType="java.util.LinkedHashMap">
+    SELECT id,name FROM training WHERE created_by=#{owner} ORDER BY id DESC
+  </select>
+  <select id="departmentOptions" resultType="java.util.LinkedHashMap">
+    SELECT DISTINCT a.department_id id,a.department_name name FROM training_audience a
+    JOIN training t ON t.id=a.training_id WHERE t.created_by=#{owner} ORDER BY a.department_name
+  </select>
+  <select id="rows" resultType="java.util.LinkedHashMap">
+SELECT t.id trainingId,t.name trainingName,t.assessment_id assessmentId,t.end_at trainingEnd,
+ ta.employee_id employeeId,ta.candidate_name name,ta.phone,ta.department_id departmentId,ta.department_name departmentName,
+ s.id sessionId,s.started_at startedAt,s.completed_at confirmedAt,
+ (SELECT COUNT(*) FROM training_video v WHERE v.training_id=t.id)
+ +(SELECT COUNT(*) FROM training_material m JOIN training_material_page p ON p.material_id=m.id WHERE m.training_id=t.id) totalUnits,
+ (SELECT COUNT(*) FROM candidate_video_progress p JOIN training_video v ON v.id=p.video_id WHERE v.training_id=t.id AND p.session_id=s.id AND p.completed=1)
+ +(SELECT COUNT(*) FROM candidate_material_progress p JOIN training_material m ON m.id=p.material_id WHERE m.training_id=t.id AND p.session_id=s.id AND p.completed=1) completedUnits,
+ COALESCE((SELECT SUM(p.studied_seconds) FROM candidate_video_progress p JOIN training_video v ON v.id=p.video_id WHERE v.training_id=t.id AND p.session_id=s.id),0)
+ +COALESCE((SELECT SUM(p.studied_seconds) FROM candidate_material_progress p JOIN training_material m ON m.id=p.material_id WHERE m.training_id=t.id AND p.session_id=s.id),0) studiedSeconds,
+ (SELECT COUNT(*) FROM candidate_video_progress p JOIN training_video v ON v.id=p.video_id WHERE v.training_id=t.id AND p.session_id=s.id AND p.studied_seconds IS NULL) missingDuration,
+ (SELECT MAX(p.completed_at) FROM candidate_video_progress p JOIN training_video v ON v.id=p.video_id WHERE v.training_id=t.id AND p.session_id=s.id) videoCompletedAt,
+ (SELECT MAX(p.completed_at) FROM candidate_material_progress p JOIN training_material m ON m.id=p.material_id WHERE m.training_id=t.id AND p.session_id=s.id) readingCompletedAt,
+ a.end_at examEnd,a.name examName,
+ aa.id attemptId,aa.status attemptStatus,aa.score,aa.total_score totalScore,aa.passed,aa.submitted_at submittedAt,
+ CASE WHEN aa.submitted_at IS NOT NULL THEN GREATEST(0,TIMESTAMPDIFF(SECOND,aa.started_at,aa.submitted_at)) END durationSeconds,
+ (SELECT COUNT(*) FROM assessment_attempt x JOIN assessment_participant p ON p.id=x.participant_id WHERE p.task_id=a.id AND p.employee_id=ta.employee_id) attemptCount
+FROM training t JOIN training_audience ta ON ta.training_id=t.id
+LEFT JOIN assessment_task a ON a.id=t.assessment_id AND a.created_by=t.created_by
+LEFT JOIN candidate_learning_session s ON s.id=(SELECT MAX(x.id) FROM candidate_learning_session x WHERE x.employee_id=ta.employee_id AND (x.training_id=t.id OR x.task_id=t.assessment_id))
+LEFT JOIN assessment_attempt aa ON aa.id=(SELECT MAX(x.id) FROM assessment_attempt x JOIN assessment_participant p ON p.id=x.participant_id WHERE p.task_id=a.id AND p.employee_id=ta.employee_id)
+    <include refid="conditions"/>
+    <if test="filters.containsKey('departmentId')">AND ta.department_id=#{filters.departmentId}</if>
+    ORDER BY t.id DESC,ta.employee_id
+  </select>
+</mapper>

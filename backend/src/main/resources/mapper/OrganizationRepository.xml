@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiquestion.repository.OrganizationRepository">
+  <select id="findDepartmentsWithEmployeeCounts" resultType="java.util.LinkedHashMap">
+    SELECT d.id,d.name,d.status,(SELECT COUNT(*) FROM organization_employee e WHERE e.department_id=d.id) employeeCount FROM organization_department d WHERE d.created_by=#{ownerId} ORDER BY d.id
+  </select>
+  <select id="findEmployees" resultType="java.util.LinkedHashMap">
+    SELECT e.id,e.name,e.phone,e.email,e.employee_no employeeNo,e.data_source dataSource,e.learner_type learnerType,e.gender,e.remark,e.job_title jobTitle,e.department_id departmentId,d.name departmentName,e.status FROM organization_employee e JOIN organization_department d ON d.id=e.department_id WHERE e.created_by=#{ownerId} ORDER BY e.id
+  </select>
+  <select id="countOwnedDepartments" resultType="java.lang.Integer">
+    SELECT COUNT(*) FROM organization_department WHERE id=#{departmentId} AND created_by=#{ownerId}<choose><when test="activeOnly"> AND status='ACTIVE'</when><otherwise></otherwise></choose>
+  </select>
+  <select id="lockDepartmentStatus" resultType="java.lang.String">
+    SELECT status FROM organization_department WHERE id=#{departmentId} AND created_by=#{ownerId} FOR UPDATE
+  </select>
+  <insert id="insertDepartment" useGeneratedKeys="true" keyProperty="generated.id" keyColumn="id">
+    INSERT INTO organization_department(created_by,name,status) VALUES(#{ownerId},#{name},#{status})
+  </insert>
+  <update id="updateDepartment">
+    UPDATE organization_department SET name=#{name},status=#{status} WHERE id=#{departmentId} AND created_by=#{ownerId}
+  </update>
+  <select id="findEmployeeDepartment" resultType="java.util.LinkedHashMap">
+    SELECT department_id,status FROM organization_employee WHERE id=#{employeeId} AND created_by=#{ownerId}
+  </select>
+  <select id="countOwnedEmployees" resultType="java.lang.Integer">
+    SELECT COUNT(*) FROM organization_employee WHERE id=#{employeeId} AND created_by=#{ownerId}
+  </select>
+  <select id="countPhoneConflicts" resultType="java.lang.Integer">
+    SELECT COUNT(*) FROM organization_employee WHERE phone=#{phone} AND id&lt;&gt;#{excludedEmployeeId}
+  </select>
+  <insert id="insertEmployee" useGeneratedKeys="true" keyProperty="generated.id" keyColumn="id">
+    INSERT INTO organization_employee(created_by,department_id,name,phone,email,job_title,status,learner_type,gender,employee_no,remark) VALUES(#{ownerId},#{departmentId},#{name},#{phone},#{email},#{jobTitle},#{status},#{learnerType},#{gender},#{employeeNo},#{remark})
+  </insert>
+  <update id="updateEmployee">
+    UPDATE organization_employee SET department_id=#{departmentId},name=#{name},phone=#{phone},email=#{email},job_title=#{jobTitle},status=#{status},learner_type=#{learnerType},gender=#{gender},employee_no=#{employeeNo},remark=#{remark} WHERE id=#{employeeId} AND created_by=#{ownerId}
+  </update>
+</mapper>

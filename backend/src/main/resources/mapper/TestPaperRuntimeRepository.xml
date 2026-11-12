@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiquestion.repository.TestPaperRuntimeRepository">
+  <insert id="copyRandomBankConfig">
+    INSERT INTO test_paper_random_bank(
+  paper_id,bank_id,single_count,single_score,multiple_count,multiple_score,true_false_count,true_false_score
+)
+SELECT #{targetPaperId},bank_id,single_count,single_score,multiple_count,multiple_score,true_false_count,true_false_score
+FROM test_paper_random_bank WHERE paper_id=#{sourcePaperId}
+
+  </insert>
+  <select id="findRandomConfig" resultType="java.util.LinkedHashMap">
+    SELECT r.id,r.bank_id bankId,b.name bankName,
+  r.single_count singleCount,r.single_score singleScore,
+  r.multiple_count multipleCount,r.multiple_score multipleScore,
+  r.true_false_count trueFalseCount,r.true_false_score trueFalseScore,
+  (SELECT COUNT(*) FROM question_item q WHERE q.bank_id=r.bank_id AND q.question_type='SINGLE' AND q.status='ENABLED') availableSingleCount,
+  (SELECT COUNT(*) FROM question_item q WHERE q.bank_id=r.bank_id AND q.question_type='MULTIPLE' AND q.status='ENABLED') availableMultipleCount,
+  (SELECT COUNT(*) FROM question_item q WHERE q.bank_id=r.bank_id AND q.question_type='TRUE_FALSE' AND q.status='ENABLED') availableTrueFalseCount
+FROM test_paper_random_bank r JOIN question_bank b ON b.id=r.bank_id
+WHERE r.paper_id=#{paperId} ORDER BY r.id
+
+  </select>
+  <select id="countBank" resultType="java.lang.Integer">
+    SELECT COUNT(*) FROM question_bank WHERE id=#{bankId}
+  </select>
+  <select id="countRandomBank" resultType="java.lang.Integer">
+    SELECT COUNT(*) FROM test_paper_random_bank WHERE paper_id=#{paperId} AND bank_id=#{bankId}
+  </select>
+  <insert id="insertRandomBank">
+    INSERT INTO test_paper_random_bank(paper_id,bank_id) VALUES(#{paperId},#{bankId})
+  </insert>
+  <delete id="deleteRandomBank">
+    DELETE FROM test_paper_random_bank WHERE paper_id=#{paperId} AND bank_id=#{bankId}
+  </delete>
+  <delete id="deleteRandomConfig">
+    DELETE FROM test_paper_random_bank WHERE paper_id=#{paperId}
+  </delete>
+  <insert id="insertRandomConfig">
+    INSERT INTO test_paper_random_bank(paper_id,bank_id,single_count,single_score,multiple_count,multiple_score,true_false_count,true_false_score) VALUES(#{paperId},#{bankId},#{singleCount},#{singleScore},#{multipleCount},#{multipleScore},#{trueFalseCount},#{trueFalseScore})
+  </insert>
+  <select id="sumRandomScores" resultType="java.math.BigDecimal">
+    SELECT COALESCE(SUM(single_count*single_score+multiple_count*multiple_score+true_false_count*true_false_score),0) FROM test_paper_random_bank WHERE paper_id=#{paperId}
+  </select>
+  <select id="sumRandomQuestionCount" resultType="java.lang.Integer">
+    SELECT COALESCE(SUM(single_count+multiple_count+true_false_count),0) FROM test_paper_random_bank WHERE paper_id=#{paperId}
+  </select>
+  <select id="countConfiguredBank" resultType="java.lang.Integer">
+    SELECT COUNT(*) FROM question_bank WHERE id=#{bankId}
+  </select>
+  <select id="countAccessibleBank" resultType="java.lang.Integer">
+    SELECT COUNT(*) FROM question_bank WHERE id=#{bankId} AND (created_by=#{ownerId} OR published=TRUE)
+  </select>
+  <select id="countAvailableQuestions" resultType="java.lang.Integer">
+    SELECT COUNT(*) FROM question_item WHERE bank_id=#{bankId} AND question_type=#{questionType} AND status='ENABLED'
+  </select>
+</mapper>

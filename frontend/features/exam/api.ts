@@ -1,3 +1,4 @@
+import { confirmLearner } from "@/features/auth/learner-session";
 import { apiClient } from "@/lib/api/client";
 export function startPublicExam(
   id: string,
@@ -19,10 +20,11 @@ export function startPublicExam(
     answers: Array<{ question_id: number; answer_text: string }>;
   }>(`/public/exams/${id}/start`, data);
 }
-export function checkPublicExamEligibility(
+export async function checkPublicExamEligibility(
   id: string,
   data: { name: string; phone: string },
 ) {
+  await confirmLearner("EXAM", Number(id), data.name, data.phone);
   return apiClient.get<{
     allowRetake: boolean;
     maxAttempts: number;

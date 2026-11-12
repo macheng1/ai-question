@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiquestion.repository.LearnerIdentityRepository">
+  <select id="findEntryOwner" resultType="java.lang.Long">
+    SELECT created_by FROM <choose><when test="training">training</when><otherwise>assessment_task</otherwise></choose> WHERE id=#{entryId}
+  </select>
+  <select id="findActiveEmployee" resultType="java.lang.Long">
+    SELECT id FROM organization_employee WHERE created_by=#{enterpriseId} AND name=#{name} AND phone=#{phone} AND status='ACTIVE'
+  </select>
+  <select id="countOwnedAttempt" resultType="java.lang.Integer">
+    SELECT COUNT(*) FROM assessment_attempt a JOIN assessment_participant p ON p.id=a.participant_id JOIN assessment_task t ON t.id=a.task_id WHERE a.id=#{attemptId} AND p.employee_id=#{employeeId} AND t.created_by=#{enterpriseId}
+  </select>
+  <select id="findSessionEmployee" resultType="java.lang.Long">
+    SELECT employee_id FROM candidate_learning_session WHERE token=#{token} AND employee_id IS NOT NULL
+  </select>
+  <select id="countEmployeeSession" resultType="java.lang.Integer">
+    SELECT COUNT(*) FROM candidate_learning_session WHERE token=#{token} AND employee_id=#{employeeId}
+  </select>
+</mapper>

@@ -54,17 +54,13 @@ public class OrganizationController {
             r.email(),
             r.jobTitle(),
             r.departmentId(),
-            r.status() == null ? "ACTIVE" : r.status()));
-  }
-
-  @PostMapping("/employees/{id}/reset-password")
-  public ApiResponse<?> resetPassword(@PathVariable long id) {
-    service.resetPassword(id);
-    return ApiResponse.ok(null);
+            r.status() == null ? "ACTIVE" : r.status(),
+            r.learnerType(), r.gender(), r.employeeNo(), r.remark()));
   }
 
   public record Department(String name, String status) {}
 
   public record Employee(
-      String name, String phone, String email, String jobTitle, Long departmentId, String status) {}
+      String name, String phone, String email, String jobTitle, Long departmentId, String status,
+      String learnerType, String gender, String employeeNo, String remark) {}
 }

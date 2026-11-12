@@ -190,7 +190,7 @@ export function Dashboard() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <Typography.Title heading={2} style={{ color: "#183f35", margin: 0 }}>
-            数据驾驶舱
+            概览
           </Typography.Title>
           <p className="mt-2 text-sm text-slate-500">企业培训与考核数据总览</p>
         </div>

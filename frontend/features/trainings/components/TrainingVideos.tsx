@@ -13,8 +13,9 @@ export function TrainingVideos({ id }: { id: number }) {
   const [previewError, setPreviewError] = useState("");
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewAttempt, setPreviewAttempt] = useState(0);
+  const [ratio, setRatio] = useState("16 / 9");
   useEffect(() => {
-    setPreviewUrl(""); setPreviewError("");
+    setPreviewUrl(""); setPreviewError(""); setRatio("16 / 9");
     if (!preview) { setPreviewLoading(false); return; }
     const controller = new AbortController();
     let objectUrl = "";
@@ -54,11 +55,11 @@ export function TrainingVideos({ id }: { id: number }) {
       catch (error) { Toast.error(error instanceof Error ? error.message : "上传失败"); onError({}); }
       finally { setBusy(false); }
     }}><Button disabled={busy} loading={busy}>上传培训视频</Button></Upload>{busy && <p>处理中…</p>}
-    <Modal bodyStyle={{ maxHeight: "calc(100dvh - 240px)", overflowY: "auto" }} title={preview ? `视频预览：${preview.title}` : "视频预览"} visible={!!preview} onCancel={() => setPreview(null)} footer={null} style={{ width: "min(900px, 94vw)" }}>
+    <Modal centered bodyStyle={{ maxHeight: "calc(100dvh - 240px)", overflowY: "auto" }} title={preview ? `视频预览：${preview.title}` : "视频预览"} visible={!!preview} onCancel={() => setPreview(null)} footer={null} style={{ width: "min(900px, 94vw)" }}>
       {preview && <div className="flex flex-col gap-3">
         {previewLoading && <div role="status" className="flex items-center gap-2 py-10"><Spin />正在加载视频…</div>}
         {previewError && <p role="alert" className="text-red-600">{previewError}</p>}
-        {previewUrl && !previewError && <VideoPlayer key={previewUrl} src={previewUrl} width="100%" height="auto" style={{ aspectRatio: "16 / 9" }} autoPlay={false} clickToPlay muted={false} defaultPlaybackRate={1} volume={80} theme="dark" playbackRateList={[{ label: "1x", value: 1 }, { label: "1.5x", value: 1.5 }, { label: "2x", value: 2 }]} ref={element => { if (element) element.onerror = () => setPreviewError("视频无法播放，请重试或检查视频格式。"); }} />}
+        {previewUrl && !previewError && <VideoPlayer key={previewUrl} src={previewUrl} width="100%" height="auto" style={{ aspectRatio: ratio, maxHeight: "calc(100dvh - 220px)" }} autoPlay={false} clickToPlay muted={false} defaultPlaybackRate={1} volume={80} theme="dark" playbackRateList={[{ label: "1x", value: 1 }, { label: "1.5x", value: 1.5 }, { label: "2x", value: 2 }]} ref={element => { if (element) { element.onerror = () => setPreviewError("视频无法播放，请重试或检查视频格式。"); element.onloadedmetadata = () => { if (element.videoWidth > 0 && element.videoHeight > 0) setRatio(`${element.videoWidth} / ${element.videoHeight}`); }; } }} />}
         {previewError && <Button onClick={() => setPreviewAttempt(value => value + 1)}>重新加载</Button>}
       </div>}
     </Modal>

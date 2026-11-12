@@ -28,14 +28,8 @@ export type UserProfile = {
   address?: string;
   roleCode?: string;
 };
-export function login(
-  data: { phone: string; password: string },
-  type: AccountType = "ADMIN",
-) {
-  return apiClient.post<AuthResult>(
-    type === "EMPLOYEE" ? "/auth/employee/login" : "/auth/login",
-    data,
-  );
+export function login(data: { phone: string; password: string }) {
+  return apiClient.post<AuthResult>("/auth/login", data);
 }
 export function register(data: {
   phone: string;

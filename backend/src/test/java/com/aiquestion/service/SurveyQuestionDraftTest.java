@@ -6,7 +6,7 @@ import com.aiquestion.common.BusinessException;
 
 class SurveyQuestionDraftTest {
   @Test void createsSupportedDraftsWithServerIds() {
-    var service = new TrainingService(null, null);
+    var service = new TrainingService(null, null, null, null);
     var ids = new java.util.HashSet<String>();
     for (String type : java.util.List.of("RATING", "SINGLE", "TEXT")) {
       var q = service.createQuestionDraft(type);
@@ -19,7 +19,7 @@ class SurveyQuestionDraftTest {
     }
   }
   @Test void rejectsUnsupportedType() {
-    var service = new TrainingService(null, null);
+    var service = new TrainingService(null, null, null, null);
     assertThrows(BusinessException.class, () -> service.createQuestionDraft("BAD"));
     assertThrows(BusinessException.class, () -> service.createQuestionDraft(null));
   }

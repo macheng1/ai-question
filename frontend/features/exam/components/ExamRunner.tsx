@@ -4,7 +4,7 @@ import { Layout } from "@douyinfe/semi-ui";
 
 import { IconClock, IconList, IconTick, IconArrowRight } from "@douyinfe/semi-icons";
 import { ExamResultView, type QuestionGrade } from "./ExamResultView";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import "@douyinfe/semi-ui/react19-adapter";
 import { Button, Input, Toast, Modal, Radio, RadioGroup, Checkbox, CheckboxGroup, Progress } from "@douyinfe/semi-ui";
 import { ExamTrainingMaterials } from "@/features/trainings/components/ExamTrainingMaterials";
@@ -32,7 +32,7 @@ const remainingSeconds = (
 ) => {
   const durationRemaining = startedAt
     ? (() => {
-        const started = Date.parse(startedAt);
+        const started = parseExamTime(startedAt);
         return Number.isNaN(started)
           ? durationMinutes * 60
           : durationMinutes * 60 - Math.floor((Date.now() - started) / 1000);
@@ -40,7 +40,7 @@ const remainingSeconds = (
     : durationMinutes * 60;
   const parsedEndAt = parseExamTime(endAt);
   const taskRemaining = Number.isFinite(parsedEndAt)
-    ? Math.floor((parsedEndAt - Date.now()) / 1000)
+    ? Math.ceil((parsedEndAt - Date.now()) / 1000)
     : durationRemaining;
   return Math.max(0, Math.min(durationRemaining, taskRemaining));
 };
@@ -162,6 +162,12 @@ export function ExamRunner({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [navigating, setNavigating] = useState(false);
+  const [timeoutError, setTimeoutError] = useState("");
+  const submissionPending = useRef(false);
+  const autoSubmittedAttempt = useRef<number | null>(null);
+  // 串行保存，避免快速改选时旧答案覆盖新答案；交卷等待已发出的保存结束。
+  const answerQueue = useRef<Promise<boolean>>(Promise.resolve(true));
+  const timedOut = !practice && !!startedAt && seconds === 0;
   const [learning, setLearning] = useState<ExamLearning>();
   const [learningError, setLearningError] = useState("");
   useEffect(() => {
@@ -175,7 +181,7 @@ export function ExamRunner({
       .catch(e => { if (active) setLearningError(e.message || "学习进度加载失败"); });
     return () => { active = false; };
   }, [learningPage, initialPaper.id, initialName, initialPhone]);
-  const draftKey = `aiquestion:exam-draft:${practice ? "practice" : "official"}:${paper.id}`;
+  const draftKey = `aiquestion:exam-draft:${practice ? "practice" : "official"}:${paper.id}:${initialAttemptId || "entry"}`;
   const q = activeQuestions[index];
   const score = result?.score || 0;
   useEffect(() => {
@@ -186,7 +192,7 @@ export function ExamRunner({
     try {
       // 答题草稿只在当前浏览器标签页会话内保留，关闭浏览器后自动清除。
       const draft = JSON.parse(sessionStorage.getItem(draftKey) || "null");
-      if (draft && draft.stage === "answer" && !draft.submitted) {
+      if (draft && draft.stage === "answer" && !draft.submitted && draft.attemptId === initialAttemptId) {
         setName(draft.name || "");
         setPhone(draft.phone || "");
         const draftAnswers = draft.answers || {};
@@ -205,12 +211,12 @@ export function ExamRunner({
       /* ignore a damaged local draft */
     }
     setRestored(true);
-  }, [allowRestore, draftKey, paper.duration, paper.questions.length]);
+  }, [allowRestore, draftKey, initialAttemptId, paper.duration, paper.endAt, paper.questions]);
   useEffect(() => {
     if (practice || initialStage !== "info" || learningPage) return;
     try {
       const persisted = JSON.parse(
-        localStorage.getItem("aiquestion-auth") || "null",
+        localStorage.getItem("aiquestion-learner-auth") || "null",
       );
       const user = persisted?.state?.user;
       if (!user?.name || !/^1\d{10}$/.test(user.phone || "")) return;
@@ -352,41 +358,70 @@ export function ExamRunner({
   ]);
   useEffect(() => {
     if (stage !== "answer" || submitted) return;
-    const timer = window.setInterval(
-      () =>
-        setSeconds((s) => {
-          if (s <= 1) {
-            window.clearInterval(timer);
-            return 0;
-          }
-          return s - 1;
-        }),
-      1000,
-    );
-    return () => window.clearInterval(timer);
-  }, [stage, submitted]);
-  const persistAnswer = async (questionId: number, selected: string[]) => {
-    if (!attemptId || practice) return true;
-    try {
-      await savePublicAnswer(attemptId, questionId, selected);
-      return true;
-    } catch (error) {
-      Toast.error(error instanceof Error ? error.message : "答案保存失败");
-      return false;
-    }
-  };
-  const choose = (key: string) => {
-    setAnswers((current) => {
-      const old = current[q.id] || [];
-      const next =
-        q.kind === "multi"
-          ? old.includes(key)
-            ? old.filter((x) => x !== key)
-            : [...old, key]
-          : [key];
-      return { ...current, [q.id]: next };
+    const update = () => {
+      if (startedAt) setSeconds(remainingSeconds(startedAt, paper.duration, paper.endAt));
+      else if (practice) setSeconds(value => Math.max(0, value - 1));
+    };
+    const timer = window.setInterval(update, 1000);
+    window.addEventListener("focus", update);
+    document.addEventListener("visibilitychange", update);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", update);
+      document.removeEventListener("visibilitychange", update);
+    };
+  }, [stage, submitted, startedAt, paper.duration, paper.endAt, practice]);
+  const persistAnswer = (questionId: number, selected: string[]) => {
+    if (!attemptId || practice) return Promise.resolve(true);
+    const pending = answerQueue.current.then(async () => {
+      try {
+        await savePublicAnswer(attemptId, questionId, selected);
+        return true;
+      } catch (error) {
+        Toast.error(error instanceof Error ? error.message : "答案保存失败");
+        return false;
+      }
     });
+    answerQueue.current = pending;
+    return pending;
   };
+  const updateAnswer = (selected: string[]) => {
+    if (submitting || navigating || timedOut) return;
+    // 切回后台页面到下一次计时刷新之间，也不能写入超时后的改选。
+    if (!practice && startedAt && remainingSeconds(startedAt, paper.duration, paper.endAt) === 0) {
+      setSeconds(0);
+      return;
+    }
+    setAnswers(current => ({ ...current, [q.id]: selected }));
+    void persistAnswer(q.id, selected);
+  };
+  const choose = (key: string) => updateAnswer([key]);
+  const submitExpired = useCallback(async () => {
+    if (!attemptId || submissionPending.current) return;
+    submissionPending.current = true;
+    setSubmitting(true);
+    setTimeoutError("");
+    setCardOpen(false);
+    setConfirmOpen(false);
+    try {
+      await answerQueue.current;
+      await submitPublicAttempt(attemptId);
+      setSubmitted(true);
+      sessionStorage.removeItem(draftKey);
+      window.location.assign(withTraining(`/kaoshi/${initialPaper.id}/result?attemptId=${attemptId}`));
+    } catch (error) {
+      setTimeoutError(error instanceof Error ? error.message : "交卷失败，请重试");
+    } finally {
+      submissionPending.current = false;
+      setSubmitting(false);
+    }
+  }, [attemptId, draftKey, initialPaper.id]);
+  useEffect(() => {
+    if (stage !== "answer" || !restored || !timedOut || submitted || !attemptId ||
+        submitting || autoSubmittedAttempt.current === attemptId) return;
+    autoSubmittedAttempt.current = attemptId;
+    void submitExpired();
+  }, [stage, restored, timedOut, submitted, attemptId, submitting, submitExpired]);
   const beginExam = async () => {
     if (starting) return;
     if (!practice && (!name.trim() || !/^1\d{10}$/.test(phone))) {
@@ -530,11 +565,14 @@ export function ExamRunner({
     localStorage.removeItem("aiquestion:records");
   };
   const submit = async () => {
-    if (submitting) return;
+    if (timedOut) { await submitExpired(); return; }
+    if (submissionPending.current) return;
+    submissionPending.current = true;
     setSubmitting(true);
-    try { await submitAnswers(); } finally { setSubmitting(false); setConfirmOpen(false); }
+    try { await submitAnswers(); } finally { submissionPending.current = false; setSubmitting(false); setConfirmOpen(false); }
   };
   const requestSubmit = async () => {
+    if (timedOut) { await submitExpired(); return; }
     if (navigating || submitting) return;
     setNavigating(true);
     const saved = (practice || seconds > 0) ? await persistAnswer(q.id, answers[q.id] || []) : true;
@@ -571,7 +609,7 @@ export function ExamRunner({
   const time = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 
   const moveTo = async (target: number) => {
-    if (navigating || submitting) return;
+    if (timedOut || navigating || submitting) return;
     setNavigating(true);
     try { if (await persistAnswer(q.id, picked)) { setIndex(target); setCardOpen(false); } }
     finally { setNavigating(false); }
@@ -582,20 +620,48 @@ export function ExamRunner({
   };
   const answeredCount = paper.questions.filter(question => (answers[question.id] || []).length).length;
   const optionBody = (option: (typeof options)[number]) => <span className="h5-option-body"><span className="h5-option-key">{option.key}</span><span>{option.text}</span></span>;
-  const answerCard = <><p className="h5-muted">已答 {answeredCount} / {paper.questions.length} 题，绿色为已答题目。</p><div className="h5-card-grid">{paper.questions.map((question, i) => <Button key={question.id} aria-label={`第 ${i + 1} 题${(answers[question.id] || []).length ? "，已答" : "，未答"}`} theme={(answers[question.id] || []).length ? "light" : "borderless"} className={`${(answers[question.id] || []).length ? "answered" : ""} ${i === index ? "current" : ""}`} disabled={navigating || submitting} onClick={() => moveTo(i)}>{i + 1}</Button>)}</div><Button block size="large" theme="solid" onClick={requestSubmit} disabled={navigating || submitting}>提交答卷</Button></>;
+  const answerCard = <div className="h5-answer-card-content">
+    <div className="h5-answer-card-summary">
+      <span>已答 <strong>{answeredCount}</strong> / {paper.questions.length} 题</span>
+      <span>未答 <strong>{paper.questions.length - answeredCount}</strong> 题</span>
+    </div>
+    <div className="h5-answer-card-legend">
+      <span><i className="answered" />已答</span>
+      <span><i />未答</span>
+      <span><i className="current" />当前题</span>
+    </div>
+    <div className="h5-card-grid">
+      {paper.questions.map((question, i) => {
+        const answered = (answers[question.id] || []).length > 0;
+        return <Button key={question.id} aria-current={i === index ? "step" : undefined}
+          aria-label={`第 ${i + 1} 题，${answered ? "已答" : "未答"}${i === index ? "，当前题" : ""}`}
+          theme={answered ? "light" : "borderless"}
+          className={`${answered ? "answered" : ""} ${i === index ? "current" : ""}`}
+          disabled={timedOut || navigating || submitting} onClick={() => moveTo(i)}>{i + 1}</Button>;
+      })}
+    </div>
+  </div>;
+  const answerCardSubmit = <Button block size="large" theme="solid" onClick={requestSubmit}
+    loading={submitting} disabled={navigating || submitting}>{timedOut ? (submitting ? "正在自动交卷…" : "重新提交") : "提交答卷"}</Button>;
+
   return <Layout.Content className="h5-answer-layout">
-    <aside className="h5-desktop-answer-card"><h2 className="h5-section-title">答题卡</h2>{answerCard}</aside>
+    <aside className="h5-desktop-answer-card"><h2 className="h5-section-title">答题卡</h2>{answerCard}<div className="h5-answer-card-footer">{answerCardSubmit}</div></aside>
     <div className="h5-answer-main">
-    <div className="h5-exam-toolbar"><div className={`h5-timer ${seconds < 60 ? "urgent" : ""}`}><IconClock /><strong>{time}</strong><small>剩余时间</small></div><Button aria-label="打开答题卡" theme="borderless" className="h5-link" icon={<IconList />} onClick={() => setCardOpen(true)}>已答 {answeredCount}/{paper.questions.length}</Button></div>
+    {timedOut && <div role={timeoutError ? "alert" : "status"} className="mx-6 mt-6 rounded-lg bg-amber-50 p-4 text-sm text-amber-800">
+      <strong>考试时间已到，答案已锁定。</strong>
+      <p className="mt-2">{timeoutError ? `自动交卷失败：${timeoutError}。请点击重新提交，已保存的答案不会丢失。` : "正在自动交卷，请稍候…"}</p>
+      {timeoutError && <Button className="mt-3" onClick={submitExpired} loading={submitting}>重新提交</Button>}
+    </div>}
+    <div className="h5-exam-toolbar"><div className={`h5-timer ${seconds < 60 ? "urgent" : ""}`}><IconClock /><strong>{time}</strong><small>{timedOut ? "答题已结束" : "剩余时间"}</small></div><Button aria-label="打开答题卡" theme="borderless" className="h5-link" icon={<IconList />} onClick={() => setCardOpen(true)}>已答 {answeredCount}/{paper.questions.length}</Button></div>
     <Progress percent={(index + 1) / Math.max(1, paper.questions.length) * 100} showInfo={false} stroke="#60af91" style={{ height: 3 }} />
     <div className="h5-content h5-answer-content"><div className="h5-question-meta"><span className="h5-tag">{q.kind === "multi" ? "多选题" : q.kind === "judge" ? "判断题" : "单选题"}</span><span>本题 {q.score || 0} 分</span><b>{String(index + 1).padStart(2, "0")} <small>/ {String(paper.questions.length).padStart(2, "0")}</small></b></div>
       <h1 className="h5-question" id="exam-question-title">{q.title}</h1><p className="h5-muted">{q.kind === "multi" ? "请选择所有符合题意的选项" : "请选择一个正确答案"}</p>
-      {q.kind === "multi" ? <CheckboxGroup aria-labelledby="exam-question-title" className="h5-answer-options" value={picked} disabled={navigating || submitting} onChange={values => setAnswers(current => ({ ...current, [q.id]: values.map(String) }))}>{options.map(option => <Checkbox key={option.key} value={option.key}>{optionBody(option)}</Checkbox>)}</CheckboxGroup> : <RadioGroup aria-labelledby="exam-question-title" className="h5-answer-options" value={picked[0]} disabled={navigating || submitting} onChange={e => choose(String(e.target.value))}>{options.map(option => <Radio key={option.key} value={option.key}>{optionBody(option)}</Radio>)}</RadioGroup>}
-      <p className="h5-save"><IconTick />答案保留在当前会话，切题时同步保存</p>
+      {q.kind === "multi" ? <CheckboxGroup aria-labelledby="exam-question-title" className="h5-answer-options" value={picked} disabled={timedOut || navigating || submitting} onChange={values => updateAnswer(values.map(String))}>{options.map(option => <Checkbox key={option.key} value={option.key}>{optionBody(option)}</Checkbox>)}</CheckboxGroup> : <RadioGroup aria-labelledby="exam-question-title" className="h5-answer-options" value={picked[0]} disabled={timedOut || navigating || submitting} onChange={e => choose(String(e.target.value))}>{options.map(option => <Radio key={option.key} value={option.key}>{optionBody(option)}</Radio>)}</RadioGroup>}
+      <p className="h5-save"><IconTick />选择答案后自动保存，请保持网络连接</p>
     </div>
-    <div className="h5-bottom"><div className="h5-actions"><Button style={{ flex: 1 }} size="large" className="h5-secondary" disabled={index === 0 || navigating || submitting} onClick={() => moveTo(Math.max(0, index - 1))}>上一题</Button>{index < paper.questions.length - 1 && (practice || seconds > 0) ? <Button style={{ flex: 1 }} size="large" theme="solid" className="h5-primary" loading={navigating} disabled={submitting} onClick={goNext}>下一题 <IconArrowRight /></Button> : <Button style={{ flex: 1 }} size="large" theme="solid" className="h5-primary" loading={submitting} disabled={navigating} onClick={requestSubmit}>提交答卷</Button>}</div><Button theme="borderless" className="h5-link" onClick={() => setCardOpen(true)}>查看答题卡 · 检查并交卷</Button></div>
+    <div className="h5-bottom"><div className="h5-actions"><Button style={{ flex: 1 }} size="large" className="h5-secondary" disabled={timedOut || index === 0 || navigating || submitting} onClick={() => moveTo(Math.max(0, index - 1))}>上一题</Button>{index < paper.questions.length - 1 && (practice || seconds > 0) ? <Button style={{ flex: 1 }} size="large" theme="solid" className="h5-primary" loading={navigating} disabled={submitting} onClick={goNext}>下一题 <IconArrowRight /></Button> : <Button style={{ flex: 1 }} size="large" theme="solid" className="h5-primary" loading={submitting} disabled={navigating} onClick={requestSubmit}>{timedOut ? (submitting ? "正在自动交卷…" : "重新提交") : "提交答卷"}</Button>}</div><Button theme="borderless" className="h5-link" onClick={() => setCardOpen(true)}>查看答题卡 · 检查并交卷</Button></div>
     </div>
-    <Modal bodyStyle={{ maxHeight: "calc(100dvh - 240px)", overflowY: "auto" }} title="答题卡" visible={cardOpen} className="h5-modal-root" modalContentClass="h5-modal" style={{ width: "min(440px, calc(100vw - 28px))" }} footer={null} onCancel={() => setCardOpen(false)}>{answerCard}</Modal>
-    <Modal bodyStyle={{ maxHeight: "calc(100dvh - 240px)", overflowY: "auto" }} title="确认提交答卷？" visible={confirmOpen} className="h5-modal-root" modalContentClass="h5-modal" style={{ width: "min(440px, calc(100vw - 28px))" }} okText="确认提交" cancelText="继续检查" confirmLoading={submitting} cancelButtonProps={{ disabled: submitting }} closable={!submitting} maskClosable={!submitting} onCancel={() => { if (!submitting) setConfirmOpen(false); }} onOk={submit}><p className="h5-muted">已完成 {answeredCount} / {paper.questions.length} 道题目。提交后将结束本次考试，无法修改答案。</p>{seconds === 0 && <p className="h5-muted">考试时间已到，请提交当前答卷。</p>}</Modal>
+    <Modal centered bodyStyle={{ maxHeight: "calc(100vh - 260px)", overflowY: "auto", paddingBottom: 8 }} title="答题卡" visible={cardOpen} className="h5-modal-root" modalContentClass="h5-modal" width={480} style={{ maxWidth: "calc(100vw - 32px)" }} footer={answerCardSubmit} onCancel={() => setCardOpen(false)}>{answerCard}</Modal>
+    <Modal centered bodyStyle={{ maxHeight: "calc(100dvh - 240px)", overflowY: "auto" }} title="确认提交答卷？" visible={confirmOpen} className="h5-modal-root" modalContentClass="h5-modal" style={{ width: "min(440px, calc(100vw - 28px))" }} okText="确认提交" cancelText="继续检查" confirmLoading={submitting} cancelButtonProps={{ disabled: submitting }} closable={!submitting} maskClosable={!submitting} onCancel={() => { if (!submitting) setConfirmOpen(false); }} onOk={submit}><p className="h5-muted">已完成 {answeredCount} / {paper.questions.length} 道题目。提交后将结束本次考试，无法修改答案。</p>{seconds === 0 && <p className="h5-muted">考试时间已到，请提交当前答卷。</p>}</Modal>
   </Layout.Content>;
 }

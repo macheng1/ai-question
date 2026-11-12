@@ -24,6 +24,9 @@ const optionsFor = (q: ExamQuestion) => q.options?.length ? q.options : q.kind =
 
 export function ExamResultView(props: ExamResultViewProps) {
   const { paper, score, passed, answers, showAnswers, grades, candidateName, candidatePhone, attemptNo, startedAt, submittedAt, remainingAttempts, attemptId, details = false, practice = false } = props;
+  const answerLabel = (question: ExamQuestion, values: string[]) => values.map(value =>
+    question.kind === "judge" ? (optionsFor(question).find(option => option.key === value)?.text || value) : value,
+  ).join("、");
   const [wrongOnly, setWrongOnly] = useState(false);
   const [practiceDetails, setPracticeDetails] = useState(false);
   const reviewing = details || practiceDetails;
@@ -53,7 +56,7 @@ export function ExamResultView(props: ExamResultViewProps) {
       {!reviewing && <>
         <dl className="h5-result-meta"><div><dt>考生</dt><dd>{candidateName || "—"}{candidatePhone ? ` · ${candidatePhone}` : ""}</dd></div><div><dt>提交时间</dt><dd>{dateLabel(submittedAt)}</dd></div><div><dt>试卷</dt><dd>{paper.questions.length} 题 · 限时 {paper.duration} 分钟</dd></div><div><dt>答题次数</dt><dd>第 {attemptNo || 1} 次</dd></div></dl>
         {!practice && <TrainingExamLinks examId={paper.id} />}
-        <div className="h5-result-links print-hidden">{remainingAttempts > 0 && <a href={`/kaoshi/${paper.id}`}>重新考试（还可 {remainingAttempts} 次）</a>}<a href="/profile">返回个人中心</a></div>
+        <div className="h5-result-links print-hidden">{remainingAttempts > 0 && <a href={`/kaoshi/${paper.id}`}>重新考试（还可 {remainingAttempts} 次）</a>}<a href="/learner">返回个人中心</a></div>
       </>}
       {reviewing && (showAnswers ? <>
         <div className="h5-detail-tabs print-hidden"><Button theme="borderless" className={!wrongOnly ? "active" : ""} onClick={() => setWrongOnly(false)}>全部题目（{paper.questions.length}）</Button><Button theme="borderless" className={wrongOnly ? "active" : ""} onClick={() => setWrongOnly(true)}>只看错题（{wrongCount}）</Button></div>
@@ -67,7 +70,7 @@ export function ExamResultView(props: ExamResultViewProps) {
               const correct = question.answer.includes(option.key), mine = picked.includes(option.key);
               return <div key={option.key} className={`h5-review-option ${correct ? "correct" : mine ? "wrong" : ""}`}><span>{option.key}</span><p>{option.text}</p>{(correct || mine) && <small>{correct ? "正确答案" : "我的选择"}</small>}</div>;
             })}</div>
-            <div className="h5-answer-comparison"><span>我的答案 <b>{picked.join("、") || "未作答"}</b></span><span>正确答案 <b>{question.answer.join("、") || "未公布"}</b></span><span>{grade.isCorrect ? "回答正确" : "回答错误"}</span></div>
+            <div className="h5-answer-comparison"><span>我的答案 <b>{answerLabel(question, picked) || "未作答"}</b></span><span>正确答案 <b>{answerLabel(question, question.answer) || "未公布"}</b></span><span>{grade.isCorrect ? "回答正确" : "回答错误"}</span></div>
             <div className="h5-explanation"><b>答案解析</b>{question.analysis || "暂无解析"}</div>
           </article>;
         })}

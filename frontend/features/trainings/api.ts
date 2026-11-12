@@ -74,3 +74,8 @@ export type ReminderPreview = { requestId: string; trainingEndAt: string | null;
 export type ReminderResult = { employeeId: number; name: string; status: "SENT" | "FAILED" | "SKIPPED"; message: string };
 export const getReminderPreview = (id: number) => apiClient.get<ReminderPreview>(`/management/trainings/${id}/reminders`);
 export const sendReminders = (id: number, requestId: string, employeeIds: number[]) => apiClient.post<ReminderResult[]>(`/management/trainings/${id}/reminders`, { requestId, employeeIds }, { timeout: 900000 });
+
+export const copyTraining = (id: number) => apiClient.post<Training>(`/management/trainings/${id}/copy`, undefined, { timeout: 900000 });
+
+export const getTrainingExcludedEmployees = (assessmentId: number, trainingId?: number) =>
+  apiClient.get<number[]>("/management/trainings/audience-eligibility", { assessmentId, trainingId });

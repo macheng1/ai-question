@@ -4,7 +4,6 @@ import { Card } from "@douyinfe/semi-ui";
 import { IconPlus } from "@douyinfe/semi-icons";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import "@douyinfe/semi-ui/react19-adapter";
 import { Button, DatePicker, Input, Modal, Spin, Toast } from "@douyinfe/semi-ui";
 import { ProfileShell } from "@/components/layout/ProfileShell";
@@ -40,7 +39,6 @@ export default function AssessmentManagementPage() {
     [start, setStart] = useState<string>(),
     [end, setEnd] = useState<string>(),
     [loading, setLoading] = useState(true),
-    [selected, setSelected] = useState<Assessment | null>(null),
     [editing, setEditing] = useState<Assessment | null>(null),
     [confirm, setConfirm] = useState<{
       type: "end" | "delete";
@@ -99,19 +97,13 @@ export default function AssessmentManagementPage() {
       setConfirming(false);
     }
   };
-  const copyLink = async (item: Assessment) => {
-    await navigator.clipboard?.writeText(
-      `${window.location.origin}/kaoshi/${item.id}`,
-    );
-    Toast.success("考试链接已复制");
-  };
   return (
     <ProfileShell>
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <Typography.Title heading={1} className="!m-0 !text-[28px] !font-semibold !text-[#183f35]">考试管理</Typography.Title>
               <p className="mt-2 text-sm text-slate-500">
-                管理已发布的考试任务、成绩和考生入口
+                管理已发布的考试任务和成绩
               </p>
             </div>
             <Button theme="borderless"
@@ -196,48 +188,40 @@ export default function AssessmentManagementPage() {
                           </span>
                         </div>
                       </div>
-                      <div className="flex flex-wrap items-center gap-4 text-sm">
+                      <Space wrap spacing={8}>
                         <Button theme="borderless"
-                          className="font-semibold text-slate-700"
+                          type="primary"
                           onClick={() => setEditing(item)}
                         >
                           编辑
                         </Button>
-                        <Link
-                          className="text-blue-500 no-underline"
+                        <Button theme="borderless" type="primary"
                           href={`/profile/assessments/${item.id}/scores`}
                         >
                           成绩
-                        </Link>
+                        </Button>
                         {label === "已结束" && (
-                          <Link
-                            className="text-blue-500 no-underline"
+                          <Button theme="borderless" type="primary"
                             href={`/profile/assessments/${item.id}/statistics`}
                           >
                             统计
-                          </Link>
+                          </Button>
                         )}
-                        <Button theme="borderless"
-                          className="text-blue-500"
-                          onClick={() => setSelected(item)}
-                        >
-                          二维码
-                        </Button>
                         {label !== "已结束" && (
                           <Button theme="borderless"
-                            className="text-orange-500"
+                            type="warning"
                             onClick={() => forceEnd(item)}
                           >
                             强制结束考试
                           </Button>
                         )}
                         <Button theme="borderless"
-                          className="text-red-500"
+                          type="danger"
                           onClick={() => remove(item)}
                         >
                           删除
                         </Button>
-                      </div>
+                      </Space>
                     </div>
                   </div></Card>
                 );
@@ -250,11 +234,6 @@ export default function AssessmentManagementPage() {
             </div>
           )}
 
-      <ExamInfoModal
-        item={selected}
-        onClose={() => setSelected(null)}
-        onCopy={copyLink}
-      />
       <EditAssessmentModal
         item={editing}
         onClose={() => setEditing(null)}
@@ -305,74 +284,6 @@ export default function AssessmentManagementPage() {
         </p>
       </Modal>
     </ProfileShell>
-  );
-}
-
-function ExamInfoModal({
-  item,
-  onClose,
-  onCopy,
-}: {
-  item: Assessment | null;
-  onClose: () => void;
-  onCopy: (item: Assessment) => void;
-}) {
-  if (!item) return null;
-  const link = `${typeof window !== "undefined" ? window.location.origin : ""}/kaoshi/${item.id}`;
-  const qr = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(link)}`;
-  return (
-    <Modal bodyStyle={{ maxHeight: "calc(100dvh - 240px)", overflowY: "auto" }} width="min(480px, calc(100vw - 24px))"
-      visible
-      title="考试信息"
-      onCancel={onClose}
-      footer={
-        <Space wrap >
-          <Button theme="borderless" onClick={onClose}>
-            关闭
-          </Button>
-          <Button
-            theme="solid"
-            type="warning"
-            onClick={() => window.open(qr, "_blank")}
-          >
-            保存图片
-          </Button>
-        </Space>
-      }
-    >
-      <p className="mb-5 text-sm text-slate-500">可扫码或复制链接参加考试。</p>
-      <div className="grid grid-cols-[90px_1fr] gap-y-3 text-sm">
-        <span className="text-slate-500">考试名称</span>
-        <b>{item.name}</b>
-        <span className="text-slate-500">试卷名称</span>
-        <span>{item.paperName || item.paperId}</span>
-        <span className="text-slate-500">考试时间</span>
-        <span>
-          {dateText(item.startAt)} ～ {dateText(item.endAt)}
-        </span>
-        <span className="text-slate-500">考试时长</span>
-        <span>{item.durationMinutes} 分钟</span>
-      </div>
-      <div className="my-5 flex justify-center">
-        <img
-          className="h-48 w-48 rounded-xl border border-slate-200 p-3"
-          src={qr}
-          alt="考试二维码"
-        />
-      </div>
-      <div className="flex w-full items-center gap-2">
-        <Input
-          aria-label="考试链接"
-          value={link}
-          readOnly
-          onFocus={event => event.target.select()}
-          style={{ flex: 1, minWidth: 0 }}
-        />
-        <Button className="shrink-0" theme="borderless" onClick={() => onCopy(item)}>
-          复制链接
-        </Button>
-      </div>
-    </Modal>
   );
 }
 

@@ -2,13 +2,12 @@ import type { AccountType } from "./api";
 
 export const accountMenus = {
   ADMIN: [
-    { label: "概览", href: "/profile" },
-    { label: "数据驾驶舱", href: "/profile/dashboard" },
+    { label: "概览", href: "/profile/dashboard" },
     { label: "培训管理", href: "/profile/trainings" },
     { label: "题库管理", href: "/profile/banks" },
     { label: "试卷管理", href: "/profile/papers" },
     { label: "考试管理", href: "/profile/assessments" },
-    { label: "部门与员工", href: "/profile/organization" },
+    { label: "学员管理", href: "/profile/organization" },
   ],
   EMPLOYEE: [
     { label: "我的培训", href: "/learner" },
@@ -20,6 +19,6 @@ export const accountMenus = {
 } satisfies Record<AccountType, { label: string; href: string }[]>;
 
 export const accountHome = (type: AccountType) =>
-  type === "EMPLOYEE" ? "/learner" : "/profile";
+  type === "EMPLOYEE" ? "/learner" : "/profile/dashboard";
 export const accountSettings = (type: AccountType) =>
   type === "EMPLOYEE" ? "/learner/settings" : "/profile/settings";

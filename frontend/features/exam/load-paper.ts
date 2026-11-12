@@ -30,7 +30,8 @@ export async function loadExamPaper(
     const baseURL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:18080/api";
     const response = await fetch(
       `${baseURL}/public/exams/${id}${params.toString() ? `?${params}` : ""}`,
-      { cache: "no-store" },
+      { cache: "no-store", headers: typeof window !== "undefined" && window.localStorage.getItem("aiquestion_learner_access_token")
+        ? { Authorization: `Bearer ${window.localStorage.getItem("aiquestion_learner_access_token")}` } : {} },
     );
     const envelope = (await response.json()) as ApiEnvelope<ApiPaper>;
     if (!response.ok || !envelope.success || !envelope.data) {
@@ -42,6 +43,13 @@ export async function loadExamPaper(
       id,
       questions: (data.questions || []).map((item) => ({
         ...item,
+        // 判断题的已存答案使用 A/B，选项也必须使用相同标识。
+        options: item.kind === "judge"
+          ? (item.options || []).map(option => ({
+              ...option,
+              key: option.key.toUpperCase() === "TRUE" ? "A" : option.key.toUpperCase() === "FALSE" ? "B" : option.key,
+            }))
+          : item.options,
         answer: item.answer || [],
         analysis: item.analysis || "",
       })),

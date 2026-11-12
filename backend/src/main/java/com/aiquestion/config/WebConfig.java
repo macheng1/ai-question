@@ -11,9 +11,11 @@ import org.springframework.web.servlet.config.annotation.*;
  */
 public class WebConfig implements WebMvcConfigurer {
   private final TraceIdInterceptor traceIdInterceptor;
+  private final com.aiquestion.security.LearnerAccess learnerAccess;
 
-  public WebConfig(TraceIdInterceptor traceIdInterceptor) {
+  public WebConfig(TraceIdInterceptor traceIdInterceptor, com.aiquestion.security.LearnerAccess learnerAccess) {
     this.traceIdInterceptor = traceIdInterceptor;
+    this.learnerAccess = learnerAccess;
   }
 
   @Override
@@ -30,5 +32,6 @@ public class WebConfig implements WebMvcConfigurer {
   @Override
   public void addInterceptors(InterceptorRegistry registry) {
     registry.addInterceptor(traceIdInterceptor);
+    registry.addInterceptor(learnerAccess).addPathPatterns("/public/exams/**", "/public/courses/**");
   }
 }

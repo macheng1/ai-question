@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiquestion.repository.TrainingCopyRepository">
+  <select id="lockOwnedAssessment" resultType="java.util.LinkedHashMap">
+    SELECT * FROM assessment_task WHERE id=#{assessmentId} AND created_by=#{ownerId} FOR UPDATE
+  </select>
+  <select id="lockOwnedTraining" resultType="java.util.LinkedHashMap">
+    SELECT * FROM training WHERE id=#{trainingId} AND created_by=#{ownerId} FOR UPDATE
+  </select>
+  <insert id="copyTraining" useGeneratedKeys="true" keyProperty="generated.id" keyColumn="id">
+    INSERT INTO training(name,description,survey_enabled,questions_json,created_by,assessment_id,category,requirement_type,purpose,start_at,end_at) SELECT #{name},description,survey_enabled,questions_json,created_by,NULL,category,requirement_type,'STANDALONE',start_at,end_at FROM training WHERE id=#{sourceTrainingId}
+  </insert>
+  <update id="resetAudience">
+    UPDATE training SET audience_type='USERS' WHERE id=#{trainingId}
+  </update>
+  <select id="findSourceVideos" resultType="java.util.LinkedHashMap">
+    SELECT * FROM training_video WHERE training_id=#{trainingId} ORDER BY sort_order,id
+  </select>
+  <insert id="insertVideo">
+    INSERT INTO training_video(training_id,title,storage_path,content_type,sort_order) VALUES(#{trainingId},#{title},#{storagePath},#{contentType},#{sortOrder})
+  </insert>
+  <select id="findSourceMaterials" resultType="java.util.LinkedHashMap">
+    SELECT * FROM training_material WHERE training_id=#{trainingId} ORDER BY sort_order,id
+  </select>
+  <insert id="insertMaterial" useGeneratedKeys="true" keyProperty="generated.id" keyColumn="id">
+    INSERT INTO training_material(training_id,title,material_type,storage_key,page_count,sort_order) VALUES(#{trainingId},#{title},#{materialType},#{storageKey},#{pageCount},#{sortOrder})
+  </insert>
+  <insert id="copyMaterialPages">
+    INSERT INTO training_material_page(material_id,page_number,required_seconds) SELECT #{materialId},page_number,required_seconds FROM training_material_page WHERE material_id=#{sourceMaterialId}
+  </insert>
+</mapper>

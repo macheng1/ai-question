@@ -7,7 +7,12 @@ import type { ApiResponse, DownloadOptions, UploadOptions } from "./types";
 const baseURL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:18080/api";
 const TOKEN_KEY = "aiquestion_access_token";
 
-function getToken() { return typeof window === "undefined" ? null : window.localStorage.getItem(TOKEN_KEY); }
+const LEARNER_TOKEN_KEY = "aiquestion_learner_access_token";
+function getToken(url = "") {
+  if (typeof window === "undefined") return null;
+  const learner = url.startsWith("/learner/") || url.startsWith("/public/exams/") || url.startsWith("/public/courses/") || /^\/trainings\/\d+\/survey/.test(url);
+  return window.localStorage.getItem(learner ? LEARNER_TOKEN_KEY : TOKEN_KEY);
+}
 function extractFilename(response: AxiosResponse<Blob>, fallback: string) {
   const header = response.headers["content-disposition"] as string | undefined;
   const encoded = header?.match(/filename\*=UTF-8''([^;]+)/i);
@@ -31,7 +36,7 @@ class HttpClient {
   readonly instance: AxiosInstance;
   constructor() {
     this.instance = axios.create({ baseURL, timeout: 30_000 });
-    this.instance.interceptors.request.use(config => { const token = getToken(); if (token) config.headers.Authorization = `Bearer ${token}`; config.headers["X-Client"] = "aiquestion-web"; return config; });
+    this.instance.interceptors.request.use(config => { const token = getToken(config.url); if (token) config.headers.Authorization = `Bearer ${token}`; config.headers["X-Client"] = "aiquestion-web"; return config; });
     this.instance.interceptors.response.use(response => {
       const body = response.data as ApiResponse<unknown>;
       if (body && typeof body === "object" && "success" in body) { if (!body.success) throw new ApiError(body.message, { status: response.status, traceId: body.traceId }); response.data = body.data; }
@@ -78,4 +83,4 @@ class HttpClient {
 }
 
 export const http = new HttpClient();
-export { TOKEN_KEY };
+export { TOKEN_KEY, LEARNER_TOKEN_KEY };

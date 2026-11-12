@@ -8,7 +8,7 @@ import com.aiquestion.controller.PublicExamController;
 import com.aiquestion.repository.*;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.JdbcTemplate;
+
 import org.springframework.test.util.ReflectionTestUtils;
 
 class AssessmentLockOrderingTest {
@@ -38,17 +38,16 @@ class AssessmentLockOrderingTest {
 
   @Test
   void startLocksBeforeTaskReadAndConvertsMissingTask() {
-    var jdbc = mock(JdbcTemplate.class);
-    when(jdbc.queryForObject(
-            "SELECT id FROM assessment_task WHERE id=? FOR UPDATE", Long.class, 1L))
+    var jdbc = mock(AssessmentRosterRepository.class);
+    when(jdbc.lockTask(1L))
         .thenThrow(new org.springframework.dao.EmptyResultDataAccessException(1));
     assertThrows(
         BusinessException.class,
         () ->
-            new PublicExamController(jdbc)
+            new PublicExamService(mock(PublicExamRepository.class), new AssessmentRosterService(jdbc, mock(TrainingAudienceService.class)), mock(CandidateLearningService.class))
                 .start(1L, new PublicExamController.CandidateCommand("Alice", "13800000000")));
     verify(jdbc)
-        .queryForObject("SELECT id FROM assessment_task WHERE id=? FOR UPDATE", Long.class, 1L);
+        .lockTask(1L);
     verifyNoMoreInteractions(jdbc);
   }
 }

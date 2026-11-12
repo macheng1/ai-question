@@ -6,7 +6,7 @@ import com.aiquestion.repository.*;
 import com.aiquestion.service.TestPaperService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.JdbcTemplate;
+
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.context.request.RequestContextHolder;
@@ -17,17 +17,17 @@ import static org.mockito.Mockito.*;
 class ManagementAccessTest {
   @Test void employeeTokenIsForbiddenEvenWhenAdminIdExists() {
     var tokens = mock(JwtTokenService.class);
-    var jdbc = mock(JdbcTemplate.class);
+    var jdbc = mock(AccountRepository.class);
     when(tokens.subject("employee", false)).thenReturn("employee:7");
     var request = new MockHttpServletRequest();
     request.addHeader("Authorization", "Bearer employee");
     assertThrows(BusinessException.class, () -> new ManagementAccess(new com.aiquestion.service.AccountService(jdbc, tokens, mock(org.springframework.security.crypto.password.PasswordEncoder.class))).preHandle(request, new MockHttpServletResponse(), new Object()));
-    verify(jdbc, never()).queryForObject(anyString(), eq(Integer.class), anyLong());
+    verify(jdbc, never()).countActiveAdministrator(anyLong());
   }
   @AfterEach void clear() { RequestContextHolder.resetRequestAttributes(); }
   @Test void missingAndInvalidTokensAreRejected() {
     var tokens=mock(JwtTokenService.class);
-    var jdbc=mock(JdbcTemplate.class);
+    var jdbc=mock(AccountRepository.class);
     var access=new ManagementAccess(new com.aiquestion.service.AccountService(jdbc, tokens, mock(org.springframework.security.crypto.password.PasswordEncoder.class)));
     var request=new MockHttpServletRequest();
     assertThrows(BusinessException.class,()->access.preHandle(request,new MockHttpServletResponse(),new Object()));
@@ -38,12 +38,12 @@ class ManagementAccessTest {
   }
   @Test void inactiveUsersAreRejectedAndActiveIdentityIsExposed() {
     var tokens=mock(JwtTokenService.class);
-    var jdbc=mock(JdbcTemplate.class);
+    var jdbc=mock(AccountRepository.class);
     var access=new ManagementAccess(new com.aiquestion.service.AccountService(jdbc, tokens, mock(org.springframework.security.crypto.password.PasswordEncoder.class)));
     var request=new MockHttpServletRequest();
     request.addHeader("Authorization","Bearer token");
     when(tokens.subject("token",false)).thenReturn("7");
-    when(jdbc.queryForObject(anyString(),eq(Integer.class),eq(7L))).thenReturn(0,1);
+    when(jdbc.countActiveAdministrator(7L)).thenReturn(java.util.List.of(0),java.util.List.of(1));
     assertThrows(BusinessException.class,()->access.preHandle(request,new MockHttpServletResponse(),new Object()));
     assertTrue(access.preHandle(request,new MockHttpServletResponse(),new Object()));
     RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
@@ -54,7 +54,7 @@ class ManagementAccessTest {
     request.setAttribute("managementUserId",7L);
     RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
     var repo=mock(TestPaperRepository.class);
-    var service=new TestPaperService(repo,mock(TestPaperQuestionRepository.class),mock(QuestionItemRepository.class),mock(QuestionOptionRepository.class),mock(JdbcTemplate.class));
+    var service=new TestPaperService(repo,mock(TestPaperQuestionRepository.class),mock(QuestionItemRepository.class),mock(QuestionOptionRepository.class),mock(TestPaperRuntimeRepository.class));
     var paper=new TestPaper(); paper.setId(9L); paper.setCreatedBy(8L);
     when(repo.findById(9L)).thenReturn(paper);
     assertThrows(BusinessException.class,()->service.get(9L));

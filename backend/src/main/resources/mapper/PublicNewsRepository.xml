@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiquestion.repository.PublicNewsRepository">
+  <select id="findPublishedNews" resultType="java.util.LinkedHashMap">
+    SELECT id, title, summary, content, published_at AS publishedAt
+FROM site_news
+WHERE status = 'PUBLISHED' AND published_at &lt;= CURRENT_TIMESTAMP(3)
+ORDER BY published_at DESC, id DESC
+
+  </select>
+  <select id="findPublishedNewsById" resultType="java.util.LinkedHashMap">
+    SELECT id, title, summary, content, published_at AS publishedAt
+FROM site_news
+WHERE id = #{newsId} AND status = 'PUBLISHED' AND published_at &lt;= CURRENT_TIMESTAMP(3)
+
+  </select>
+</mapper>

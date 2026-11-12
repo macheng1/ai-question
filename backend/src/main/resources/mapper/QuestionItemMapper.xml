@@ -25,4 +25,5 @@
   <update id="update">UPDATE question_item SET question_type=#{questionType},stem=#{stem},answer_text=#{answerText},analysis=#{analysis},tags=#{tags},source=#{source},difficulty=#{difficulty},score=#{score},updated_at=CURRENT_TIMESTAMP(3) WHERE id=#{id}</update>
   <delete id="deleteById">DELETE FROM question_item WHERE id=#{id}</delete>
   <select id="countByBankIdAndStem" resultType="long">SELECT COUNT(*) FROM question_item WHERE bank_id=#{bankId} AND stem=#{stem}</select>
+  <select id="countAssessmentReferences" resultType="long">SELECT (SELECT COUNT(*) FROM test_paper_question q JOIN assessment_task t ON t.paper_id=q.paper_id WHERE q.question_id=#{id}) + (SELECT COUNT(*) FROM assessment_attempt_question WHERE question_id=#{id}) + (SELECT COUNT(*) FROM test_paper_random_bank r JOIN assessment_task t ON t.paper_id=r.paper_id JOIN question_item q ON q.bank_id=r.bank_id WHERE q.id=#{id})</select>
 </mapper>

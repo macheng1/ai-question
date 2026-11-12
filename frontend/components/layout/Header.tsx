@@ -13,13 +13,13 @@ import {
   Space,
   Tag,
 } from "@douyinfe/semi-ui";
-import { useAuthStore } from "@/features/auth/store";
+import { useCurrentSession } from "@/features/auth/store";
+import { learnerEntry } from "@/features/auth/learner-session";
 import { accountHome, accountSettings } from "@/features/auth/navigation";
 
 export function Header() {
   const router = useRouter();
-  const user = useAuthStore((state) => state.user);
-  const clearSession = useAuthStore((state) => state.clearSession);
+  const { user, clearSession } = useCurrentSession();
   const [mounted, setMounted] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -49,7 +49,7 @@ export function Header() {
                       router.push(accountSettings(identity.accountType))
                     }
                   >
-                    账号资料与密码
+                    {identity.accountType === "EMPLOYEE" ? "员工资料" : "账号资料与密码"}
                   </Dropdown.Item>
                   <Dropdown.Divider />
                   <Dropdown.Item onClick={() => setLogoutOpen(true)}>
@@ -82,7 +82,7 @@ export function Header() {
         onCancel={() => setLogoutOpen(false)}
         onOk={() => {
           clearSession();
-          window.location.assign("/login");
+          window.location.assign(identity?.accountType === "EMPLOYEE" ? (learnerEntry() || "/learner") : "/login");
         }}
       >
         确认退出当前账号？

@@ -81,8 +81,8 @@ public class QuestionItemService {
     item.setAnalysis(analysis);
     item.setTags(tags);
     item.setSource(source);
-    item.setDifficulty(difficulty);
-    item.setScore(score);
+    item.setDifficulty(difficulty == null || difficulty.isBlank() ? "MEDIUM" : difficulty);
+    item.setScore(score == null ? BigDecimal.ZERO : score);
     item.setStatus("ENABLED");
     repository.insert(item);
     saveOptions(item.getId(), options);
@@ -114,8 +114,8 @@ public class QuestionItemService {
     item.setAnalysis(analysis);
     item.setTags(tags);
     item.setSource(source);
-    item.setDifficulty(difficulty);
-    item.setScore(score);
+    item.setDifficulty(difficulty == null || difficulty.isBlank() ? "MEDIUM" : difficulty);
+    item.setScore(score == null ? BigDecimal.ZERO : score);
     repository.update(item);
     optionRepository.deleteByQuestionId(id);
     saveOptions(id, options);

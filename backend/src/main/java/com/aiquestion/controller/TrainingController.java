@@ -4,109 +4,130 @@ import com.aiquestion.common.*;
 import com.aiquestion.security.JwtTokenService;
 import com.aiquestion.service.TrainingService;
 import java.util.*;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 public class TrainingController {
-  private final TrainingService service;
-  private final com.aiquestion.service.AccountService accounts;
-  private final com.aiquestion.service.TrainingLogService logs;
-  private final com.aiquestion.service.TrainingMaterialService materials;
-  private final JwtTokenService tokens;
-  private final JdbcTemplate jdbc;
-  private final com.aiquestion.service.TrainingVideoStorage storage;
-  public TrainingController(com.aiquestion.service.AccountService accounts, TrainingService service, JwtTokenService tokens, JdbcTemplate jdbc, com.aiquestion.service.TrainingVideoStorage storage, com.aiquestion.service.TrainingMaterialService materials, com.aiquestion.service.TrainingLogService logs) { this.accounts=accounts; this.logs=logs; this.materials=materials; this.service = service; this.tokens = tokens; this.jdbc = jdbc; this.storage = storage; }
-  private long user(String authorization) {
-    if (authorization == null || !authorization.startsWith("Bearer ")) throw new BusinessException(ErrorCode.UNAUTHORIZED);
-    long id;
-    try { id = Long.parseLong(tokens.subject(authorization.substring(7), false)); }
-    catch (RuntimeException e) { throw new BusinessException(ErrorCode.INVALID_TOKEN); }
-    if (jdbc.queryForObject("SELECT COUNT(*) FROM app_user WHERE id=? AND status='ACTIVE'", Integer.class, id) == 0) throw new BusinessException(ErrorCode.UNAUTHORIZED);
-    return id;
-  }
-  @GetMapping("/management/trainings/{id}/learning-records")
-  public ApiResponse<?> learningRecords(@PathVariable long id,@RequestHeader(value="Authorization",required=false) String auth){return ApiResponse.ok(logs.list(id,user(auth)));}
 
-  @GetMapping("/management/trainings/{id}/materials")
-  public ApiResponse<?> materials(@PathVariable long id,@RequestHeader(value="Authorization",required=false) String auth) {service.get(id,user(auth));return ApiResponse.ok(materials.list(id));}
-  @PutMapping("/management/trainings/{id}/materials/order")
-  public ApiResponse<?> reorderMaterials(@PathVariable long id,@RequestBody List<Long> ids,@RequestHeader(value="Authorization",required=false) String auth){materials.reorder(id,user(auth),ids);return ApiResponse.ok(null);}
-  @PostMapping("/management/trainings/{id}/materials")
-  public ApiResponse<?> uploadMaterial(@PathVariable long id,@RequestParam org.springframework.web.multipart.MultipartFile file,@RequestHeader(value="Authorization",required=false) String auth) throws java.io.IOException {materials.upload(id,user(auth),file);return ApiResponse.ok(materials.list(id));}
-  @GetMapping(value="/management/trainings/{id}/materials/{material}/pages/{page}",produces="image/png")
-  public org.springframework.http.ResponseEntity<byte[]> materialPage(@PathVariable long id,@PathVariable long material,@PathVariable int page,@RequestHeader(value="Authorization",required=false) String auth) throws java.io.IOException {service.get(id,user(auth));return org.springframework.http.ResponseEntity.ok().header("Cache-Control","private, no-store").body(materials.page(id,material,page));}
-  @PutMapping("/management/trainings/{id}/materials/{material}/timings")
-  public ApiResponse<?> materialTimings(@PathVariable long id,@PathVariable long material,@RequestBody List<com.aiquestion.service.TrainingMaterialService.PageTime> times,@RequestHeader(value="Authorization",required=false) String auth) {materials.timings(id,material,user(auth),times);return ApiResponse.ok(null);}
-  @DeleteMapping("/management/trainings/{id}/materials/{material}")
-  public ApiResponse<?> deleteMaterial(@PathVariable long id,@PathVariable long material,@RequestHeader(value="Authorization",required=false) String auth) {materials.delete(id,material,user(auth));return ApiResponse.ok(null);}
-  public record QuestionDraftRequest(String type) {}
-  @PostMapping("/management/trainings/question-drafts")
-  public ApiResponse<?> createQuestionDraft(@RequestBody QuestionDraftRequest command, @RequestHeader(value="Authorization", required=false) String auth) {
-    user(auth);
-    return ApiResponse.ok(service.createQuestionDraft(command.type()));
-  }
-  @GetMapping("/management/trainings")
-  public ApiResponse<?> list(@RequestHeader(value="Authorization", required=false) String auth) { return ApiResponse.ok(service.list(user(auth))); }
-  @GetMapping("/management/trainings/{id}")
-  public ApiResponse<?> get(@PathVariable long id, @RequestHeader(value="Authorization", required=false) String auth) { return ApiResponse.ok(service.get(id, user(auth))); }
-  @PostMapping("/management/trainings")
-  public ApiResponse<?> create(@RequestBody TrainingService.SaveTraining command, @RequestHeader(value="Authorization", required=false) String auth) { return ApiResponse.ok(service.save(null, command, user(auth))); }
-  @PutMapping("/management/trainings/{id}")
-  public ApiResponse<?> update(@PathVariable long id, @RequestBody TrainingService.SaveTraining command, @RequestHeader(value="Authorization", required=false) String auth) { return ApiResponse.ok(service.save(id, command, user(auth))); }
-  @DeleteMapping("/management/trainings/{id}")
-  public ApiResponse<?> delete(@PathVariable long id, @RequestHeader(value="Authorization", required=false) String auth) { long uid=user(auth); var keys=service.videoFiles(id,uid); service.delete(id,uid); keys.forEach(this::cleanupVideo); return ApiResponse.ok(null); }
-  @GetMapping("/management/trainings/{id}/responses")
-  public ApiResponse<?> responses(@PathVariable long id, @RequestHeader(value="Authorization", required=false) String auth) { return ApiResponse.ok(service.responses(id, user(auth))); }
-  @GetMapping("/trainings/{id}/survey")
-  public ApiResponse<?> survey(@PathVariable long id, @RequestHeader(value="Authorization", required=false) String auth) { var identity = accounts.current(auth);
-    return ApiResponse.ok(identity.accountType() == com.aiquestion.security.AccountType.EMPLOYEE
-        ? service.employeeSurvey(id, accounts.employee(identity.accountId())) : service.survey(id, identity.accountId())); }
-  @PostMapping("/trainings/{id}/survey")
-  public ApiResponse<?> submit(@PathVariable long id, @RequestBody TrainingService.Submission command, @RequestHeader(value="Authorization", required=false) String auth) { var identity = accounts.current(auth);
-    if (identity.accountType() == com.aiquestion.security.AccountType.EMPLOYEE)
-      service.submitEmployee(id, command, accounts.employee(identity.accountId()));
-    else service.submit(id, command, identity.accountId());
-    return ApiResponse.ok(null); }
-  @GetMapping("/trainings/{id}")
-  public ApiResponse<?> learning(@PathVariable long id,@RequestHeader(value="Authorization",required=false) String auth) { return ApiResponse.ok(service.learning(id,user(auth))); }
-  public record Progress(double position,boolean completed) {}
-  @PutMapping("/trainings/{id}/videos/{video}/progress")
-  public ApiResponse<?> progress(@PathVariable long id,@PathVariable long video,@RequestBody Progress data,@RequestHeader(value="Authorization",required=false) String auth) {service.progress(id,video,user(auth),data.position(),data.completed());return ApiResponse.ok(null);}
-  @PostMapping("/management/trainings/{id}/videos")
-  public ApiResponse<?> upload(@PathVariable long id,@RequestParam("file") org.springframework.web.multipart.MultipartFile file,@RequestHeader(value="Authorization",required=false) String auth) throws java.io.IOException {
-    long uid=user(auth); service.get(id,uid);
-    String name=Objects.toString(file.getOriginalFilename(),"");
-    boolean mp4=name.toLowerCase(Locale.ROOT).endsWith(".mp4"),webm=name.toLowerCase(Locale.ROOT).endsWith(".webm");
-    if((!mp4&&!webm)||file.getSize()<12||file.getSize()>100L*1024*1024) throw new BusinessException(ErrorCode.BAD_REQUEST,"仅支持100MB以内的MP4或WebM视频");
-    byte[] head;try(var stream=file.getInputStream()){head=stream.readNBytes(12);}
-    boolean valid=mp4 ? head[4]=='f'&&head[5]=='t'&&head[6]=='y'&&head[7]=='p' : (head[0]&255)==0x1a&&(head[1]&255)==0x45&&(head[2]&255)==0xdf&&(head[3]&255)==0xa3;
-    if(!valid) throw new BusinessException(ErrorCode.BAD_REQUEST,"视频文件内容与扩展名不匹配");
-    String type=mp4?"video/mp4":"video/webm";
-    String key=storage.upload(file,type);
-    try { service.addVideo(id,uid,name.substring(0,Math.min(name.length(),255)),key,type); }
-    catch(RuntimeException e) { cleanupVideo(key); throw e; }
-    return ApiResponse.ok(service.learning(id,uid));
-  }
-  @GetMapping("/trainings/{id}/videos/{video}/content")
-  public org.springframework.http.ResponseEntity<org.springframework.core.io.Resource> content(@PathVariable long id,@PathVariable long video,@RequestHeader(value="Authorization",required=false) String auth) {
-    service.get(id,user(auth));
-    return storage.content(service.video(id,video));
-  }
-  @DeleteMapping("/management/trainings/{id}/videos/{video}")
-  public ApiResponse<?> removeVideo(@PathVariable long id,@PathVariable long video,@RequestHeader(value="Authorization",required=false) String auth) {
-    String key=service.removeVideo(id,video,user(auth));
-    cleanupVideo(key);
-    return ApiResponse.ok(null);
-  }
-  @PutMapping("/management/trainings/{id}/videos/order")
-  public ApiResponse<?> reorderVideos(@PathVariable long id,@RequestBody List<Long> ids,@RequestHeader(value="Authorization",required=false) String auth) {
-    service.reorderVideos(id,user(auth),ids);return ApiResponse.ok(null);
-  }
-  private void cleanupVideo(String key) {
-    try { storage.delete(key); }
-    catch (RuntimeException error) {
-      org.slf4j.LoggerFactory.getLogger(TrainingController.class).warn("Training video cleanup failed for storage key {}",key,error);
+    @GetMapping("/management/trainings/{id}/learning-records")
+    public ApiResponse<?> learningRecords(@PathVariable long id, @RequestHeader(value = "Authorization", required = false) String auth) {
+        return service.learningRecords(id, auth);
     }
-  }
+
+    @GetMapping("/management/trainings/{id}/materials")
+    public ApiResponse<?> materials(@PathVariable long id, @RequestHeader(value = "Authorization", required = false) String auth) {
+        return service.materials(id, auth);
+    }
+
+    @PutMapping("/management/trainings/{id}/materials/order")
+    public ApiResponse<?> reorderMaterials(@PathVariable long id, @RequestBody List<Long> ids, @RequestHeader(value = "Authorization", required = false) String auth) {
+        return service.reorderMaterials(id, ids, auth);
+    }
+
+    @PostMapping("/management/trainings/{id}/materials")
+    public ApiResponse<?> uploadMaterial(@PathVariable long id, @RequestParam org.springframework.web.multipart.MultipartFile file, @RequestHeader(value = "Authorization", required = false) String auth) throws java.io.IOException {
+        return service.uploadMaterial(id, file, auth);
+    }
+
+    @GetMapping(value = "/management/trainings/{id}/materials/{material}/pages/{page}", produces = "image/png")
+    public org.springframework.http.ResponseEntity<byte[]> materialPage(@PathVariable long id, @PathVariable long material, @PathVariable int page, @RequestHeader(value = "Authorization", required = false) String auth) throws java.io.IOException {
+        return service.materialPage(id, material, page, auth);
+    }
+
+    @PutMapping("/management/trainings/{id}/materials/{material}/timings")
+    public ApiResponse<?> materialTimings(@PathVariable long id, @PathVariable long material, @RequestBody List<com.aiquestion.service.TrainingMaterialService.PageTime> times, @RequestHeader(value = "Authorization", required = false) String auth) {
+        return service.materialTimings(id, material, times, auth);
+    }
+
+    @DeleteMapping("/management/trainings/{id}/materials/{material}")
+    public ApiResponse<?> deleteMaterial(@PathVariable long id, @PathVariable long material, @RequestHeader(value = "Authorization", required = false) String auth) {
+        return service.deleteMaterial(id, material, auth);
+    }
+
+    public record QuestionDraftRequest(String type) {
+    }
+
+    @PostMapping("/management/trainings/question-drafts")
+    public ApiResponse<?> createQuestionDraft(@RequestBody QuestionDraftRequest command, @RequestHeader(value = "Authorization", required = false) String auth) {
+        return service.createQuestionDraft(command, auth);
+    }
+
+    @GetMapping("/management/trainings")
+    public ApiResponse<?> list(@RequestHeader(value = "Authorization", required = false) String auth) {
+        return service.list(auth);
+    }
+
+    @GetMapping("/management/trainings/{id}")
+    public ApiResponse<?> get(@PathVariable long id, @RequestHeader(value = "Authorization", required = false) String auth) {
+        return service.get(id, auth);
+    }
+
+    @PostMapping("/management/trainings")
+    public ApiResponse<?> create(@RequestBody TrainingService.SaveTraining command, @RequestHeader(value = "Authorization", required = false) String auth) {
+        return service.create(command, auth);
+    }
+
+    @PutMapping("/management/trainings/{id}")
+    public ApiResponse<?> update(@PathVariable long id, @RequestBody TrainingService.SaveTraining command, @RequestHeader(value = "Authorization", required = false) String auth) {
+        return service.update(id, command, auth);
+    }
+
+    @DeleteMapping("/management/trainings/{id}")
+    public ApiResponse<?> delete(@PathVariable long id, @RequestHeader(value = "Authorization", required = false) String auth) {
+        return service.delete(id, auth);
+    }
+
+    @GetMapping("/management/trainings/{id}/responses")
+    public ApiResponse<?> responses(@PathVariable long id, @RequestHeader(value = "Authorization", required = false) String auth) {
+        return service.responses(id, auth);
+    }
+
+    @GetMapping("/trainings/{id}/survey")
+    public ApiResponse<?> survey(@PathVariable long id, @RequestHeader(value = "Authorization", required = false) String auth) {
+        return service.survey(id, auth);
+    }
+
+    @PostMapping("/trainings/{id}/survey")
+    public ApiResponse<?> submit(@PathVariable long id, @RequestBody TrainingService.Submission command, @RequestHeader(value = "Authorization", required = false) String auth) {
+        return service.submit(id, command, auth);
+    }
+
+    @GetMapping("/trainings/{id}")
+    public ApiResponse<?> learning(@PathVariable long id, @RequestHeader(value = "Authorization", required = false) String auth) {
+        return service.learning(id, auth);
+    }
+
+    public record Progress(double position, boolean completed) {
+    }
+
+    @PutMapping("/trainings/{id}/videos/{video}/progress")
+    public ApiResponse<?> progress(@PathVariable long id, @PathVariable long video, @RequestBody Progress data, @RequestHeader(value = "Authorization", required = false) String auth) {
+        return service.progress(id, video, data, auth);
+    }
+
+    @PostMapping("/management/trainings/{id}/videos")
+    public ApiResponse<?> upload(@PathVariable long id, @RequestParam("file") org.springframework.web.multipart.MultipartFile file, @RequestHeader(value = "Authorization", required = false) String auth) throws java.io.IOException {
+        return service.upload(id, file, auth);
+    }
+
+    @GetMapping("/trainings/{id}/videos/{video}/content")
+    public org.springframework.http.ResponseEntity<org.springframework.core.io.Resource> content(@PathVariable long id, @PathVariable long video, @RequestHeader(value = "Authorization", required = false) String auth) {
+        return service.content(id, video, auth);
+    }
+
+    @DeleteMapping("/management/trainings/{id}/videos/{video}")
+    public ApiResponse<?> removeVideo(@PathVariable long id, @PathVariable long video, @RequestHeader(value = "Authorization", required = false) String auth) {
+        return service.removeVideo(id, video, auth);
+    }
+
+    @PutMapping("/management/trainings/{id}/videos/order")
+    public ApiResponse<?> reorderVideos(@PathVariable long id, @RequestBody List<Long> ids, @RequestHeader(value = "Authorization", required = false) String auth) {
+        return service.reorderVideos(id, ids, auth);
+    }
+
+    private final com.aiquestion.service.TrainingEndpointService service;
+
+    public TrainingController(com.aiquestion.service.TrainingEndpointService service) {
+        this.service = service;
+    }
 }

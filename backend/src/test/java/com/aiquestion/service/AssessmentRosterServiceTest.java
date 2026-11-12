@@ -2,63 +2,42 @@ package com.aiquestion.service;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
-
 import com.aiquestion.common.BusinessException;
+import com.aiquestion.repository.AssessmentRosterRepository;
+import com.aiquestion.repository.TrainingAudienceRepository;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 class AssessmentRosterServiceTest {
-  private final JdbcTemplate jdbc = mock(JdbcTemplate.class);
-  private final AssessmentRosterService service = new AssessmentRosterService(jdbc);
+  private final AssessmentRosterRepository repository = mock(AssessmentRosterRepository.class);
+  private final TrainingAudienceRepository audience = mock(TrainingAudienceRepository.class);
+  private final AssessmentRosterService service = new AssessmentRosterService(repository,
+      new TrainingAudienceService(audience, mock(TrainingEligibilityService.class)));
 
-  @Test
-  void unlinkedExamRemainsOpen() {
-    when(jdbc.queryForObject("SELECT COUNT(*) FROM assessment_task WHERE id=?", Integer.class, 1L))
-        .thenReturn(1);
-    when(jdbc.queryForList("SELECT id FROM training WHERE assessment_id=?", Long.class, 1L))
-        .thenReturn(List.of());
+  @BeforeEach void defaultStartedTraining() {
+    when(audience.countNotStartedTrainings(1L, true)).thenReturn(List.of(0));
+  }
+  @Test void unlinkedExamRemainsOpen() {
+    when(repository.countTask(1L)).thenReturn(List.of(1));
+    when(audience.findTrainingIdsForEntry(1L, true)).thenReturn(List.of());
     assertDoesNotThrow(() -> service.requireEligible(1L, "张三", "13900000000"));
   }
-
-  @Test
-  void linkedExamRejectsCandidateOutsideTrainingEvenWhenExamIsOpen() {
-    when(jdbc.queryForObject("SELECT COUNT(*) FROM assessment_task WHERE id=?", Integer.class, 1L))
-        .thenReturn(1);
-    when(jdbc.queryForList("SELECT id FROM training WHERE assessment_id=?", Long.class, 1L))
-        .thenReturn(List.of(2L));
-    when(jdbc.queryForObject(
-            "SELECT COUNT(*) FROM training_audience WHERE training_id=? AND candidate_name=? AND"
-                + " phone=?",
-            Integer.class,
-            2L,
-            "张三",
-            "13900000000"))
-        .thenReturn(0);
+  @Test void linkedExamRejectsCandidateOutsideTrainingEvenWhenExamIsOpen() {
+    when(repository.countTask(1L)).thenReturn(List.of(1));
+    when(audience.findTrainingIdsForEntry(1L, true)).thenReturn(List.of(2L));
+    when(audience.countCandidateAssignments(2L, "张三", "13900000000")).thenReturn(List.of(0));
     assertThrows(BusinessException.class, () -> service.requireEligible(1L, "张三", "13900000000"));
   }
-
-  @Test
-  void linkedExamAcceptsTrainingMember() {
-    when(jdbc.queryForObject("SELECT COUNT(*) FROM assessment_task WHERE id=?", Integer.class, 1L))
-        .thenReturn(1);
-    when(jdbc.queryForList("SELECT id FROM training WHERE assessment_id=?", Long.class, 1L))
-        .thenReturn(List.of(2L));
-    when(jdbc.queryForObject(
-            "SELECT COUNT(*) FROM training_audience WHERE training_id=? AND candidate_name=? AND"
-                + " phone=?",
-            Integer.class,
-            2L,
-            "张三",
-            "13900000000"))
-        .thenReturn(1);
+  @Test void linkedExamAcceptsTrainingMember() {
+    when(repository.countTask(1L)).thenReturn(List.of(1));
+    when(audience.findTrainingIdsForEntry(1L, true)).thenReturn(List.of(2L));
+    when(audience.countCandidateAssignments(2L, "张三", "13900000000")).thenReturn(List.of(1));
     assertDoesNotThrow(() -> service.requireEligible(1L, "张三", "13900000000"));
   }
-
-  @Test
-  void missingExamIsRejected() {
-    when(jdbc.queryForObject("SELECT COUNT(*) FROM assessment_task WHERE id=?", Integer.class, 1L))
-        .thenReturn(0);
+  @Test void missingExamIsRejected() {
+    when(repository.countTask(1L)).thenReturn(List.of(0));
     assertThrows(BusinessException.class, () -> service.requireEligible(1L, "张三", "13900000000"));
+    verifyNoInteractions(audience);
   }
 }

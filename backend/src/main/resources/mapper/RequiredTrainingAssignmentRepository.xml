@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiquestion.repository.RequiredTrainingAssignmentRepository">
+  <select id="findActiveDepartmentEmployeeIds" resultType="java.lang.Long">
+    SELECT e.id FROM organization_employee e
+    JOIN organization_department d ON d.id=e.department_id AND d.created_by=e.created_by
+    WHERE e.department_id=#{departmentId} AND e.created_by=#{ownerId}
+      AND e.status='ACTIVE' AND d.status='ACTIVE'
+    ORDER BY e.id
+  </select>
+  <select id="findActiveEmployee" resultType="java.util.LinkedHashMap">
+    SELECT e.id,e.name,e.phone,e.department_id,d.name department_name FROM organization_employee e JOIN organization_department d ON d.id=e.department_id AND d.created_by=e.created_by WHERE e.id=#{employeeId} AND e.created_by=#{ownerId} AND e.status='ACTIVE' AND d.status='ACTIVE'
+  </select>
+  <select id="findMatchingTrainings" resultType="java.util.LinkedHashMap">
+    SELECT t.id FROM training t WHERE t.created_by=#{ownerId} AND t.requirement_type='REQUIRED' AND (t.audience_type='ALL' OR (t.audience_type='DEPARTMENT' AND EXISTS (SELECT 1 FROM training_scope_target s WHERE s.training_id=t.id AND s.target_id=#{departmentId}))) ORDER BY t.id
+  </select>
+  <select id="lockMatchingTraining" resultType="java.util.LinkedHashMap">
+    SELECT t.id,t.assessment_id FROM training t WHERE t.id=#{trainingId} AND t.created_by=#{ownerId} AND t.requirement_type='REQUIRED' AND (t.audience_type='ALL' OR (t.audience_type='DEPARTMENT' AND EXISTS (SELECT 1 FROM training_scope_target s WHERE s.training_id=t.id AND s.target_id=#{departmentId}))) FOR UPDATE
+  </select>
+  <insert id="insertAudienceIfAbsent">
+    INSERT INTO training_audience(training_id,employee_id,candidate_name,phone,department_id,department_name) SELECT #{trainingId},#{employeeId},#{candidateName},#{phone},#{departmentId},#{departmentName} WHERE NOT EXISTS (SELECT 1 FROM training_audience WHERE training_id=#{existingTrainingId} AND employee_id=#{existingEmployeeId})
+  </insert>
+</mapper>

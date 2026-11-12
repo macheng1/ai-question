@@ -5,7 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { Banner, Button, Spin, Typography } from "@douyinfe/semi-ui";
 import { getCurrentUser, type AccountType } from "@/features/auth/api";
 import { accountHome } from "@/features/auth/navigation";
-import { useAuthStore } from "@/features/auth/store";
+import { getLearnerProfile, learnerEntry } from "@/features/auth/learner-session";
+import { useAuthStore, useLearnerStore } from "@/features/auth/store";
 import { ApiError } from "@/lib/api/client";
 
 /** Resolve the server identity before mounting protected pages or their data requests. */
@@ -25,16 +26,19 @@ export function AuthGuard({
     let active = true;
     setChecked(false);
     setError("");
-    const auth = useAuthStore.getState();
-    const login = () =>
-      router.replace(
-        `/login?type=${accountType || "ADMIN"}&redirect=${encodeURIComponent(pathname)}`,
-      );
+    const auth = (accountType === "EMPLOYEE" ? useLearnerStore : useAuthStore).getState();
+    const login = () => {
+      if (accountType === "EMPLOYEE") {
+        const entry = learnerEntry();
+        if (entry) router.replace(entry);
+        else setError("请使用企业提供的培训或考试二维码、链接确认学员身份后进入个人中心。");
+      } else router.replace(`/login?redirect=${encodeURIComponent(pathname)}`);
+    };
     if (!auth.accessToken) {
       login();
       return;
     }
-    getCurrentUser()
+    (accountType === "EMPLOYEE" ? getLearnerProfile() : getCurrentUser())
       .then((profile) => {
         if (!active) return;
         auth.setSession(profile, auth.accessToken!);

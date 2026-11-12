@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiquestion.repository.MaterialLearningRepository">
+  <select id="findSession" resultType="java.util.LinkedHashMap">
+    SELECT * FROM candidate_learning_session WHERE <choose><when test="examTask">task_id</when><otherwise>training_id</otherwise></choose>=#{taskId} AND token=#{token}
+  </select>
+  <select id="findMaterials" resultType="java.util.LinkedHashMap">
+    SELECT m.id,m.training_id trainingId,m.title,m.material_type materialType,m.page_count pageCount FROM training_material m JOIN training t ON t.id=m.training_id WHERE <choose><when test="examTask">t.assessment_id=#{taskId}</when><otherwise>t.id=#{taskId}</otherwise></choose> ORDER BY t.id,m.sort_order,m.id
+  </select>
+  <select id="findPageProgress" resultType="java.util.LinkedHashMap">
+    SELECT p.page_number pageNumber,p.required_seconds requiredSeconds,COALESCE(s.studied_seconds,0) studiedSeconds,COALESCE(s.completed,FALSE) completed FROM training_material_page p LEFT JOIN candidate_material_progress s ON s.material_id=p.material_id AND s.page_number=p.page_number AND s.session_id=#{sessionId} WHERE p.material_id=#{materialId} ORDER BY p.page_number
+  </select>
+  <select id="countAuthorizedPage" resultType="java.lang.Integer">
+    SELECT COUNT(*) FROM training_material m JOIN training t ON t.id=m.training_id WHERE m.id=#{materialId} AND <choose><when test="examTask">t.assessment_id=#{taskId}</when><otherwise>t.id=#{taskId}</otherwise></choose> AND #{pageNumber} BETWEEN 1 AND m.page_count
+  </select>
+  <select id="countIncompleteEarlierPages" resultType="java.lang.Integer">
+    SELECT COUNT(*) FROM training_material_page p WHERE p.material_id=#{materialId} AND p.page_number&lt;#{pageNumber} AND NOT EXISTS (SELECT 1 FROM candidate_material_progress s WHERE s.session_id=#{sessionId} AND s.material_id=p.material_id AND s.page_number=p.page_number AND s.completed=TRUE)
+  </select>
+  <select id="lockMaterial" resultType="java.util.LinkedHashMap">
+    SELECT id FROM training_material WHERE id=#{materialId} FOR UPDATE
+  </select>
+  <select id="lockSession" resultType="java.util.LinkedHashMap">
+    SELECT id FROM candidate_learning_session WHERE id=#{sessionId} FOR UPDATE
+  </select>
+  <insert id="initializePageProgress">
+    INSERT IGNORE INTO candidate_material_progress(session_id,material_id,page_number) VALUES(#{sessionId},#{materialId},#{pageNumber})
+  </insert>
+  <select id="lockPageProgress" resultType="java.util.LinkedHashMap">
+    SELECT s.*,p.required_seconds,GREATEST(0,TIMESTAMPDIFF(MICROSECOND,s.last_seen,CURRENT_TIMESTAMP(3))/1000000.0) elapsed FROM candidate_material_progress s JOIN training_material_page p ON p.material_id=s.material_id AND p.page_number=s.page_number WHERE s.session_id=#{sessionId} AND s.material_id=#{materialId} AND s.page_number=#{pageNumber} FOR UPDATE
+  </select>
+  <update id="clearHeartbeatTokens">
+    UPDATE candidate_material_progress SET heartbeat_token=NULL WHERE session_id=#{sessionId}
+  </update>
+  <update id="updatePageProgress">
+    UPDATE candidate_material_progress SET studied_seconds=#{studiedSeconds},completed=#{completed},last_seen=CURRENT_TIMESTAMP(3),heartbeat_token=#{heartbeatToken},completed_at=IF(#{markCompleted} AND completed_at IS NULL,CURRENT_TIMESTAMP(3),completed_at) WHERE session_id=#{sessionId} AND material_id=#{materialId} AND page_number=#{pageNumber}
+  </update>
+</mapper>

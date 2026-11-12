@@ -236,3 +236,36 @@ mysql -h <数据库地址> -P <端口> -u <用户名> -p --default-character-set
 
 跨域放行不会解除浏览器的 HTTPS 混合内容限制：HTTPS 前端仍应请求 HTTPS 后端或同源代理。
 网关拦截、服务未启动和连接失败需要在对应层处理。
+
+### 培训副本关联考试的清理
+
+`V45__training_copied_assessment.sql` 增加 `training.copied_assessment_id`，仅记录复制培训时自动创建的考试。
+取消关联、换绑或删除副本时，在同一事务内清理该空考试；原考试、共用试卷和手动关联考试保留。
+有学习、答题或其他培训引用时禁止清理，保存失败时整体回滚。删除培训仍需满足原有材料与反馈检查。
+为避免误删，历史副本不通过名称推断来源；迁移前已遗留的考试需要人工核对后处理。
+部署需执行 V45（正常启动时由 Flyway 执行），无需新增环境变量。
+
+### MyBatis 迁移回归测试
+
+运行时 SQL 统一放在 `src/main/resources/mapper`。常规 `mvn test` 包含 Mapper 绑定与架构检查。
+`MyBatisMigrationIntegrationTest` 会真实启动 Spring 服务、执行 Flyway 和 MySQL SQL；它只允许显式指定的本地 `aiquestion_mybatis_test` 数据库。
+
+仅在单独的临时 MySQL 实例上运行，不能使用开发或生产数据库：
+
+```bash
+# 示例口令仅用于下面的临时容器。
+docker run -d --name aiquestion-mybatis-test \
+  -e MYSQL_ROOT_PASSWORD=local-mapper-test-only \
+  -e MYSQL_DATABASE=aiquestion_mybatis_test \
+  -p 127.0.0.1:13316:3306 mysql:8.0 --default-time-zone=+00:00
+
+# 等待容器内 MySQL 就绪后，在 backend 目录运行：
+MYBATIS_TEST_URL='jdbc:mysql://127.0.0.1:13316/aiquestion_mybatis_test?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&useSSL=false&allowPublicKeyRetrieval=true' \
+MYBATIS_TEST_PASSWORD='local-mapper-test-only' mvn test
+
+# 仅清理上面专门创建的测试容器。
+docker rm -f aiquestion-mybatis-test
+```
+
+未提供上述变量时，这组集成测试会跳过，不影响常规单元测试。测试会创建测试账号和业务数据，使用后应销毁临时实例。
+覆盖学员保存和身份隔离、培训保存/失败回滚、复制考试和材料的主键、复制失败清理、阅读顺序/并发计时、视频进度、固定/随机考试及恢复、重复交卷、统计筛选。

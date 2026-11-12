@@ -5,13 +5,17 @@ import { Layout } from "@douyinfe/semi-ui";
 import { useEffect, useRef, useState } from "react";
 import { Banner, Button, Progress, Spin, VideoPlayer } from "@douyinfe/semi-ui";
 import { IconPlay, IconTick, IconClock, IconArrowRight } from "@douyinfe/semi-icons";
+import { confirmLearner } from "@/features/auth/learner-session";
 import { apiClient } from "@/lib/api/client";
 
 export type ExamVideo = { id: number; trainingId: number; title: string; positionSeconds: number; completed: boolean };
 export type ExamLearning = { materials?: import("./TrainingMaterials").Material[]; token: string; videos: ExamVideo[]; trainings: { id: number; name: string; category?: string; requirementType?: string; surveyEnabled: boolean }[] };
 export const learningBase = (id:string) => Number(id)<0?`/public/courses/${-Number(id)}/learning`:`/public/exams/${id}/learning`;
-export const loadExamLearning = (examId: string, name: string, phone: string) =>
-  apiClient.post<ExamLearning>(learningBase(examId), { name: name.trim(), phone: phone.trim() });
+export async function loadExamLearning(examId: string, name: string, phone: string) {
+  const id = Number(examId);
+  await confirmLearner(id < 0 ? "TRAINING" : "EXAM", Math.abs(id), name, phone);
+  return apiClient.post<ExamLearning>(learningBase(examId), { name: name.trim(), phone: phone.trim() });
+}
 
 /** 观看完成以服务端确认的进度为准，尚未观看的片段不能通过拖动跳过。 */
 export function ExamTrainingVideos({ examId, data, onBack, onContinue, starting, continueLabel = "开始考试", onProgress }: {
@@ -83,7 +87,7 @@ export function ExamTrainingVideos({ examId, data, onBack, onContinue, starting,
       if (video.completed || !Number.isFinite(element.duration) || element.duration <= 0) return;
       const base = apiClient.instance.defaults.baseURL || "/api";
       void fetch(`${base}${learningBase(examId)}/videos/${video.id}/progress`, {
-        method: "PUT", keepalive: true, headers: { "Content-Type": "application/json" },
+        method: "PUT", keepalive: true, headers: { "Content-Type": "application/json", Authorization: `Bearer ${window.localStorage.getItem("aiquestion_learner_access_token") || ""}` },
         body: JSON.stringify({ token: data.token, position: Math.min(element.currentTime, furthest), duration: element.duration, completed: element.ended }),
       }).catch(() => undefined);
     };
@@ -115,7 +119,7 @@ export function ExamTrainingVideos({ examId, data, onBack, onContinue, starting,
 
   return <Layout.Content>
     <div className="h5-content">
-      {src ? <VideoPlayer key={src} ref={player} src={src} width="100%" height="auto" style={{ aspectRatio: "16 / 9", borderRadius: 15, overflow: "hidden" }} autoPlay={false} clickToPlay defaultPlaybackRate={1} muted={false} playbackRateList={[{ label: "1.0x", value: 1 }]} theme="dark" volume={80} controlsList={["play", "time", "volume", "fullscreen"]} /> : !error && <div className="flex h-48 items-center justify-center rounded-xl bg-slate-100"><Spin tip="正在加载视频…" /></div>}
+      {src ? <VideoPlayer key={src} ref={player} src={src} width="100%" height="auto" style={{ aspectRatio: "16 / 9", borderRadius: 15, overflow: "hidden" }} autoPlay={false} clickToPlay defaultPlaybackRate={1} muted={false} playbackRateList={[{ label: "1.0x", value: 1 }]} theme="dark" volume={80} controlsList={["play", "time", "volume", "fullscreen"]} /> : !error && <div className="flex flex-col items-center justify-center gap-3 rounded-xl bg-slate-100" style={{ aspectRatio: "16 / 9" }}><Spin size="large" /><p className="text-sm text-slate-500">正在加载视频…</p></div>}
       {video && <div className="h5-video-resume"><IconClock /> {video.completed ? "本节视频已完成，可再次观看" : video.positionSeconds > 0 ? `已保存到 ${Math.floor(video.positionSeconds / 60)} 分 ${Math.floor(video.positionSeconds % 60)} 秒，下次可继续观看` : (Number(examId)<0?"观看进度自动保存，退出后可继续学习":"观看进度自动保存，完成学习后进入考试")}</div>}
       <Typography.Title heading={1} className="h5-video-title !text-xl !leading-7 !mb-2">{video?.title || "培训视频学习"}</Typography.Title><p className="h5-muted">{Number(examId)<0?"请完整观看全部培训视频，进度自动保存。":"请完整观看全部培训视频。学习期间不占用考试答题时间。"}</p>
       <div className="h5-lesson-progress"><Typography.Title heading={2} className="!text-sm">课程完成进度</Typography.Title><span>{completedCount} / {videos.length} 节</span></div>

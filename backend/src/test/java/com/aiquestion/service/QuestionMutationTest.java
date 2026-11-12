@@ -14,7 +14,7 @@ class QuestionMutationTest {
     var repo = mock(TestPaperRepository.class);
     var service = spy(new TestPaperService(repo, mock(TestPaperQuestionRepository.class),
         mock(QuestionItemRepository.class), mock(QuestionOptionRepository.class),
-        mock(org.springframework.jdbc.core.JdbcTemplate.class)));
+        mock(TestPaperRuntimeRepository.class)));
     var paper = new TestPaper();
     paper.setHasAssessment(true);
     doReturn(paper).when(service).get(1L);

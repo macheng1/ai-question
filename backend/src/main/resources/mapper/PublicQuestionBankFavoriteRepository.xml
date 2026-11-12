@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiquestion.repository.PublicQuestionBankFavoriteRepository">
+  <select id="findFavoriteBankIds" resultType="java.lang.Long">
+    SELECT bank_id FROM user_question_bank_favorite WHERE user_id=#{userId} ORDER BY created_at DESC
+  </select>
+  <select id="countPublishedBank" resultType="java.lang.Integer">
+    SELECT COUNT(*) FROM question_bank WHERE id=#{bankId} AND published=TRUE
+  </select>
+  <insert id="insertFavorite">
+    INSERT IGNORE INTO user_question_bank_favorite(user_id,bank_id) VALUES(#{userId},#{bankId})
+  </insert>
+  <delete id="deleteFavorite">
+    DELETE FROM user_question_bank_favorite WHERE user_id=#{userId} AND bank_id=#{bankId}
+  </delete>
+</mapper>

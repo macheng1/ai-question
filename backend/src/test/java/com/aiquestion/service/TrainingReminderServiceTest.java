@@ -7,12 +7,12 @@ import com.aiquestion.common.*;
 import com.aiquestion.integration.TrainingReminderMailer;
 import java.util.*;
 import org.junit.jupiter.api.Test;
-import org.springframework.jdbc.core.JdbcTemplate;
+import com.aiquestion.repository.TrainingReminderRepository;
 
 class TrainingReminderServiceTest {
   @Test
   void permissionCheckedBeforeReadingRecipients() {
-    var jdbc = mock(JdbcTemplate.class);
+    var jdbc = mock(TrainingReminderRepository.class);
     var trainings = mock(TrainingService.class);
     when(trainings.get(1L, 2L)).thenThrow(new BusinessException(ErrorCode.NOT_FOUND));
     var service =
@@ -27,7 +27,7 @@ class TrainingReminderServiceTest {
     var mailer = mock(TrainingReminderMailer.class);
     var service =
         new TrainingReminderService(
-            mock(JdbcTemplate.class),
+            mock(TrainingReminderRepository.class),
             mock(TrainingService.class),
             mock(TrainingLogService.class),
             mailer);

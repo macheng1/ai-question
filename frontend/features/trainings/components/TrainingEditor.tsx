@@ -38,6 +38,11 @@ import { TrainingMaterials } from "./TrainingMaterials";
 import { TrainingVideos } from "./TrainingVideos";
 import { getAssessments, type Assessment } from "@/features/assessments/api";
 const labels = { RATING: "评分题", SINGLE: "单选题", TEXT: "意见题" };
+const scopeKey = (item: Training) => JSON.stringify({
+    assessmentId: item.assessmentId ?? null,
+    type: item.audience?.type,
+    ids: [...(item.audience?.ids || [])].sort((a, b) => a - b),
+  });
 export function TrainingEditor({ id }: { id?: string }) {
   const router = useRouter();
   const [assessments, setAssessments] = useState<Assessment[]>([]);
@@ -58,6 +63,8 @@ export function TrainingEditor({ id }: { id?: string }) {
   const [loading, setLoading] = useState(Boolean(id));
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [audienceError, setAudienceError] = useState("正在检查学员资格，请稍候");
+  const savedScope = useRef("");
   const [adding, setAdding] = useState<SurveyQuestion["type"] | null>(null);
   const addingRef = useRef(false);
   const [dirty, setDirty] = useState(false);
@@ -66,7 +73,7 @@ export function TrainingEditor({ id }: { id?: string }) {
   useEffect(() => {
     if (id)
       getTraining(id)
-        .then(setTraining)
+        .then((saved) => { savedScope.current = scopeKey(saved); setTraining(saved); })
         .catch((e) => setError(e.message))
         .finally(() => setLoading(false));
   }, [id]);
@@ -184,9 +191,16 @@ export function TrainingEditor({ id }: { id?: string }) {
       setTab("survey");
       return;
     }
+    if (audienceError && (!training.id || savedScope.current !== scopeKey(training)
+        || (training.audience?.type !== "ALL" && !training.audience?.ids.length))) {
+      Toast.error(audienceError);
+      setTab("content");
+      return;
+    }
     setBusy(true);
     try {
       const saved = await saveTraining(training.id || undefined, training);
+      savedScope.current = scopeKey(saved);
       setTraining(saved);
       setDirty(false);
       Toast.success("培训评估已保存");
@@ -321,6 +335,10 @@ export function TrainingEditor({ id }: { id?: string }) {
                     </div>
                     <Select
                       aria-label="关联考试"
+                      onDropdownVisibleChange={(visible) => {
+                        if (visible) getAssessments().then((result) => setAssessments(result.records))
+                          .catch((error) => Toast.error(error instanceof Error ? error.message : "考试列表刷新失败"));
+                      }}
                       motion={false}
                       style={{ width: "100%" }}
                       showClear
@@ -362,6 +380,10 @@ export function TrainingEditor({ id }: { id?: string }) {
                     {endsAfterExam && <Banner type="warning" description="培训结束时间晚于考试结束时间，员工学完时考试可能已经关闭，请核对时间安排。" />}
                   </div>
                   <TrainingAudience
+                    trainingId={training.id || undefined}
+                    onValidationChange={setAudienceError}
+                    assessmentId={training.assessmentId}
+                    locked={training.learningLocked}
                     value={training.audience || { type: "ALL", ids: [] }}
                     disabled={busy || training.learningLocked}
                     onChange={(audience) => change({ audience })}
@@ -569,14 +591,14 @@ export function TrainingEditor({ id }: { id?: string }) {
         </>
       )}
       <Modal
-        bodyStyle={{ maxHeight: "calc(100dvh - 240px)", overflowY: "auto" }}
+        bodyStyle={{ maxHeight: "calc(100vh - 180px)", overflowY: "auto", overflowX: "hidden", paddingRight: 16, paddingBottom: 24 }}
         title="满意度评估预览"
         visible={preview}
         onCancel={() => setPreview(false)}
         footer={null}
         style={{ width: "min(640px, 94vw)" }}
       >
-        <div className="max-h-[70vh] overflow-y-auto p-1">
+        <div className="min-w-0 px-1 pt-1">
           <Typography.Title heading={2} className="!mb-4 !text-xl !font-bold">
             {training.name || "培训名称"}
           </Typography.Title>

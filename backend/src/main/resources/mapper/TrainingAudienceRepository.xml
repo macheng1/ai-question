@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiquestion.repository.TrainingAudienceRepository">
+  <select id="findAudienceType" resultType="java.lang.String">
+    SELECT audience_type FROM training WHERE id=#{trainingId}
+  </select>
+  <select id="findScopeTargetIds" resultType="java.lang.Long">
+    SELECT target_id FROM training_scope_target WHERE training_id=#{trainingId} ORDER BY target_id
+  </select>
+  <select id="countOwnedTrainings" resultType="java.lang.Integer">
+    SELECT COUNT(*) FROM training WHERE id=#{trainingId} AND created_by=#{ownerId}
+  </select>
+  <select id="lockTraining" resultType="java.util.LinkedHashMap">
+    SELECT * FROM training WHERE id=#{trainingId} FOR UPDATE
+  </select>
+  <select id="countLearningSessions" resultType="java.lang.Integer">
+    SELECT COUNT(*) FROM candidate_learning_session s JOIN training t ON (t.assessment_id=s.task_id OR t.id=s.training_id) WHERE t.id=#{trainingId}
+  </select>
+  <select id="countExamParticipants" resultType="java.lang.Integer">
+    SELECT COUNT(*) FROM assessment_participant WHERE task_id=#{assessmentId}
+  </select>
+  <select id="findActiveEmployees" resultType="java.util.LinkedHashMap">
+    SELECT e.id,e.name,e.phone,e.department_id,d.name department_name FROM organization_employee e JOIN organization_department d ON d.id=e.department_id AND d.created_by=e.created_by WHERE e.created_by=#{ownerId} AND e.status='ACTIVE' AND d.status='ACTIVE'
+  </select>
+  <select id="findActiveDepartmentIds" resultType="java.lang.Long">
+    SELECT id FROM organization_department WHERE created_by=#{ownerId} AND status='ACTIVE'
+  </select>
+  <select id="findAssignments" resultType="java.util.LinkedHashMap">
+    SELECT employee_id,assigned_at FROM training_audience WHERE training_id=#{trainingId}
+  </select>
+  <delete id="deleteAudience">
+    DELETE FROM training_audience WHERE training_id=#{trainingId}
+  </delete>
+  <delete id="deleteScopeTargets">
+    DELETE FROM training_scope_target WHERE training_id=#{trainingId}
+  </delete>
+  <update id="updateAudienceType">
+    UPDATE training SET audience_type=#{audienceType} WHERE id=#{trainingId}
+  </update>
+  <insert id="insertScopeTarget">
+    INSERT INTO training_scope_target(training_id,target_id) VALUES(#{trainingId},#{targetId})
+  </insert>
+  <insert id="insertAssignment">
+    INSERT INTO training_audience(training_id,employee_id,candidate_name,phone,department_id,department_name,assigned_at) VALUES(#{trainingId},#{employeeId},#{name},#{phone},#{departmentId},#{departmentName},COALESCE(#{assignedAt},CURRENT_TIMESTAMP(3)))
+  </insert>
+  <select id="countCandidateAssignments" resultType="java.lang.Integer">
+    SELECT COUNT(*) FROM training_audience WHERE training_id=#{trainingId} AND candidate_name=#{name} AND phone=#{phone}
+  </select>
+  <select id="countNotStartedTrainings" resultType="java.lang.Integer">
+    SELECT COUNT(*) FROM training WHERE <choose><when test="examTask">assessment_id=#{entryId}</when><otherwise>id=#{entryId}</otherwise></choose> AND start_at&gt;CURRENT_TIMESTAMP(3)
+  </select>
+  <select id="countExamLinkedTrainings" resultType="java.lang.Integer">
+    SELECT COUNT(*) FROM training WHERE id=#{trainingId} AND assessment_id IS NOT NULL
+  </select>
+  <select id="findTrainingIdsForEntry" resultType="java.lang.Long">
+    SELECT id FROM training WHERE <choose><when test="examTask">assessment_id=#{entryId}</when><otherwise>id=#{entryId}</otherwise></choose>
+  </select>
+</mapper>

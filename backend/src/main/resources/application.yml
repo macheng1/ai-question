@@ -43,6 +43,10 @@ mybatis:
   configuration:
     map-underscore-to-camel-case: true
     cache-enabled: false
+    # Locking/progress queries must reach MySQL on every invocation.
+    local-cache-scope: STATEMENT
+    # Preserve nullable keys in existing Map-based API responses.
+    call-setters-on-nulls: true
 springdoc:
   api-docs:
     path: /v3/api-docs

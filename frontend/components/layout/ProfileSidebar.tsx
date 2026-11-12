@@ -4,15 +4,15 @@ import { usePathname, useRouter } from "next/navigation";
 import { Button, Modal, Nav, Select, Space, Toast } from "@douyinfe/semi-ui";
 import {
   IconAlertCircle, IconBook, IconCalendar, IconExit, IconFile,
-  IconHistogram, IconHistory, IconHome, IconLayers, IconLikeThumb,
+  IconHistogram, IconHistory, IconLayers, IconLikeThumb,
   IconUserGroup,
 } from "@douyinfe/semi-icons";
-import { useAuthStore } from "@/features/auth/store";
+import { useCurrentSession } from "@/features/auth/store";
 
+import { learnerEntry } from "@/features/auth/learner-session";
 import { accountMenus, accountHome } from "@/features/auth/navigation";
 
 const menuIcons = {
-  "/profile": IconHome,
   "/profile/dashboard": IconHistogram,
   "/profile/trainings": IconBook,
   "/profile/banks": IconLayers,
@@ -33,11 +33,11 @@ const menuIcons = {
  * 避免各页面分别维护一套几乎相同的侧边栏导致行为不一致。
  */
 export function ProfileSidebar() {
-  const accountType = useAuthStore((state) => state.user?.accountType);
+  const { user, clearSession } = useCurrentSession();
+  const accountType = user?.accountType;
   const menu = accountType ? accountMenus[accountType] : [];
   const pathname = usePathname();
   const router = useRouter();
-  const clearSession = useAuthStore((state) => state.clearSession);
   const [logoutOpen, setLogoutOpen] = useState(false);
 
   const isActive = (href: string) =>
@@ -53,7 +53,7 @@ export function ProfileSidebar() {
     clearSession();
     setLogoutOpen(false);
     Toast.success("已退出登录");
-    window.location.href = "/";
+    window.location.href = accountType === "EMPLOYEE" ? (learnerEntry() || "/learner") : "/login";
   };
 
   const selectedKey = menu.find((item) => isActive(item.href))?.href;

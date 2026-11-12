@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiquestion.repository.PublicSelfTestRepository">
+  <select id="countPublishedTests" resultType="java.lang.Long">
+    SELECT COUNT(*) FROM public_self_test p JOIN question_bank b ON b.id=p.bank_id WHERE p.published=TRUE AND b.published=TRUE AND (#{search} IS NULL OR p.name LIKE #{nameSearch} OR p.description LIKE #{descriptionSearch} OR b.name LIKE #{bankSearch})
+  </select>
+  <select id="findPublishedTests" resultType="java.util.LinkedHashMap">
+    SELECT p.id,p.bank_id,p.name,p.description,p.single_count,p.multiple_count,p.true_false_count,b.question_count,b.name bank_name FROM public_self_test p JOIN question_bank b ON b.id=p.bank_id WHERE p.published=TRUE AND b.published=TRUE AND (#{search} IS NULL OR p.name LIKE #{nameSearch} OR p.description LIKE #{descriptionSearch} OR b.name LIKE #{bankSearch}) ORDER BY p.sort_no ASC,p.id ASC LIMIT #{limit} OFFSET #{offset}
+  </select>
+  <select id="findPublishedTest" resultType="java.util.LinkedHashMap">
+    SELECT p.id,p.bank_id,p.name,p.description,p.single_count,p.multiple_count,p.true_false_count,p.random_order,b.question_count,b.name bank_name,b.category,b.source FROM public_self_test p JOIN question_bank b ON b.id=p.bank_id WHERE p.id=#{testId} AND p.published=TRUE AND b.published=TRUE
+  </select>
+</mapper>

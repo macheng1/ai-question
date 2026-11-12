@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiquestion.repository.CandidateLearningRepository">
+  <select id="findTrainings" resultType="java.util.LinkedHashMap">
+    SELECT id,name,category,requirement_type requirementType,survey_enabled surveyEnabled FROM training t WHERE <choose><when test="examTask">t.assessment_id=#{taskId}</when><otherwise>t.id=#{taskId}</otherwise></choose> ORDER BY id
+  </select>
+  <select id="countIncompleteVideos" resultType="java.lang.Integer">
+    SELECT COUNT(*) FROM training_video v JOIN training t ON t.id=v.training_id WHERE <choose><when test="examTask">t.assessment_id=#{taskId}</when><otherwise>t.id=#{taskId}</otherwise></choose> AND NOT EXISTS (SELECT 1 FROM candidate_video_progress p JOIN candidate_learning_session s ON s.id=p.session_id WHERE p.video_id=v.id AND p.completed=TRUE AND s.<choose><when test="examTask">task_id</when><otherwise>training_id</otherwise></choose>=#{sessionTaskId} AND s.candidate_name=#{candidateName} AND s.phone=#{phone})
+  </select>
+  <select id="countIncompletePages" resultType="java.lang.Integer">
+    SELECT COUNT(*) FROM training_material_page p JOIN training_material m ON m.id=p.material_id JOIN training t ON t.id=m.training_id WHERE <choose><when test="examTask">t.assessment_id=#{taskId}</when><otherwise>t.id=#{taskId}</otherwise></choose> AND NOT EXISTS (SELECT 1 FROM candidate_material_progress s JOIN candidate_learning_session c ON c.id=s.session_id WHERE s.material_id=p.material_id AND s.page_number=p.page_number AND s.completed=TRUE AND c.<choose><when test="examTask">task_id</when><otherwise>training_id</otherwise></choose>=#{sessionTaskId} AND c.candidate_name=#{candidateName} AND c.phone=#{phone})
+  </select>
+  <update id="confirmSessionsCompleted">
+    UPDATE candidate_learning_session SET completed_at=COALESCE(completed_at,CURRENT_TIMESTAMP(3)) WHERE <choose><when test="examTask">task_id</when><otherwise>training_id</otherwise></choose>=#{taskId} AND candidate_name=#{candidateName} AND phone=#{phone}
+  </update>
+  <select id="lockExamTrainings" resultType="java.util.LinkedHashMap">
+    SELECT id FROM training WHERE assessment_id=#{taskId} ORDER BY id FOR UPDATE
+  </select>
+  <select id="lockStandaloneTraining" resultType="java.util.LinkedHashMap">
+    SELECT id FROM training WHERE id=#{trainingId} FOR UPDATE
+  </select>
+  <select id="findTask" resultType="java.util.LinkedHashMap">
+    SELECT id FROM assessment_task WHERE id=#{taskId}
+  </select>
+  <insert id="insertSessionIfAbsent">
+    INSERT INTO candidate_learning_session(<choose><when test="examTask">task_id</when><otherwise>training_id</otherwise></choose>,candidate_name,phone,token) VALUES(#{taskId},#{candidateName},#{phone},#{token}) ON DUPLICATE KEY UPDATE id=id
+  </insert>
+  <update id="assignSessionEmployee">
+    UPDATE candidate_learning_session s LEFT JOIN training t ON t.id=s.training_id LEFT JOIN assessment_task a ON a.id=s.task_id JOIN organization_employee e ON e.created_by=COALESCE(t.created_by,a.created_by) AND e.name=s.candidate_name AND e.phone=s.phone AND e.status='ACTIVE' SET s.employee_id=e.id WHERE s.employee_id IS NULL AND s.<choose><when test="examTask">task_id</when><otherwise>training_id</otherwise></choose>=#{taskId} AND s.candidate_name=#{candidateName} AND s.phone=#{phone}
+  </update>
+  <select id="findCandidateSession" resultType="java.util.LinkedHashMap">
+    SELECT id,token FROM candidate_learning_session WHERE <choose><when test="examTask">task_id</when><otherwise>training_id</otherwise></choose>=#{taskId} AND candidate_name=#{candidateName} AND phone=#{phone}
+  </select>
+  <insert id="initializeVideoProgress">
+    INSERT IGNORE INTO candidate_video_progress(session_id,video_id) SELECT #{sessionId},v.id FROM training_video v JOIN training t ON t.id=v.training_id WHERE <choose><when test="examTask">t.assessment_id=#{taskId}</when><otherwise>t.id=#{taskId}</otherwise></choose>
+  </insert>
+  <select id="findSessionVideos" resultType="java.util.LinkedHashMap">
+    SELECT v.id,v.training_id trainingId,v.title,p.position_seconds positionSeconds,p.completed FROM training_video v JOIN training t ON t.id=v.training_id JOIN candidate_video_progress p ON p.video_id=v.id AND p.session_id=#{sessionId} WHERE <choose><when test="examTask">t.assessment_id=#{taskId}</when><otherwise>t.id=#{taskId}</otherwise></choose> ORDER BY t.id,v.sort_order,v.id
+  </select>
+  <select id="findAuthorizedVideo" resultType="java.util.LinkedHashMap">
+    SELECT v.*,p.session_id FROM training_video v JOIN training t ON t.id=v.training_id JOIN candidate_video_progress p ON p.video_id=v.id JOIN candidate_learning_session s ON s.id=p.session_id WHERE <choose><when test="examTask">t.assessment_id=#{taskId}</when><otherwise>t.id=#{taskId}</otherwise></choose> AND s.<choose><when test="examTask">task_id</when><otherwise>training_id</otherwise></choose>=#{sessionTaskId} AND s.token=#{token} AND v.id=#{videoId}
+  </select>
+  <select id="findSessionIdentity" resultType="java.util.LinkedHashMap">
+    SELECT candidate_name,phone FROM candidate_learning_session WHERE token=#{token} AND <choose><when test="examTask">task_id</when><otherwise>training_id</otherwise></choose>=#{taskId}
+  </select>
+  <select id="lockVideoProgress" resultType="java.util.LinkedHashMap">
+    SELECT studied_seconds,last_play_position,GREATEST(0,TIMESTAMPDIFF(MICROSECOND,updated_at,CURRENT_TIMESTAMP(3))/1000000.0) recent_elapsed,position_seconds,baseline_position,completed,GREATEST(0,TIMESTAMPDIFF(MICROSECOND,baseline_at,CURRENT_TIMESTAMP(3))/1000000.0) elapsed FROM candidate_video_progress WHERE session_id=#{sessionId} AND video_id=#{videoId} FOR UPDATE
+  </select>
+  <update id="updateVideoProgress">
+    UPDATE candidate_video_progress SET position_seconds=#{positionSeconds},completed=#{completed},studied_seconds=#{studiedSeconds},last_play_position=#{playPosition},first_studied_at=COALESCE(first_studied_at,CURRENT_TIMESTAMP(3)),completed_at=IF(#{markCompleted} AND completed_at IS NULL,CURRENT_TIMESTAMP(3),completed_at),updated_at=CURRENT_TIMESTAMP(3) WHERE session_id=#{sessionId} AND video_id=#{videoId}
+  </update>
+</mapper>

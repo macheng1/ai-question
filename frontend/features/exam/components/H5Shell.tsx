@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { IconChevronLeft } from "@douyinfe/semi-icons";
 
-export function H5Shell({ title, backHref = "/profile", children }: { title: string; backHref?: string; children: ReactNode }) {
+export function H5Shell({ title, backHref = "/learner", children }: { title: string; backHref?: string; children: ReactNode }) {
   return <Layout.Content className="exam-h5">
     <Layout.Header className="exam-desktop-header print-hidden">
       <div className="exam-desktop-header-inner">

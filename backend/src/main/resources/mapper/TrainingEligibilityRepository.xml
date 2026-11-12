@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiquestion.repository.TrainingEligibilityRepository">
+  <insert id="lockAllocationOwner">
+    INSERT INTO training_allocation_lock(owner_id) VALUES(#{ownerId})
+    ON DUPLICATE KEY UPDATE owner_id=training_allocation_lock.owner_id
+  </insert>
+  <select id="findOwnedTaskPaper" resultType="java.util.LinkedHashMap">
+    SELECT paper_id FROM assessment_task WHERE id=#{taskId} AND created_by=#{ownerId}
+  </select>
+  <select id="findSubmittedEmployees" resultType="java.lang.Long">
+    SELECT DISTINCT p.employee_id FROM assessment_attempt a JOIN assessment_participant p ON p.id=a.participant_id AND p.task_id=a.task_id JOIN assessment_task t ON t.id=a.task_id JOIN organization_employee e ON e.id=p.employee_id AND e.created_by=t.created_by WHERE t.created_by=#{ownerId} AND t.paper_id=#{paperId} AND a.status='SUBMITTED'
+  </select>
+  <select id="findOwnedTraining" resultType="java.lang.Long">
+    SELECT id FROM training WHERE id=#{trainingId} AND created_by=#{ownerId}
+  </select>
+  <select id="findOriginalEmployees" resultType="java.lang.Long">
+    SELECT employee_id FROM learner_paper_binding WHERE owner_id=#{ownerId} AND paper_id=#{paperId}
+      AND JSON_CONTAINS(training_ids,CAST(#{trainingId} AS JSON))
+  </select>
+  <select id="findBoundEmployees" resultType="java.lang.Long">
+    SELECT employee_id FROM learner_paper_binding
+    WHERE owner_id=#{ownerId} AND paper_id=#{paperId}
+      AND (#{trainingId} IS NULL OR NOT JSON_CONTAINS(training_ids,CAST(#{trainingId} AS JSON)))
+  </select>
+  <insert id="insertBinding">
+    INSERT INTO learner_paper_binding(owner_id,employee_id,paper_id,training_ids)
+    VALUES(#{ownerId},#{employeeId},#{paperId},JSON_ARRAY(#{trainingId}))
+    ON DUPLICATE KEY UPDATE owner_id=learner_paper_binding.owner_id
+  </insert>
+  <select id="ownsBinding" resultType="java.lang.Integer">
+    SELECT JSON_CONTAINS(training_ids,CAST(#{trainingId} AS JSON)) FROM learner_paper_binding
+    WHERE owner_id=#{ownerId} AND employee_id=#{employeeId} AND paper_id=#{paperId} FOR UPDATE
+  </select>
+</mapper>

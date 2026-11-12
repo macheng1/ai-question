@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiquestion.repository.PublicExamRepository">
+  <select id="findAttemptStatus" resultType="java.util.LinkedHashMap">
+    SELECT status FROM assessment_attempt WHERE id=#{attemptId} AND task_id=#{taskId}
+  </select>
+  <select id="findAttemptCandidate" resultType="java.util.LinkedHashMap">
+    SELECT p.candidate_name,p.phone FROM assessment_participant p JOIN assessment_attempt a ON a.participant_id=p.id WHERE a.id=#{attemptId} AND p.task_id=#{taskId}
+  </select>
+  <select id="findQuestionOptions" resultType="java.util.LinkedHashMap">
+    SELECT option_key `key`,option_text text FROM question_option WHERE question_id=#{questionId} ORDER BY sort_no,id
+  </select>
+  <select id="findLatestParticipant" resultType="java.util.LinkedHashMap">
+    SELECT id,attempt_count FROM assessment_participant WHERE task_id=#{taskId} AND candidate_name=#{candidateName} AND phone=#{phone} ORDER BY id DESC LIMIT 1
+  </select>
+  <insert id="insertParticipant" useGeneratedKeys="true" keyProperty="generated.id" keyColumn="id">
+    INSERT INTO assessment_participant(task_id,candidate_name,phone,status,attempt_count,created_at,updated_at) VALUES(#{taskId},#{candidateName},#{phone},'IN_PROGRESS',0,CURRENT_TIMESTAMP(3),CURRENT_TIMESTAMP(3))
+  </insert>
+  <update id="assignParticipantEmployee">
+    UPDATE assessment_participant p JOIN assessment_task t ON t.id=p.task_id LEFT JOIN training tr ON tr.assessment_id=t.id LEFT JOIN training_audience ta ON ta.training_id=tr.id AND ta.candidate_name=p.candidate_name AND ta.phone=p.phone LEFT JOIN organization_employee e ON e.created_by=t.created_by AND e.name=p.candidate_name AND e.phone=p.phone SET p.employee_id=COALESCE(ta.employee_id,e.id) WHERE p.id=#{participantId} AND p.employee_id IS NULL
+  </update>
+  <select id="findActiveAttempt" resultType="java.util.LinkedHashMap">
+    SELECT id,attempt_no,started_at FROM assessment_attempt WHERE task_id=#{taskId} AND participant_id=#{participantId} AND status='IN_PROGRESS' ORDER BY id DESC LIMIT 1
+  </select>
+  <select id="findLatestSubmittedAttempt" resultType="java.util.LinkedHashMap">
+    SELECT id,attempt_no,started_at,submitted_at,score,total_score,passed FROM assessment_attempt WHERE task_id=#{taskId} AND participant_id=#{participantId} AND status='SUBMITTED' ORDER BY attempt_no DESC LIMIT 1
+  </select>
+  <select id="findLatestAttemptAnswers" resultType="java.util.LinkedHashMap">
+    SELECT question_id,answer_text FROM assessment_answer WHERE attempt_id=#{attemptId}
+  </select>
+  <insert id="insertAttemptFromTask" useGeneratedKeys="true" keyProperty="generated.id" keyColumn="id">
+    INSERT INTO assessment_attempt(task_id,participant_id,attempt_no,status,total_score,started_at,created_at,updated_at) SELECT #{taskId},#{participantId},#{attemptNumber}, 'IN_PROGRESS',p.total_score,CURRENT_TIMESTAMP(3),CURRENT_TIMESTAMP(3),CURRENT_TIMESTAMP(3) FROM test_paper p JOIN assessment_task a ON a.paper_id=p.id WHERE a.id=#{sourceTaskId}
+  </insert>
+  <select id="findAttemptStartedAt" resultType="java.lang.Object">
+    SELECT started_at FROM assessment_attempt WHERE id=#{attemptId}
+  </select>
+  <update id="updateParticipantAttemptCount">
+    UPDATE assessment_participant SET attempt_count=#{attemptCount},status='IN_PROGRESS',updated_at=CURRENT_TIMESTAMP(3) WHERE id=#{participantId}
+  </update>
+  <select id="findStartedAttemptAnswers" resultType="java.util.LinkedHashMap">
+    SELECT question_id,answer_text FROM assessment_answer WHERE attempt_id=#{attemptId}
+  </select>
+  <select id="findEligibilityParticipant" resultType="java.util.LinkedHashMap">
+    SELECT id,attempt_count FROM assessment_participant WHERE task_id=#{taskId} AND candidate_name=#{candidateName} AND phone=#{phone} ORDER BY id DESC LIMIT 1
+  </select>
+  <select id="findAnyActiveAttempt" resultType="java.util.LinkedHashMap">
+    SELECT id FROM assessment_attempt WHERE task_id=#{taskId} AND participant_id=#{participantId} AND status='IN_PROGRESS' LIMIT 1
+  </select>
+  <select id="findCandidateActiveAttempt" resultType="java.util.LinkedHashMap">
+    SELECT aa.id attempt_id,aa.started_at FROM assessment_attempt aa JOIN assessment_participant ap ON ap.id=aa.participant_id WHERE aa.task_id=#{taskId} AND ap.candidate_name=#{candidateName} AND ap.phone=#{phone} AND aa.status='IN_PROGRESS' ORDER BY aa.id DESC LIMIT 1
+  </select>
+  <select id="findProgressAnswers" resultType="java.util.LinkedHashMap">
+    SELECT question_id,answer_text FROM assessment_answer WHERE attempt_id=#{attemptId}
+  </select>
+  <select id="findQuestionForAnswer" resultType="java.util.LinkedHashMap">
+    SELECT q.question_type,q.answer_text,aq.score FROM assessment_attempt_question aq JOIN question_item q ON q.id=aq.question_id WHERE aq.attempt_id=#{attemptId} AND aq.question_id=#{questionId}
+  </select>
+  <insert id="upsertAnswer">
+    INSERT INTO assessment_answer(attempt_id,question_id,answer_text,correct_answer,is_correct,score,answered_at) VALUES(#{attemptId},#{questionId},#{answer},#{correctAnswer},#{correct},#{score},CURRENT_TIMESTAMP(3)) ON DUPLICATE KEY UPDATE answer_text=VALUES(answer_text),correct_answer=VALUES(correct_answer),is_correct=VALUES(is_correct),score=VALUES(score),answered_at=CURRENT_TIMESTAMP(3)
+  </insert>
+  <select id="findAttemptForSubmission" resultType="java.util.LinkedHashMap">
+    SELECT a.task_id,a.participant_id,a.attempt_no,t.paper_id,t.allow_retake allowRetake,t.max_attempts maxAttempts,p.total_score,p.pass_score FROM assessment_attempt a JOIN assessment_task t ON t.id=a.task_id JOIN test_paper p ON p.id=t.paper_id WHERE a.id=#{attemptId}
+  </select>
+  <select id="countAttemptQuestions" resultType="java.lang.Integer">
+    SELECT COUNT(*) FROM assessment_attempt_question WHERE attempt_id=#{attemptId}
+  </select>
+  <select id="countAnsweredQuestions" resultType="java.lang.Integer">
+    SELECT COUNT(DISTINCT question_id) FROM assessment_answer WHERE attempt_id=#{attemptId} AND answer_text IS NOT NULL AND TRIM(answer_text)&lt;&gt;''
+  </select>
+  <select id="sumAnswerScores" resultType="java.math.BigDecimal">
+    SELECT COALESCE(SUM(score),0) FROM assessment_answer WHERE attempt_id=#{attemptId}
+  </select>
+  <update id="submitAttempt">
+    UPDATE assessment_attempt SET status='SUBMITTED',score=#{score},passed=#{passed},submitted_at=CURRENT_TIMESTAMP(3),updated_at=CURRENT_TIMESTAMP(3) WHERE id=#{attemptId}
+  </update>
+  <select id="findCandidateRecords" resultType="java.util.LinkedHashMap">
+    SELECT t.name title,a.score,a.total_score totalScore,a.passed,a.submitted_at submittedAt FROM assessment_attempt a JOIN assessment_participant p ON p.id=a.participant_id JOIN assessment_task t ON t.id=a.task_id WHERE a.task_id=#{taskId} AND p.phone=#{phone} AND a.status='SUBMITTED' ORDER BY a.id DESC
+  </select>
+  <select id="findAttemptResult" resultType="java.util.LinkedHashMap">
+    SELECT a.id attemptId,a.task_id taskId,a.attempt_no attemptNo,a.status,a.score,a.total_score totalScore,p.pass_score passScore,a.passed,a.started_at startedAt,a.submitted_at submittedAt,ap.candidate_name candidateName,ap.phone,t.allow_retake allowRetake,t.max_attempts maxAttempts,t.show_result_immediately reviewEnabled FROM assessment_attempt a JOIN assessment_task t ON t.id=a.task_id JOIN test_paper p ON p.id=t.paper_id JOIN assessment_participant ap ON ap.id=a.participant_id WHERE a.id=#{attemptId}
+  </select>
+  <select id="findResultAnswers" resultType="java.util.LinkedHashMap">
+    SELECT question_id questionId,answer_text answerText,is_correct isCorrect,score FROM assessment_answer WHERE attempt_id=#{attemptId} ORDER BY question_id
+  </select>
+  <select id="findTaskDetails" resultType="java.util.LinkedHashMap">
+    SELECT a.id,a.name title,p.name subtitle,p.id paperId,p.mode paperMode,CASE WHEN p.mode='RANDOM' THEN COALESCE((SELECT SUM(r.single_count+r.multiple_count+r.true_false_count) FROM test_paper_random_bank r WHERE r.paper_id=p.id),0) ELSE (SELECT COUNT(*) FROM test_paper_question pq WHERE pq.paper_id=p.id) END questionCount,a.duration_minutes duration,p.total_score totalScore,p.pass_score passScore,a.allow_retake allowRetake,a.max_attempts maxAttempts,a.start_at startAt,a.end_at endAt,CASE WHEN a.end_at&lt;=CURRENT_TIMESTAMP(3) THEN 'ENDED' ELSE a.status END taskStatus,a.show_result_immediately reviewEnabled FROM assessment_task a JOIN test_paper p ON p.id=a.paper_id WHERE a.id=#{taskId}
+  </select>
+  <select id="findQuestions" resultType="java.util.LinkedHashMap">
+    <choose><when test="paperQuestions">SELECT q.id,q.question_type,q.stem,q.answer_text,q.analysis,pq.score FROM assessment_task a JOIN test_paper_question pq ON pq.paper_id=a.paper_id JOIN question_item q ON q.id=pq.question_id WHERE a.id=#{sourceId} ORDER BY pq.sort_no,pq.id</when><otherwise>SELECT q.id,q.question_type,q.stem,q.answer_text,q.analysis,aq.score FROM assessment_attempt_question aq JOIN question_item q ON q.id=aq.question_id WHERE aq.attempt_id=#{sourceId} ORDER BY aq.sort_no,aq.id</otherwise></choose>
+  </select>
+  <select id="countSnapshotQuestions" resultType="java.lang.Integer">
+    SELECT COUNT(*) FROM assessment_attempt_question WHERE attempt_id=#{attemptId}
+  </select>
+  <select id="findTaskPaper" resultType="java.lang.Long">
+    SELECT paper_id FROM assessment_task WHERE id=#{taskId}
+  </select>
+  <insert id="snapshotFixedQuestions">
+    INSERT INTO assessment_attempt_question(attempt_id,question_id,score,sort_no) SELECT #{attemptId},question_id,score,sort_no FROM test_paper_question WHERE paper_id=#{paperId} ORDER BY sort_no,id
+  </insert>
+  <select id="findRandomBankConfig" resultType="java.util.LinkedHashMap">
+    SELECT bank_id,single_count,single_score,multiple_count,multiple_score,true_false_count,true_false_score FROM test_paper_random_bank WHERE paper_id=#{paperId} ORDER BY id
+  </select>
+  <select id="findEnabledQuestionIds" resultType="java.util.LinkedHashMap">
+    SELECT id FROM question_item WHERE bank_id=#{bankId} AND question_type=#{questionType} AND status='ENABLED'
+  </select>
+  <insert id="insertSnapshotQuestion">
+    INSERT INTO assessment_attempt_question(attempt_id,question_id,score,sort_no) VALUES(#{attemptId},#{questionId},#{score},#{sortOrder})
+  </insert>
+  <select id="findAttemptIdentity" resultType="java.util.LinkedHashMap">
+    SELECT p.task_id,p.candidate_name,p.phone FROM assessment_participant p JOIN assessment_attempt a ON a.participant_id=p.id WHERE a.id=#{attemptId}
+  </select>
+  <select id="lockAttempt" resultType="java.util.LinkedHashMap">
+    SELECT a.id,a.status,a.started_at startedAt,t.duration_minutes duration,t.status taskStatus,t.start_at startAt,t.end_at endAt FROM assessment_attempt a JOIN assessment_task t ON t.id=a.task_id WHERE a.id=#{attemptId} FOR UPDATE
+  </select>
+</mapper>
