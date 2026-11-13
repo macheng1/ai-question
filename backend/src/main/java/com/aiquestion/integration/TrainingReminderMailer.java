@@ -74,22 +74,24 @@ public class TrainingReminderMailer {
     var message = new SimpleMailMessage();
     message.setFrom(from);
     message.setTo(email);
-    message.setSubject("培训待办提醒：" + title.replaceAll("[\\r\\n]", " "));
+    message.setSubject("【e-learning】培训逾期提醒：" + title.replaceAll("[\\r\\n]", " "));
     message.setText(
         name
-            + "，你好：\n\n培训："
+            + "，您好：\n\n您参加的以下培训仍有逾期未完成事项，请查看详情，并联系培训管理员确认后续安排。\n\n培训名称："
             + title
-            + "\n待完成事项："
+            + "\n逾期事项："
             + String.join("、", reasons)
             + "\n培训结束时间："
             + trainingEnd
             + "\n考试结束时间："
             + examEnd
-            + "\n\n培训结束后可回看材料，不再记录学习进度或参加考试。如需重新学习或考试，请联系管理员安排新培训。"
-            + "\n请登录员工账号查看："
+            + "\n\n查看培训详情与回看材料：\n"
             + publicUrl.replaceAll("/+$", "")
             + "/training/"
-            + trainingId);
+            + trainingId
+            + "\n\n培训结束后可回看材料，不再记录学习进度或参加考试。如需继续学习或考试，请联系培训管理员。"
+            + "\n\n如您已完成相关事项但状态未更新，请联系培训管理员核实。"
+            + "\n\ne-learning 企业培训与考试平台");
     senders.getObject().send(message);
   }
 }

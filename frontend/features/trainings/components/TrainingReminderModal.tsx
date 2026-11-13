@@ -26,6 +26,8 @@ export function TrainingReminderModal({ training, onClose }: { training: Trainin
     return () => { active = false; };
   }, [training.id, reload]);
 
+  const hasExam = training.assessmentId != null;
+
   const send = async () => {
     if (!preview || sending || !selected.length) return;
     setSending(true); setError("");
@@ -47,16 +49,16 @@ export function TrainingReminderModal({ training, onClose }: { training: Trainin
       <Banner type="info" closeIcon={null} description={<div className="space-y-2">
         <strong>逾期未完成规则</strong>
         <p>培训：超过培训结束时间，仍未完成全部材料学习（无材料培训需确认完成）。</p>
-        <p>考试：超过关联考试结束时间，尚未参加、未交卷或最后一次成绩未通过。</p>
-        <p>培训与考试使用相同起止时间，未开始学习的员工也包含在内；满意度评估不计入。同一员工的多个原因合并为一封邮件。</p>
-        <p>结束后可回看材料，不再记录学习进度或参加考试；需要重新学习或考试，请联系管理员安排新培训。</p>
+        {hasExam && <p>考试：超过关联考试结束时间，尚未参加、未交卷或最后一次成绩未通过。</p>}
+        <p>{hasExam && "培训与考试使用相同起止时间。"}未开始学习的员工也包含在内；满意度评估不计入。同一员工的多个原因合并为一封邮件。</p>
+        <p>结束后可回看材料，不再记录学习进度{hasExam && "或参加考试"}；如需继续学习{hasExam && "或考试"}，请联系培训管理员。</p>
       </div>} />
-      {preview && <Space wrap><Typography.Text>培训结束：{dateText(preview.trainingEndAt)}</Typography.Text><Typography.Text>考试结束：{dateText(preview.examEndAt)}</Typography.Text></Space>}
+      {preview && <Space wrap><Typography.Text>培训结束：{dateText(preview.trainingEndAt)}</Typography.Text>{hasExam && <Typography.Text>考试结束：{dateText(preview.examEndAt)}</Typography.Text>}</Space>}
       {preview && !preview.trainingEndAt && <Banner type="warning" description="历史培训未设置结束时间，无法判定培训逾期，请联系管理员核查。" />}
-      {preview && !preview.mailConfigured && <Banner type="warning" description="邮件服务未配置完整，请配置发件邮箱和平台访问地址后发送。" />}
+      {preview && !preview.mailConfigured && <Banner type="warning" description="当前后端未读取到完整的邮件配置，请确认已加载发件邮箱和平台访问地址配置，并重启后端后刷新名单。" />}
       {error && <Banner type="danger" description={error} />}
       <p className="text-sm text-slate-500">每次最多选择 50 人。缺少有效邮箱的员工不可选；发送前再次检查完成情况。刷新名单后再次发送会产生新的提醒。</p>
-      <Table<ReminderRecipient> rowKey="employeeId" loading={loading} dataSource={preview?.recipients || []} pagination={{ pageSize: 10 }} scroll={{ x: 880 }} empty="当前没有逾期未完成的员工" rowSelection={{ selectedRowKeys: selected, onChange: keys => setSelected((keys || []).map(Number)), getCheckboxProps: row => ({ disabled: sending || !!results || !row.selectable }) }} columns={[
+      <Table<ReminderRecipient> rowKey="employeeId" loading={loading} dataSource={preview?.recipients || []} pagination={{ pageSize: 10 }} scroll={{ x: 880 }} empty="当前没有逾期未完成的学员，仅在结束时间后列出未完成人员" rowSelection={{ selectedRowKeys: selected, onChange: keys => setSelected((keys || []).map(Number)), getCheckboxProps: row => ({ disabled: sending || !!results || !row.selectable }) }} columns={[
         { title: "姓名", dataIndex: "name", width: 100 },
         { title: "部门", dataIndex: "department", width: 120 },
         { title: "邮箱", width: 220, render: (_, row) => <span className="break-all">{row.email || "未填写"}{!row.selectable && <Typography.Text type="danger">（邮箱无效）</Typography.Text>}</span> },
