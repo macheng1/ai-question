@@ -64,7 +64,7 @@ public class AuthService {
         if (com.aiquestion.repository.RepositoryRows.one(persistence.countName(name)) > 0) {
             throw new BusinessException(ErrorCode.USERNAME_ALREADY_EXISTS);
         }
-        persistence.insertAdministrator(name, command.unitName(), command.province(), command.city(), command.district(), command.address(), command.phone(), encoder.encode(command.password()), "CANDIDATE", "ACTIVE", LocalDateTime.now(), LocalDateTime.now());
+        persistence.insertAdministrator(name, command.unitName(), command.province(), command.city(), command.district(), command.address(), command.phone(), encoder.encode(command.password()), "CANDIDATE", "ACTIVE", com.aiquestion.common.BusinessTime.now(), com.aiquestion.common.BusinessTime.now());
         redis.delete("auth:captcha:" + command.phone());
         Long id = com.aiquestion.repository.RepositoryRows.one(persistence.findAdministratorIdByPhone(command.phone()));
         return ApiResponse.ok(new AuthResult(id, name, command.phone(), tokens.issue(String.valueOf(id))));
@@ -94,7 +94,7 @@ public class AuthService {
         if (com.aiquestion.repository.RepositoryRows.one(persistence.countConflictingNames(name, userId)) > 0) {
             throw new BusinessException(ErrorCode.USERNAME_ALREADY_EXISTS);
         }
-        persistence.updateAdministratorProfile(name, unitName, blankToNull(command.address()), LocalDateTime.now(), userId);
+        persistence.updateAdministratorProfile(name, unitName, blankToNull(command.address()), com.aiquestion.common.BusinessTime.now(), userId);
         return me(authorization);
     }
 
@@ -110,7 +110,7 @@ public class AuthService {
         if (passwordHash == null || !encoder.matches(command.currentPassword(), passwordHash)) {
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
         }
-        persistence.updateAdministratorPassword(encoder.encode(command.newPassword()), LocalDateTime.now(), userId);
+        persistence.updateAdministratorPassword(encoder.encode(command.newPassword()), com.aiquestion.common.BusinessTime.now(), userId);
         return ApiResponse.ok(null);
     }
 

@@ -35,6 +35,24 @@ public class TrainingAudienceService {
 
     @Transactional
     public void save(long id, long user, Scope scope) {
+        save(id, user, scope, false);
+    }
+
+    /** Saving required training fills missing learners without replacing existing assignments. */
+    @Transactional
+    public void appendMissingRequiredLearners(long id, long user) {
+        lockAllocationOwner(user);
+        requireOwner(id, user);
+        var course = com.aiquestion.repository.RepositoryRows.one(persistence.lockTraining(id));
+        var endAt = com.aiquestion.repository.RepositoryRows.localDateTime(course.get("end_at"));
+        if (!"REQUIRED".equals(course.get("requirement_type"))
+                || (endAt != null && !endAt.isAfter(com.aiquestion.common.BusinessTime.now()))) return;
+        var scope = get(id, user);
+        if (!Set.of("ALL", "DEPARTMENT").contains(scope.type())) return;
+        save(id, user, scope, true);
+    }
+
+    private void save(long id, long user, Scope scope, boolean appendMissing) {
         lockAllocationOwner(user);
         requireOwner(id, user);
         var course = com.aiquestion.repository.RepositoryRows.one(persistence.lockTraining(id));
@@ -48,14 +66,16 @@ public class TrainingAudienceService {
         var previousAssignments = persistence.findAssignments(id);
         var previousIds = new HashSet<Long>();
         for (var previous : previousAssignments) previousIds.add(((Number) previous.get("employee_id")).longValue());
-        boolean notStarted = course.get("start_at") instanceof java.sql.Timestamp start
-            && start.toLocalDateTime().isAfter(java.time.LocalDateTime.now());
-        boolean appendOnly = (!notStarted && !previousAssignments.isEmpty())
+        var now = com.aiquestion.common.BusinessTime.now();
+        var startAt = com.aiquestion.repository.RepositoryRows.localDateTime(course.get("start_at"));
+        boolean notStarted = startAt != null && startAt.isAfter(now);
+        boolean appendOnly = appendMissing || (!notStarted && !previousAssignments.isEmpty())
             || com.aiquestion.repository.RepositoryRows.one(persistence.countLearningSessions(id)) > 0
             || (course.get("assessment_id") instanceof Number && com.aiquestion.repository.RepositoryRows.one(persistence.countExamParticipants(id)) > 0);
         if (appendOnly) {
-            if (unchanged) return;
-            if (course.get("end_at") instanceof java.sql.Timestamp end && !end.toLocalDateTime().isAfter(java.time.LocalDateTime.now()))
+            if (unchanged && !appendMissing) return;
+            var endAt = com.aiquestion.repository.RepositoryRows.localDateTime(course.get("end_at"));
+            if (endAt != null && !endAt.isAfter(now))
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "培训已结束，不能追加学员");
             if (!Objects.equals(existing.type(), scope.type()) || !requestedIds.containsAll(existing.ids()))
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "培训已开始或已有学习、考试记录，只能追加，不能移除原有部门或学员，也不能切换学习范围类型");
@@ -91,9 +111,11 @@ public class TrainingAudienceService {
         var assignedTimes = new HashMap<Long, Object>();
         for (var previous : previousAssignments) assignedTimes.put(((Number) previous.get("employee_id")).longValue(), previous.get("assigned_at"));
         if (!appendOnly) persistence.deleteAudience(id);
-        persistence.deleteScopeTargets(id);
-        persistence.updateAudienceType(scope.type(), id);
-        for (long target : ids) persistence.insertScopeTarget(id, target);
+        if (!appendMissing) {
+            persistence.deleteScopeTargets(id);
+            persistence.updateAudienceType(scope.type(), id);
+            for (long target : ids) persistence.insertScopeTarget(id, target);
+        }
         for (var e : selected) persistence.insertAssignment(id, ((Number) e.get("id")).longValue(), (String) e.get("name"), (String) e.get("phone"), ((Number) e.get("department_id")).longValue(), (String) e.get("department_name"), (java.sql.Timestamp) assignedTimes.get(((Number) e.get("id")).longValue()));
     }
 

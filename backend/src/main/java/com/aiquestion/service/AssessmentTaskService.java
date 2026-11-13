@@ -128,7 +128,7 @@ public class AssessmentTaskService {
   }
 
   private String statusForTime(LocalDateTime start, LocalDateTime end) {
-    LocalDateTime now = LocalDateTime.now();
+    LocalDateTime now = com.aiquestion.common.BusinessTime.now();
     if (!now.isBefore(end)) {
       return "ENDED";
     }

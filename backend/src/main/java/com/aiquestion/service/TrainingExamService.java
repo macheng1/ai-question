@@ -103,7 +103,7 @@ public class TrainingExamService {
         task.setShuffleQuestions(s.shuffleQuestions()); task.setShuffleOptions(s.shuffleOptions());
         task.setShowResultImmediately(s.showResultImmediately());
         if (!"DISABLED".equals(task.getStatus())) {
-            var now = LocalDateTime.now();
+            var now = com.aiquestion.common.BusinessTime.now();
             task.setStatus(!now.isBefore(s.endAt()) ? "ENDED" : now.isBefore(s.startAt()) ? "PUBLISHED" : "STARTED");
         }
         if (creating) tasks.insert(task); else tasks.update(task);

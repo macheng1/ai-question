@@ -13,6 +13,11 @@ public final class RepositoryRows {
     if (rows.size() != 1) throw new IncorrectResultSizeDataAccessException(1, rows.size());
     return rows.get(0);
   }
+  /** MySQL DATETIME maps to LocalDateTime; TIMESTAMP and legacy JDBC rows use Timestamp. */
+  public static java.time.LocalDateTime localDateTime(Object value) {
+    if (value instanceof java.sql.Timestamp timestamp) return java.time.LocalDateTime.ofInstant(timestamp.toInstant(), com.aiquestion.common.BusinessTime.ZONE);
+    return (java.time.LocalDateTime) value;
+  }
   public static Long nullableLong(Object value) {
     return value == null ? null : ((Number) value).longValue();
   }

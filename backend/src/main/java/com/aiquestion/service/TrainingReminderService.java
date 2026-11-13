@@ -41,7 +41,7 @@ public class TrainingReminderService {
 
     static LocalDateTime time(Object value) {
         if (value instanceof Timestamp t)
-            return t.toLocalDateTime();
+            return com.aiquestion.repository.RepositoryRows.localDateTime(t);
         if (value instanceof LocalDateTime t)
             return t;
         return null;
@@ -64,7 +64,7 @@ public class TrainingReminderService {
             }
         }
         var recipients = new ArrayList<Recipient>();
-        var now = LocalDateTime.now();
+        var now = com.aiquestion.common.BusinessTime.now();
         // 从已分配名单开始查询，不能仅查学习日志，否则完全未开始的员工会漏掉。
         for (var row : persistence.findReminderCandidates(id, owner)) {
             long employee = ((Number) row.get("id")).longValue();

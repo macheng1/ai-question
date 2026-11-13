@@ -7,6 +7,8 @@ import com.aiquestion.repository.TrainingAudienceRepository;
 import java.util.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class TrainingAudienceEligibilityTest {
   private final TrainingAudienceRepository repository = mock(TrainingAudienceRepository.class);
@@ -50,9 +52,10 @@ class TrainingAudienceEligibilityTest {
     assertRosterUntouched();
   }
 
-  @Test void futureTrainingCanReplaceAssignedPeopleAndChangeScope() {
+  @ParameterizedTest @ValueSource(booleans = {true, false})
+  void futureTrainingCanReplaceAssignedPeopleAndChangeScope(boolean timestamp) {
     when(repository.lockTraining(1L)).thenReturn(List.of(Map.of("assessment_id", 9L,
-        "start_at", java.sql.Timestamp.valueOf(java.time.LocalDateTime.now().plusDays(1)))));
+        "start_at", date(java.time.LocalDateTime.now().plusDays(1), timestamp))));
     when(repository.findScopeTargetIds(1L)).thenReturn(List.of(3L));
     when(repository.findAssignments(1L)).thenReturn(List.of(Map.of("employee_id", 3L)));
     service.save(1L, 2L, new TrainingAudienceService.Scope("DEPARTMENT", List.of(5L)));
@@ -61,14 +64,70 @@ class TrainingAudienceEligibilityTest {
     verify(repository).insertAssignment(1L, 4L, "乙", "13900000002", 5L, "研发部", null);
   }
 
-  @Test void startedTrainingCannotRemoveAssignedPeople() {
+  @ParameterizedTest @ValueSource(booleans = {true, false})
+  void startedTrainingCannotRemoveAssignedPeople(boolean timestamp) {
     when(repository.lockTraining(1L)).thenReturn(List.of(Map.of("assessment_id", 9L,
-        "start_at", java.sql.Timestamp.valueOf(java.time.LocalDateTime.now().minusHours(1)))));
+        "start_at", date(java.time.LocalDateTime.now().minusHours(1), timestamp))));
     when(repository.findScopeTargetIds(1L)).thenReturn(List.of(3L));
     when(repository.findAssignments(1L)).thenReturn(List.of(Map.of("employee_id", 3L)));
     assertThrows(BusinessException.class, () -> service.save(1L, 2L,
         new TrainingAudienceService.Scope("USERS", List.of(4L))));
     assertRosterUntouched();
+  }
+
+  @ParameterizedTest @ValueSource(booleans = {true, false})
+  void startedTrainingCanAppendPeopleWithoutReplacingExistingAssignments(boolean timestamp) {
+    when(repository.lockTraining(1L)).thenReturn(List.of(Map.of("assessment_id", 9L,
+        "start_at", date(java.time.LocalDateTime.now().minusDays(1), timestamp),
+        "end_at", date(java.time.LocalDateTime.now().plusDays(1), timestamp))));
+    when(repository.findScopeTargetIds(1L)).thenReturn(List.of(3L));
+    when(repository.findAssignments(1L)).thenReturn(List.of(Map.of("employee_id", 3L)));
+    service.save(1L, 2L, new TrainingAudienceService.Scope("USERS", List.of(3L, 4L)));
+    verify(repository, never()).deleteAudience(anyLong());
+    verify(repository).insertAssignment(1L, 4L, "乙", "13900000002", 5L, "研发部", null);
+    verify(repository, never()).insertAssignment(eq(1L), eq(3L), any(), any(), any(), any(), any());
+  }
+
+  @ParameterizedTest @ValueSource(booleans = {true, false})
+  void endedTrainingCannotAppendPeople(boolean timestamp) {
+    when(repository.lockTraining(1L)).thenReturn(List.of(Map.of("assessment_id", 9L,
+        "start_at", date(java.time.LocalDateTime.now().minusDays(2), timestamp),
+        "end_at", date(java.time.LocalDateTime.now().minusDays(1), timestamp))));
+    when(repository.findScopeTargetIds(1L)).thenReturn(List.of(3L));
+    when(repository.findAssignments(1L)).thenReturn(List.of(Map.of("employee_id", 3L)));
+    var error = assertThrows(BusinessException.class, () -> service.save(1L, 2L,
+        new TrainingAudienceService.Scope("USERS", List.of(3L, 4L))));
+    assertEquals("培训已结束，不能追加学员", error.getMessage());
+    assertRosterUntouched();
+  }
+
+  @ParameterizedTest @ValueSource(booleans = {true, false})
+  void futureTrainingWithLearningRecordsCannotReplaceScope(boolean timestamp) {
+    protectFutureTraining(timestamp);
+    when(repository.countLearningSessions(1L)).thenReturn(List.of(1));
+    assertThrows(BusinessException.class, () -> service.save(1L, 2L,
+        new TrainingAudienceService.Scope("DEPARTMENT", List.of(5L))));
+    assertRosterUntouched();
+  }
+
+  @ParameterizedTest @ValueSource(booleans = {true, false})
+  void futureTrainingWithExamRecordsCannotRemovePeople(boolean timestamp) {
+    protectFutureTraining(timestamp);
+    when(repository.countExamParticipants(1L)).thenReturn(List.of(1));
+    assertThrows(BusinessException.class, () -> service.save(1L, 2L,
+        new TrainingAudienceService.Scope("USERS", List.of(4L))));
+    assertRosterUntouched();
+  }
+
+  private void protectFutureTraining(boolean timestamp) {
+    when(repository.lockTraining(1L)).thenReturn(List.of(Map.of("assessment_id", 9L,
+        "start_at", date(java.time.LocalDateTime.now().plusDays(1), timestamp))));
+    when(repository.findScopeTargetIds(1L)).thenReturn(List.of(3L));
+    when(repository.findAssignments(1L)).thenReturn(List.of(Map.of("employee_id", 3L)));
+  }
+
+  private static Object date(java.time.LocalDateTime time, boolean timestamp) {
+    return timestamp ? java.sql.Timestamp.valueOf(time) : time;
   }
 
   private void assertRosterUntouched() {

@@ -39,10 +39,15 @@ function EmptyChart() {
 }
 
 export function StatisticsCharts({ data, includeRetake = false }: ChartProps) {
-  const scoreValues = data.scoreDistribution.map((item) => ({
-    label: item.label,
-    count: Number(item.count || 0),
+  const scoreRanges = ["0-59", "60-69", "70-79", "80-89", "90-100"];
+  const scoreLabels = ["0–<60%", "60–<70%", "70–<80%", "80–<90%", "90–100%"];
+  const scoreValues = scoreRanges.map((range, index) => ({
+    label: scoreLabels[index],
+    count: Number(data.scoreDistribution.find((item) => item.label === range)?.count || 0),
   }));
+  data.scoreDistribution.filter((item) => !scoreRanges.includes(item.label)).forEach((item) => {
+    scoreValues.push({ label: item.label, count: Number(item.count || 0) });
+  });
   const passValues = data.passDistribution.map((item) => ({
     label: item.label,
     count: Number(item.count || 0),
@@ -58,8 +63,8 @@ export function StatisticsCharts({ data, includeRetake = false }: ChartProps) {
 
   return (
     <div className="grid grid-cols-2 gap-4 ">
-      <div className="min-w-0 col-span-2 lg:col-span-1"><ChartCard title="成绩分布" description={includeRetake ? "按得分占满分的百分比分段，统计所有已交卷次数" : "按得分占满分的百分比分段，每人取最后一次已交卷成绩"}>
-        {scoreValues.length ? (
+      <div className="min-w-0 col-span-2 lg:col-span-1"><ChartCard title="成绩分布" description={includeRetake ? "按得分占满分的百分比分段，统计所有已交卷次数；柱高表示次数" : "按得分占满分的百分比分段，每人取最后一次已交卷成绩；柱高表示人数"}>
+        {data.scoreDistribution.length ? (
           <VChart
             spec={{
               type: "bar",
@@ -67,10 +72,11 @@ export function StatisticsCharts({ data, includeRetake = false }: ChartProps) {
               xField: "label",
               yField: "count",
               color: ["#2563eb"],
+              barMaxWidth: 56,
               bar: { style: { cornerRadius: 6 } },
               axes: [
                 { orient: "bottom", title: { visible: false } },
-                { orient: "left", title: { text: includeRetake ? "次数" : "人数" } },
+                { orient: "left", min: 0, tick: { noDecimals: true }, title: { visible: true, text: includeRetake ? "次数" : "人数" } },
               ],
               label: { visible: true },
               legends: { visible: false },
@@ -92,7 +98,7 @@ export function StatisticsCharts({ data, includeRetake = false }: ChartProps) {
               valueField: "count",
               outerRadius: 0.82,
               innerRadius: 0.58,
-              color: ["#22c55e", "#ef4444"],
+              color: { type: "ordinal", domain: ["已通过", "未通过"], range: ["#22c55e", "#ef4444"] },
               legends: { visible: true, orient: "bottom" },
               label: { visible: true },
             }}
@@ -103,7 +109,7 @@ export function StatisticsCharts({ data, includeRetake = false }: ChartProps) {
         )}
       </ChartCard></div>
 
-      <div className="min-w-0 col-span-2 lg:col-span-1"><ChartCard title="交卷时间分布" description="考生交卷时间趋势">
+      <div className="min-w-0 col-span-2 lg:col-span-1"><ChartCard title="交卷时间分布" description={includeRetake ? "按交卷时间统计全部已交卷次数" : "按每人最后一次已交卷时间统计人数"}>
         {trendValues.length ? (
           <VChart
             spec={{
@@ -115,7 +121,7 @@ export function StatisticsCharts({ data, includeRetake = false }: ChartProps) {
               point: { visible: true, style: { fill: "#38bdf8" } },
               axes: [
                 { orient: "bottom", title: { visible: false } },
-                { orient: "left", title: { text: includeRetake ? "交卷次数" : "交卷人数" } },
+                { orient: "left", min: 0, tick: { noDecimals: true }, title: { visible: true, text: includeRetake ? "交卷次数" : "交卷人数" } },
               ],
               legends: { visible: false },
             }}
@@ -135,12 +141,13 @@ export function StatisticsCharts({ data, includeRetake = false }: ChartProps) {
               xField: "label",
               yField: "value",
               color: ["#38bdf8"],
+              barMaxWidth: 56,
               bar: { style: { cornerRadius: 6 } },
               axes: [
                 { orient: "bottom", title: { visible: false } },
-                { orient: "left", title: { text: "正确率（%）" } },
+                { orient: "left", min: 0, max: 100, label: { formatter: "{value}%" }, title: { visible: true, text: "正确率" } },
               ],
-              label: { visible: true },
+              label: { visible: true, formatMethod: (text) => `${text}%` },
               legends: { visible: false },
             }}
             options={{ autoFit: true }}

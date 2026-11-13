@@ -19,6 +19,7 @@ WORKDIR /app
 
 # Runtime default; override with -e STORAGE_PROVIDER=aliyun when needed.
 ENV STORAGE_PROVIDER=eds
+ENV TZ=Asia/Shanghai
 
 # Do not run the application as root inside the container.
 RUN groupadd --system --gid 10001 app && \
@@ -30,4 +31,4 @@ EXPOSE 8080
 
 # Respect the container memory limit and fail fast on an OOM instead of
 # leaving a partially healthy Java process running.
-ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-XX:+ExitOnOutOfMemoryError", "-Djava.security.egd=file:/dev/./urandom", "-jar", "/app/app.jar"]
+ENTRYPOINT ["java", "-Duser.timezone=Asia/Shanghai", "-XX:MaxRAMPercentage=75", "-XX:+ExitOnOutOfMemoryError", "-Djava.security.egd=file:/dev/./urandom", "-jar", "/app/app.jar"]

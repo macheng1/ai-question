@@ -4,6 +4,7 @@ services:
     container_name: aiquestion-api
     restart: unless-stopped
     environment:
+      TZ: Asia/Shanghai
       DB_HOST: host.docker.internal
       DB_PORT: ${DB_PORT:-3306}
       DB_NAME: ${DB_NAME:-aiquestion}

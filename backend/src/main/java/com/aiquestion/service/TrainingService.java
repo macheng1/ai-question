@@ -98,10 +98,10 @@ public class TrainingService {
         data.put("requirementType", row.get("requirement_type"));
         data.put("assessmentId", row.get("assessment_id"));
         data.put("examStatus", row.get("exam_status"));
-        data.put("examEndAt", row.get("exam_end_at") instanceof java.sql.Timestamp time ? time.toLocalDateTime() : row.get("exam_end_at"));
+        data.put("examEndAt", com.aiquestion.repository.RepositoryRows.localDateTime(row.get("exam_end_at")));
         data.put("examShared", row.get("exam_reference_count") instanceof Number n && n.intValue() > 1);
-        data.put("startAt", row.get("start_at") instanceof java.sql.Timestamp time ? time.toLocalDateTime() : row.get("start_at"));
-        data.put("endAt", row.get("end_at") instanceof java.sql.Timestamp time ? time.toLocalDateTime() : row.get("end_at"));
+        data.put("startAt", com.aiquestion.repository.RepositoryRows.localDateTime(row.get("start_at")));
+        data.put("endAt", com.aiquestion.repository.RepositoryRows.localDateTime(row.get("end_at")));
         data.put("surveyEnabled", enabled(row));
         data.put("questions", questions(row));
         data.put("version", row.get("version"));
@@ -160,6 +160,7 @@ public class TrainingService {
         Long previousAssessment = null;
         Long copiedAssessment = null;
         boolean rebuildAudience = true;
+        boolean syncRequiredAudience = false;
         if (id != null) {
             var existing = row(id, false);
             owner(existing, user);
@@ -200,7 +201,10 @@ public class TrainingService {
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "已有反馈，不能修改题目；请新建培训");
             var scope = command.audience();
             var originalScope = trainingAudienceService.get(id, user);
-            if (old.get("end_at") instanceof java.sql.Timestamp end && !end.toLocalDateTime().isAfter(java.time.LocalDateTime.now())
+            var endAt = com.aiquestion.repository.RepositoryRows.localDateTime(old.get("end_at"));
+            syncRequiredAudience = "REQUIRED".equals(requirement)
+                && (endAt == null || endAt.isAfter(com.aiquestion.common.BusinessTime.now()));
+            if (endAt != null && !endAt.isAfter(com.aiquestion.common.BusinessTime.now())
                 && scope != null && (!Objects.equals(scope.type(), originalScope.type())
                     || scope.ids() == null || !new HashSet<>(scope.ids()).equals(new HashSet<>(originalScope.ids()))))
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "培训已结束，不能追加学员");
@@ -215,6 +219,7 @@ public class TrainingService {
         persistence.updateSettings(command.assessmentId(), category, requirement, purpose, command.endAt(), command.startAt(), id);
         if (rebuildAudience)
             trainingAudienceService.save(id, user, command.audience());
+        if (syncRequiredAudience) trainingAudienceService.appendMissingRequiredLearners(id, user);
         if (copiedAssessment != null) {
             persistence.clearCopiedAssessment(id);
             deleteCopiedAssessment(copiedAssessment, user);
@@ -233,9 +238,8 @@ public class TrainingService {
         var locked = row(id, true);
         if (!Objects.equals(task, assessmentId(locked)))
             throw new BusinessException(ErrorCode.BAD_REQUEST, "考试关联已变更，请刷新后重试");
-        Object start = locked.get("start_at");
-        java.time.LocalDateTime startAt = start instanceof java.sql.Timestamp timestamp ? timestamp.toLocalDateTime() : start instanceof java.time.LocalDateTime time ? time : null;
-        if (startAt != null && startAt.isAfter(java.time.LocalDateTime.now()))
+        var startAt = com.aiquestion.repository.RepositoryRows.localDateTime(locked.get("start_at"));
+        if (startAt != null && startAt.isAfter(com.aiquestion.common.BusinessTime.now()))
             throw new BusinessException(ErrorCode.BAD_REQUEST, "培训尚未开始，不能结束培训");
         if (task != null) exams.end(task, user);
         persistence.endTraining(id);
