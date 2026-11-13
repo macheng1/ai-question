@@ -5,6 +5,7 @@ import { Layout, Card, Typography } from "@douyinfe/semi-ui";
 import { IconArrowLeft, IconLock } from "@douyinfe/semi-icons";
 
 import { useEffect, useMemo, useState } from "react";
+import { formatQuestionOption, getQuestionDisplayOptions } from "@/lib/question-display";
 import { useParams } from "next/navigation";
 import "@douyinfe/semi-ui/react19-adapter";
 import { Button, Input, Select, Spin, Toast, InputNumber } from "@douyinfe/semi-ui";
@@ -15,11 +16,6 @@ import {
   getBankQuestions,
   type QuestionItem,
 } from "@/features/banks/management-api";
-import {
-  getFavoriteBankIds,
-  getPublicBankQuestions,
-  getQuestionBanks,
-} from "@/features/banks/api";
 import {
   addPaperQuestion,
   getPaper,
@@ -37,28 +33,11 @@ const typeLabel: Record<string, string> = {
   JUDGE: "判断",
 };
 
-/**
- * 组卷两侧统一使用同一份选项渲染数据。
- * 判断题的部分历史数据没有保存 options，这里补充默认的“正确/错误”选项，
- * 避免左侧题库列表和右侧已选列表出现空白。
- */
-const getDisplayOptions = (item: QuestionItem) => {
-  if (item.options?.length) return item.options;
-  if (item.questionType === "TRUE_FALSE" || item.questionType === "JUDGE") {
-    return [
-      { optionKey: "A", optionText: "正确" },
-      { optionKey: "B", optionText: "错误" },
-    ];
-  }
-  return [];
-};
-
 export default function ComposePaperPage() {
   const params = useParams<{ id: string }>();
   const paperId = Number(params.id);
   const [paper, setPaper] = useState<Paper | null>(null);
   const [banks, setBanks] = useState<{ id: number; name: string }[]>([]);
-  const [bankSource, setBankSource] = useState<"owned" | "favorite" | "public">("owned");
   const [bankId, setBankId] = useState<number>();
   const [questions, setQuestions] = useState<QuestionItem[]>([]);
   const [selected, setSelected] = useState<QuestionItem[]>([]);
@@ -88,19 +67,7 @@ export default function ComposePaperPage() {
     let cancelled = false;
     const loadBanks = async () => {
       try {
-        let records: { id: number; name: string }[] = [];
-        if (bankSource === "owned") {
-          records = (await getManagedBanks()).records;
-        } else {
-          const publicBanks = (await getQuestionBanks({ pageSize: 100 })).records;
-          if (bankSource === "public") {
-            records = publicBanks;
-          } else {
-            const favoriteIds = await getFavoriteBankIds();
-            const favoriteSet = new Set(favoriteIds);
-            records = publicBanks.filter((bank) => favoriteSet.has(bank.id));
-          }
-        }
+        const records = (await getManagedBanks()).records;
         if (!cancelled) {
           setBanks(records);
           setBankId(records[0]?.id);
@@ -117,7 +84,7 @@ export default function ComposePaperPage() {
     return () => {
       cancelled = true;
     };
-  }, [bankSource]);
+  }, []);
   useEffect(() => {
     let cancelled = false;
     if (!bankId) {
@@ -126,10 +93,7 @@ export default function ComposePaperPage() {
         cancelled = true;
       };
     }
-    const request = bankSource === "owned"
-      ? getBankQuestions(bankId)
-      : getPublicBankQuestions(bankId, { pageSize: 100 });
-    request
+    getBankQuestions(bankId)
       .then((data) => {
         if (!cancelled) setQuestions(data.records);
       })
@@ -139,7 +103,7 @@ export default function ComposePaperPage() {
     return () => {
       cancelled = true;
     };
-  }, [bankId, bankSource]);
+  }, [bankId]);
 
   const visibleQuestions = useMemo(
     () =>
@@ -150,17 +114,6 @@ export default function ComposePaperPage() {
       ),
     [questions, keyword, filter],
   );
-  /**
-   * 切换题库来源时清空旧题库状态，避免旧题库 ID 被带到新来源的接口中。
-   * 我的题库走管理接口；收藏/公开题库才走公开接口。
-   */
-  const changeBankSource = (source: "owned" | "favorite" | "public") => {
-    setBankSource(source);
-    setBanks([]);
-    setBankId(undefined);
-    setQuestions([]);
-    setKeyword("");
-  };
   const selectedIds = new Set(selected.map((item) => item.id));
   const locked = Boolean(paper?.hasAssessment);
   const score = selected.reduce(
@@ -329,26 +282,9 @@ export default function ComposePaperPage() {
           </div>
         </div>
         <div className="grid grid-cols-2 gap-4 mt-5">
-          <div className="min-w-0 col-span-2 lg:col-span-1"><Layout.Content className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-            <div className="flex flex-wrap gap-5 border-b border-slate-100 px-5 pt-4 text-sm font-semibold">
-              <Button theme="borderless"
-                className={`pb-3 ${bankSource === "owned" ? "border-b-2 border-blue-500 text-blue-500" : "text-slate-500"}`}
-                onClick={() => changeBankSource("owned")}
-              >
-                我的题库
-              </Button>
-              <Button theme="borderless"
-                className={`pb-3 ${bankSource === "favorite" ? "border-b-2 border-blue-500 text-blue-500" : "text-slate-500"}`}
-                onClick={() => changeBankSource("favorite")}
-              >
-                收藏的题库
-              </Button>
-              <Button theme="borderless"
-                className={`pb-3 ${bankSource === "public" ? "border-b-2 border-blue-500 text-blue-500" : "text-slate-500"}`}
-                onClick={() => changeBankSource("public")}
-              >
-                公开题库
-              </Button>
+          <div className="min-w-0 col-span-2 lg:col-span-1"><Layout.Content className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <div className="border-b border-slate-100 px-5 py-4 text-base font-semibold text-slate-800">
+              我的题库
             </div>
             <div className="flex flex-wrap gap-2 p-4">
               <Select
@@ -368,7 +304,7 @@ export default function ComposePaperPage() {
                 className="min-w-[180px] flex-1"
               />
             </div>
-            <div className="flex gap-2 border-b border-slate-100 px-4 pb-3">
+            <div className="flex flex-wrap gap-2 border-b border-slate-100 px-4 pb-3">
               <Button
                 theme={filter === "ALL" ? "solid" : "light"}
                 type="primary"
@@ -400,35 +336,36 @@ export default function ComposePaperPage() {
             </div>
             <div className="flex flex-col max-h-[720px] gap-2 overflow-y-auto bg-slate-50/40 p-2">
               {visibleQuestions.map((item, index) => (
-                <Button theme="borderless"
+                <button type="button"
+                  aria-pressed={selectedIds.has(item.id)}
                   key={item.id}
                   disabled={locked}
                   onClick={() => add(item)}
-                  className={`block w-full rounded-xl border-2 p-4 text-left transition-colors ${
+                  className={`block h-auto w-full shrink-0 whitespace-normal rounded-lg border p-4 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 ${
                     selectedIds.has(item.id)
                       ? "border-[#54d0ca] bg-[#e9fbfa]"
                       : "border-slate-100 bg-white"
                   } ${locked ? "cursor-not-allowed opacity-60" : "hover:bg-slate-50"}`}
                 >
-                  <div className="flex items-center justify-between gap-3 text-sm">
-                    <span className="font-medium text-slate-800">
+                  <div className="flex items-start justify-between gap-3 text-sm">
+                    <span className="min-w-0 break-words font-medium leading-6 text-slate-800">
                       {index + 1}. {item.stem}
                     </span>
                     <span className="shrink-0 text-xs text-slate-500">
                       {typeLabel[item.questionType] || item.questionType}
                     </span>
                   </div>
-                  <div className="mt-2 grid gap-x-6 gap-y-1 text-xs leading-5 sm:grid-cols-2">
-                    {getDisplayOptions(item).slice(0, 4).map((option) => (
+                  <div className="mt-2 grid grid-cols-1 gap-2 break-words text-sm leading-6">
+                    {getQuestionDisplayOptions(item).map((option) => (
                       <div
                         key={option.optionKey}
                         className={option.correct ? "font-semibold text-green-600" : "text-slate-500"}
                       >
-                        {option.optionKey}. {option.optionText}
+                        {formatQuestionOption(option)}
                       </div>
                     ))}
                   </div>
-                </Button>
+                </button>
               ))}
               {!visibleQuestions.length && (
                 <div className="py-24 text-center text-sm text-slate-400">
@@ -437,7 +374,7 @@ export default function ComposePaperPage() {
               )}
             </div>
           </Layout.Content></div>
-          <div className="min-w-0 col-span-2 lg:col-span-1"><Layout.Content className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          <div className="min-w-0 col-span-2 lg:col-span-1"><Layout.Content className="overflow-hidden rounded-lg border border-slate-200 bg-white">
             <div className="border-b border-slate-100 px-5 py-4 text-base font-semibold text-slate-800">
               已选题目 ({selected.length})
             </div>
@@ -459,13 +396,13 @@ export default function ComposePaperPage() {
                       {typeLabel[item.questionType] || item.questionType}
                     </span>
                   </div>
-                  <div className="mt-2 grid gap-1 text-xs leading-5 sm:grid-cols-2">
-                    {getDisplayOptions(item).slice(0, 4).map((option) => (
+                  <div className="mt-2 grid grid-cols-1 gap-2 break-words text-sm leading-6">
+                    {getQuestionDisplayOptions(item).map((option) => (
                       <div
                         key={option.optionKey}
                         className={option.correct ? "font-semibold text-green-600" : "text-slate-500"}
                       >
-                        {option.optionKey}. {option.optionText}
+                        {formatQuestionOption(option)}
                       </div>
                     ))}
                   </div>

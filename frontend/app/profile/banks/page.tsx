@@ -6,7 +6,7 @@ import { IconPlus } from "@douyinfe/semi-icons";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import "@douyinfe/semi-ui/react19-adapter";
-import { Button, Input, Modal, Select, Toast } from "@douyinfe/semi-ui";
+import { Button, Input, Modal, Select, Table, Toast } from "@douyinfe/semi-ui";
 import { ProfileShell } from "@/components/layout/ProfileShell";
 import {
   createBank,
@@ -23,6 +23,8 @@ export default function ManagedBanksPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [keyword, setKeyword] = useState("");
   const [category, setCategory] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [name, setName] = useState("");
@@ -53,6 +55,8 @@ export default function ManagedBanksPage() {
       ),
     [banks, category, keyword],
   );
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(visible.length / pageSize)));
+  const pageItems = visible.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const save = async () => {
     if (!name.trim()) {
       Toast.error("请输入题库名称");
@@ -105,20 +109,22 @@ export default function ManagedBanksPage() {
     <ProfileShell>
           <div className="flex flex-wrap items-center justify-between gap-4">
             <Typography.Title heading={1} className="!m-0 !text-[28px] !font-semibold !text-[#183f35]">题库管理</Typography.Title>
-            <Button theme="solid" type="warning" onClick={() => setOpen(true)}>
+            <Button theme="solid" onClick={() => setOpen(true)}>
               <IconPlus aria-hidden="true" /> 新建题库
             </Button>
           </div>
-          <Card bodyStyle={{ padding: 0 }} className="!mt-5"><div className="flex flex-col gap-3 p-4 sm:flex-row">
+          <Card bodyStyle={{ padding: 0 }} className="!mt-5"><div className="flex flex-col gap-3 p-5 sm:flex-row sm:flex-wrap">
             <Input
               value={keyword}
-              onChange={setKeyword}
+              onChange={value => { setKeyword(value); setPage(1); }}
+              onEnterPress={load}
               placeholder="搜索题库名称..."
               className="min-w-0 flex-1"
             />
             <Select
               value={category || undefined}
-              onChange={(value) => setCategory(String(value || ""))}
+              onChange={(value) => { setCategory(String(value || "")); setPage(1); }}
+              showClear
               placeholder="全部分类"
               optionList={categories.map((item) => ({
                 label: item.name,
@@ -126,7 +132,7 @@ export default function ManagedBanksPage() {
               }))}
               className="sm:w-52"
             />
-            <Button theme="solid" type="warning" onClick={load}>
+            <Button theme="solid" onClick={load}>
               搜索
             </Button>
             <Link
@@ -136,51 +142,40 @@ export default function ManagedBanksPage() {
               题库分类管理
             </Link>
           </div></Card>
-          <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {visible.map((bank) => (
-              <Card bodyStyle={{ padding: 0 }}
-                key={bank.id}
-                className=""
-              ><div className="p-5">
-                <div className="flex items-start justify-between gap-2">
-                  <Typography.Title heading={3} className="!font-bold !text-slate-800">{bank.name}</Typography.Title>
-                </div>
-                <p className="mt-4 text-sm text-slate-500">
-                  {bank.source || "暂无描述"}
-                </p>
-                <p className="mt-4 text-sm text-slate-500">
-                  包含 {bank.questionCount} 道题
-                </p>
-                <div className="mt-5 flex items-center justify-between text-sm">
-                  <Link
-                    href={`/profile/banks/${bank.id}/questions`}
-                    className="rounded-lg bg-blue-50 px-4 py-2 font-semibold text-blue-600 no-underline"
-                  >
-                    题目管理
-                  </Link>
-                  <span className="flex gap-3">
-                    <Button theme="borderless"
-                      onClick={() => edit(bank)}
-                      className="text-slate-600"
-                    >
-                      编辑
-                    </Button>
-                    <Button theme="borderless"
-                      onClick={() => remove(bank.id)}
-                      className="text-red-500"
-                    >
-                      删除
-                    </Button>
-                  </span>
-                </div>
-              </div></Card>
-            ))}
-            {!visible.length && (
-              <p className="col-span-full py-16 text-center text-sm text-slate-400">
-                暂无题库
-              </p>
-            )}
-          </div>
+          <Card bodyStyle={{ padding: 0 }} className="!mt-5 overflow-hidden">
+            <Table<QuestionBank>
+              rowKey="id"
+              dataSource={pageItems}
+              style={{ width: "100%" }}
+              className="[&_table]:!w-full [&_table]:!min-w-[1000px] [&_table]:!table-fixed [&_.semi-table-thead>tr>th]:whitespace-nowrap"
+              scroll={{ x: 1000 }}
+              empty="暂无题库"
+              pagination={{
+                total: visible.length,
+                currentPage,
+                pageSize,
+                showTotal: true,
+                showSizeChanger: true,
+                pageSizeOpts: [10, 20, 50],
+                onPageChange: setPage,
+                onPageSizeChange: size => { setPageSize(size); setPage(1); },
+                style: { padding: "16px 20px", margin: 0, boxSizing: "border-box" },
+              }}
+              columns={[
+                { title: "题库名称", dataIndex: "name", render: value => <span className="[overflow-wrap:anywhere]">{value}</span> },
+                { title: "分类", dataIndex: "category", width: 160, render: value => value || "未分类" },
+                { title: "描述", dataIndex: "source", render: value => <span className="text-slate-500 [overflow-wrap:anywhere]">{value || "—"}</span> },
+                { title: "题目数量", dataIndex: "questionCount", width: 110, render: value => value ?? 0 },
+                { title: "操作", width: 280, render: (_, bank) => (
+                  <div className="flex items-center gap-2 whitespace-nowrap">
+                    <Link href={`/profile/banks/${bank.id}/questions`} className="px-3 font-semibold text-blue-600 no-underline">题目管理</Link>
+                    <Button theme="borderless" onClick={() => edit(bank)}>编辑</Button>
+                    <Button theme="borderless" type="danger" onClick={() => remove(bank.id)}>删除</Button>
+                  </div>
+                ) },
+              ]}
+            />
+          </Card>
 
       <Modal bodyStyle={{ maxHeight: "calc(100dvh - 240px)", overflowY: "auto" }} width="min(480px, calc(100vw - 24px))"
         title="新建题库"

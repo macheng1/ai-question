@@ -1,4 +1,5 @@
 "use client";
+import { formatQuestionOption } from "@/lib/question-display";
 import { useEffect, useState } from "react";
 import { Banner, Card, Empty, Spin, Typography } from "@douyinfe/semi-ui";
 import { getMistakes, type Mistake } from "@/features/learner/api";
@@ -36,11 +37,7 @@ export default function Mistakes() {
             <ul className="mb-4 space-y-2">
               {row.options.map((option) => (
                 <li key={option.optionKey} className="whitespace-pre-wrap [overflow-wrap:anywhere]">
-                  {option.optionKey.trim().toUpperCase() === "TRUE"
-                    ? "A. 正确"
-                    : option.optionKey.trim().toUpperCase() === "FALSE"
-                      ? "B. 错误"
-                      : `${option.optionKey}. ${option.optionText}`}
+                  {formatQuestionOption(option)}
                 </li>
               ))}
             </ul>

@@ -30,7 +30,7 @@ public class QuestionBankCategoryService {
 
   public QuestionBankCategory create(
       String name, Long parentId, String description, Integer sortNo, Long userId) {
-    validateParent(parentId, userId);
+    validateParent(parentId);
     var category = new QuestionBankCategory();
     category.setName(name);
     category.setParentId(parentId);
@@ -44,10 +44,7 @@ public class QuestionBankCategoryService {
   public QuestionBankCategory update(
       Long id, String name, Long parentId, String description, Integer sortNo, Long userId) {
     get(id, userId);
-    if (id.equals(parentId)) {
-      throw new BusinessException(ErrorCode.BAD_REQUEST, "分类不能设置自己为父分类");
-    }
-    validateParent(parentId, userId);
+    validateParent(parentId);
     var category = new QuestionBankCategory();
     category.setId(id);
     category.setName(name);
@@ -74,9 +71,9 @@ public class QuestionBankCategoryService {
     return category;
   }
 
-  private void validateParent(Long parentId, Long userId) {
-    if (parentId != null && repository.findOwnedById(parentId, userId) == null) {
-      throw new BusinessException(ErrorCode.NOT_FOUND, "父分类不存在");
+  private void validateParent(Long parentId) {
+    if (parentId != null) {
+      throw new BusinessException(ErrorCode.BAD_REQUEST, "题库仅支持一级分类");
     }
   }
 }
