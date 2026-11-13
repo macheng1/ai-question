@@ -41,7 +41,7 @@ function EmptyChart() {
 
 export function StatisticsCharts({ data, includeRetake = false }: ChartProps) {
   const scoreRanges = ["0-59", "60-69", "70-79", "80-89", "90-100"];
-  const scoreLabels = ["0–<60%", "60–<70%", "70–<80%", "80–<90%", "90–100%"];
+  const scoreLabels = ["0–<60", "60–<70", "70–<80", "80–<90", "90–100"];
   const scoreValues = scoreRanges.map((range, index) => ({
     label: scoreLabels[index],
     count: Number(data.scoreDistribution.find((item) => item.label === range)?.count || 0),
