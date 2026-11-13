@@ -145,6 +145,7 @@ export function TrainingEditor({ id, copyFrom, initialPaperId }: { id?: string; 
     };
   }, [dirty, router]);
   const change = (patch: Partial<Training>) => {
+    if (patch.surveyEnabled === false) setPreview(false);
     setTraining((old) => ({ ...old, ...patch }));
     setDirty(true);
   };
@@ -224,7 +225,7 @@ export function TrainingEditor({ id, copyFrom, initialPaperId }: { id?: string; 
       return;
     }
     if (
-      training.questions.some(
+      training.surveyEnabled && training.questions.some(
         (q) =>
           !q.title.trim() ||
           (q.type === "SINGLE" &&
@@ -288,7 +289,7 @@ export function TrainingEditor({ id, copyFrom, initialPaperId }: { id?: string; 
         >
           {copyFrom ? "复制培训" : id ? "编辑培训" : "新建培训"}
         </Typography.Title>
-        {step === 2 && (
+        {step === 2 && training.surveyEnabled && (
           <Button disabled={busy || loading || !!error || !!adding} onClick={() => setPreview(true)}>
             预览评估
           </Button>
@@ -418,13 +419,13 @@ export function TrainingEditor({ id, copyFrom, initialPaperId }: { id?: string; 
                 <Card bodyStyle={{ padding: 0 }} className="">
                   <div className="flex items-center gap-3 p-4">
                     <Switch
-                      disabled={busy}
+                      disabled={busy || !!adding}
                       checked={training.surveyEnabled}
-                      onChange={(surveyEnabled) => change({ surveyEnabled })}
+                      onChange={(surveyEnabled) => change({ surveyEnabled, questions: !surveyEnabled && !locked ? [] : training.questions })}
                       aria-label="开启满意度评估"
                     />
                     <span>开启满意度评估</span>
-                    <Tooltip trigger="click" position="topLeft" content="开启后请至少添加一道评估题。关闭评估只会关闭填写入口，现有题目与反馈会保留；培训开始或已有反馈后，题目内容和顺序不可修改。">
+                    <Tooltip trigger="click" position="topLeft" content="开启后请至少添加一道评估题。关闭评估会清空尚可编辑的题目。培训开始或已有反馈后，关闭只停止填写，历史题目与反馈保留。">
                       <Button theme="borderless" type="tertiary" size="small" icon={<IconHelpCircleStroked />} aria-label="满意度评估说明" />
                     </Tooltip>
                   </div>
@@ -434,7 +435,7 @@ export function TrainingEditor({ id, copyFrom, initialPaperId }: { id?: string; 
                     {started ? "培训已开始，评估题目不可修改。" : "已有反馈，题目内容和顺序已锁定。你仍可修改培训信息或关闭评估。"}
                   </p>
                 )}
-                <fieldset
+                {training.surveyEnabled && <fieldset
                   disabled={locked || busy}
                   className="flex flex-col gap-4"
                 >
@@ -597,7 +598,7 @@ export function TrainingEditor({ id, copyFrom, initialPaperId }: { id?: string; 
                       </Button>
                     ))}
                   </Space>
-                </fieldset>
+                </fieldset>}
               </div>
             </div>
           </fieldset>
@@ -619,7 +620,7 @@ export function TrainingEditor({ id, copyFrom, initialPaperId }: { id?: string; 
       <Modal
         bodyStyle={{ maxHeight: "calc(100vh - 180px)", overflowY: "auto", overflowX: "hidden", paddingRight: 16, paddingBottom: 24 }}
         title="满意度评估预览"
-        visible={preview}
+        visible={preview && training.surveyEnabled}
         onCancel={() => setPreview(false)}
         footer={null}
         style={{ width: "min(640px, 94vw)" }}

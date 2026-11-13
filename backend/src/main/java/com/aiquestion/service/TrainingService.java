@@ -176,12 +176,13 @@ public class TrainingService {
         String requirement = Objects.toString(command.requirementType(), "REQUIRED");
         if (!Set.of("UNCATEGORIZED", "ONBOARDING", "SAFETY", "POLICY").contains(category) || !Set.of("REQUIRED", "ELECTIVE").contains(requirement))
             throw new BusinessException(ErrorCode.BAD_REQUEST, "培训分类或学习要求无效");
-        TrainingSurveyRules.questions(command.questions());
+        var surveyQuestions = command.surveyEnabled() ? command.questions() : List.<TrainingSurveyRules.Question>of();
+        TrainingSurveyRules.questions(surveyQuestions);
         if (command.surveyEnabled() && command.questions().isEmpty())
             throw new BusinessException(ErrorCode.BAD_REQUEST, "开启评估时至少添加一道题");
         if (id == null) {
             var inserted1 = new com.aiquestion.repository.GeneratedId();
-            persistence.insertTraining(command.name().trim(), Objects.toString(command.description(), ""), command.surveyEnabled(), encode(command.questions()), user, inserted1);
+            persistence.insertTraining(command.name().trim(), Objects.toString(command.description(), ""), command.surveyEnabled(), encode(surveyQuestions), user, inserted1);
             id = inserted1.getId();
         } else {
             var old = row(id, true);
@@ -197,7 +198,11 @@ public class TrainingService {
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "已有考试记录，不能变更关联考试");
             if (!Objects.equals(command.version(), ((Number) old.get("version")).intValue()))
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "培训已被修改，请刷新后重试");
-            if (count(id) > 0 && !questions(old).equals(command.questions()))
+            long responseCount = count(id);
+            var originalStart = com.aiquestion.repository.RepositoryRows.localDateTime(old.get("start_at"));
+            boolean surveyLocked = responseCount > 0 || (originalStart != null && !originalStart.isAfter(BusinessTime.now()));
+            if (!command.surveyEnabled() && surveyLocked) surveyQuestions = questions(old);
+            if (responseCount > 0 && !questions(old).equals(surveyQuestions))
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "已有反馈，不能修改题目；请新建培训");
             var scope = command.audience();
             var originalScope = trainingAudienceService.get(id, user);
@@ -214,7 +219,7 @@ public class TrainingService {
                     && new TreeSet<>(scope.ids()).equals(new TreeSet<>(originalScope.ids()))
                     && ("ALL".equals(scope.type()) || !scope.ids().isEmpty()))
                 rebuildAudience = false;
-            persistence.updateContent(command.name().trim(), Objects.toString(command.description(), ""), command.surveyEnabled(), encode(command.questions()), id);
+            persistence.updateContent(command.name().trim(), Objects.toString(command.description(), ""), command.surveyEnabled(), encode(surveyQuestions), id);
         }
         persistence.updateSettings(command.assessmentId(), category, requirement, purpose, command.endAt(), command.startAt(), id);
         if (rebuildAudience)

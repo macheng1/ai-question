@@ -1,4 +1,5 @@
 "use client";
+import { formatPercentage, formatStatistic } from "../statistics-format";
 import { Typography } from "@douyinfe/semi-ui";
 import { Layout } from "@douyinfe/semi-ui";
 
@@ -88,7 +89,7 @@ export function StatisticsCharts({ data, includeRetake = false }: ChartProps) {
         )}
       </ChartCard></div>
 
-      <div className="min-w-0 col-span-2 lg:col-span-1"><ChartCard title="及格情况" description={`及格线 ${data.overview.passScore || 0} 分`}>
+      <div className="min-w-0 col-span-2 lg:col-span-1"><ChartCard title="及格情况" description={`及格线 ${formatStatistic(data.overview.passScore || 0)} 分`}>
         {passValues.length ? (
           <VChart
             spec={{
@@ -145,9 +146,19 @@ export function StatisticsCharts({ data, includeRetake = false }: ChartProps) {
               bar: { style: { cornerRadius: 6 } },
               axes: [
                 { orient: "bottom", title: { visible: false } },
-                { orient: "left", min: 0, max: 100, label: { formatter: "{value}%" }, title: { visible: true, text: "正确率" } },
+                { orient: "left", type: "linear", min: 0, max: 100, label: { formatMethod: formatPercentage }, title: { visible: true, text: "正确率" } },
               ],
-              label: { visible: true, formatMethod: (text) => `${text}%` },
+              label: { visible: true, formatMethod: formatPercentage },
+              tooltip: {
+                mark: {
+                  title: { value: (datum) => String(datum?.label ?? "") },
+                  content: [{ key: "正确率", value: (datum) => formatPercentage(datum?.value) }],
+                },
+                dimension: {
+                  title: { value: (datum) => String(datum?.label ?? "") },
+                  content: [{ key: "正确率", value: (datum) => formatPercentage(datum?.value) }],
+                },
+              },
               legends: { visible: false },
             }}
             options={{ autoFit: true }}

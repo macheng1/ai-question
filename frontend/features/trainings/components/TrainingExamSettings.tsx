@@ -55,7 +55,7 @@ export function TrainingExamSettings({ value, onChange, disabled, locked, scopeL
   const options = paper && !papers.some(p => p.id === paper.id) ? [paper, ...papers] : papers;
   return <div className="flex flex-col gap-6 p-6">
     <div className="flex items-center gap-2">
-      <Switch checked={value.enabled} disabled={disabled || scopeLocked} aria-label="开启培训考试" onChange={enabled => change({ enabled })} />
+      <Switch checked={value.enabled} disabled={disabled || scopeLocked || locked} aria-label="开启培训考试" onChange={enabled => enabled ? change({ enabled }) : onChange({ ...emptyTrainingExam })} />
       <span className="font-semibold">开启培训考试</span>
       <RuleTip label="培训考试说明">开启后为本培训安排独立考试，复用已有试卷。同一学员可参加使用相同试卷的不同培训，各培训的答题次数与成绩独立记录；最后一步保存时才创建考试。</RuleTip>
     </div>

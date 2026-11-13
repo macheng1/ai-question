@@ -1093,6 +1093,49 @@ class MyBatisMigrationIntegrationTest {
     mvc.perform(put("/management/trainings/" + created.path("id").asLong()).header("Authorization", authorization).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body))).andExpect(status().isBadRequest());
   }
 
+  @Test void trainingSwitchCombinationsPersistAndClearAfterReload() throws Exception {
+    long original = createExam();
+    long paper = jdbc.queryForObject("SELECT paper_id FROM assessment_task WHERE id=?", Long.class, original);
+    jdbc.update("UPDATE test_paper SET status='PUBLISHED' WHERE id=?", paper);
+    var question = Map.of("id", "toggle-question", "type", "TEXT", "title", "评价", "required", false, "options", List.of());
+    for (boolean examEnabled : List.of(false, true)) {
+      for (boolean surveyEnabled : List.of(false, true)) {
+        var body = trainingCommand(null, true);
+        var exam = new HashMap<String, Object>(examSettings(paper));
+        exam.put("enabled", examEnabled);
+        body.put("exam", exam);
+        body.put("surveyEnabled", surveyEnabled);
+        body.put("questions", List.of(question)); // Disabled requests may contain stale drafts.
+        var created = request(post("/management/trainings").header("Authorization", authorization), body);
+        long id = created.path("id").asLong();
+        var reloaded = json.readTree(mvc.perform(get("/management/trainings/" + id).header("Authorization", authorization))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("data");
+        assertEquals(examEnabled, reloaded.path("exam").path("enabled").asBoolean());
+        assertEquals(surveyEnabled, reloaded.path("surveyEnabled").asBoolean());
+        assertEquals(surveyEnabled ? 1 : 0, reloaded.path("questions").size());
+        exam.put("enabled", false);
+        body.put("surveyEnabled", false);
+        body.put("version", reloaded.path("version").asInt());
+        request(put("/management/trainings/" + id).header("Authorization", authorization), body);
+        var cleared = json.readTree(mvc.perform(get("/management/trainings/" + id).header("Authorization", authorization))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("data");
+        assertFalse(cleared.path("exam").path("enabled").asBoolean());
+        assertTrue(cleared.path("exam").path("paperId").isNull());
+        assertFalse(cleared.path("surveyEnabled").asBoolean());
+        assertEquals(0, cleared.path("questions").size());
+        assertEquals("[]", jdbc.queryForObject("SELECT questions_json FROM training WHERE id=?", String.class, id));
+        assertNull(jdbc.queryForObject("SELECT assessment_id FROM training WHERE id=?", Long.class, id));
+        exam.put("enabled", true);
+        body.put("surveyEnabled", true);
+        body.put("version", cleared.path("version").asInt());
+        var reopened = request(put("/management/trainings/" + id).header("Authorization", authorization), body);
+        assertTrue(reopened.path("exam").path("enabled").asBoolean());
+        assertTrue(reopened.path("surveyEnabled").asBoolean());
+        assertEquals(1, reopened.path("questions").size());
+      }
+    }
+  }
+
   private Map<String, Object> examSettings(long paper) {
     return Map.of("enabled", true, "paperId", paper, "startAt", LocalDateTime.now().plusDays(1).toString(),
         "endAt", LocalDateTime.now().plusDays(2).toString(), "durationMinutes", 30,

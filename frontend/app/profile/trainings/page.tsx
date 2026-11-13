@@ -3,7 +3,7 @@ import { useCompactViewport } from "@/lib/hooks/useCompactViewport";
 import { Typography } from "@douyinfe/semi-ui";
 import { Card } from "@douyinfe/semi-ui";
 import { IconPlus, IconChevronDown, IconHelpCircleStroked } from "@douyinfe/semi-icons";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import "@douyinfe/semi-ui/react19-adapter";
 import { Button, Input, Modal, Toast, Table, Select, Tag, Dropdown, Tooltip } from "@douyinfe/semi-ui";
@@ -17,14 +17,45 @@ export default function TrainingsPage() {
   const [openMenu, setOpenMenu] = useState<number | null>(null);
   const [entry, setEntry] = useState<Training | null>(null);
   const [qrFailed, setQrFailed] = useState(false);
+  const entryLinkField = useRef<HTMLDivElement>(null);
   const entryLink = entry && typeof window !== "undefined" ? `${window.location.origin}/training/${entry.id}` : "";
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(entryLink)}`;
+  const copying = useRef(false);
   const copyEntryLink = async () => {
+    if (copying.current || !entryLink) return;
+    copying.current = true;
+    const toastId = "training-entry-copy";
     try {
-      await navigator.clipboard.writeText(entryLink);
-      Toast.success("链接已复制");
-    } catch {
-      Toast.warning("自动复制不可用，请选中下方链接手动复制");
+      // Run inside the click gesture, before any asynchronous permission request.
+      // The input must stay inside the modal so its focus trap does not steal selection.
+      const input = entryLinkField.current?.querySelector("input");
+      if (input) {
+        input.focus();
+        input.select();
+        input.setSelectionRange(0, input.value.length);
+        try {
+          if (document.execCommand("copy")) {
+            Toast.success({ id: toastId, content: "链接已复制" });
+            return;
+          }
+        } catch {
+          // Try the newer API when the synchronous method is unavailable.
+        }
+      }
+      if (navigator.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(entryLink);
+          Toast.success({ id: toastId, content: "链接已复制" });
+          return;
+        } catch {
+          // Leave the visible link selected for manual copying.
+        }
+      }
+      input?.focus();
+      input?.select();
+      Toast.warning({ id: toastId, content: "链接已选中，请按 Ctrl+C（Mac 为 ⌘C）或长按复制" });
+    } finally {
+      copying.current = false;
     }
   };
   const [now, setNow] = useState(() => Date.now());
@@ -97,7 +128,7 @@ export default function TrainingsPage() {
       <div className="flex min-h-60 items-center justify-center">
         {qrFailed ? <Typography.Text type="danger">二维码加载失败，请关闭后重试，或复制培训链接。</Typography.Text> : <img src={qrUrl} alt={`${entry.name}培训二维码`} width={240} height={240} onError={() => setQrFailed(true)} />}
       </div>
-      <div className="flex items-center gap-2">
+      <div ref={entryLinkField} className="flex items-center gap-2">
         <Input aria-label="培训链接" value={entryLink} readOnly onFocus={event => event.target.select()} style={{ flex: 1, minWidth: 0 }} />
         <Button className="shrink-0" onClick={copyEntryLink}>复制链接</Button>
       </div>

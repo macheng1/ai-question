@@ -58,7 +58,7 @@ class TrainingRequirementTransitionTest {
     doReturn(Map.of()).when(service).get(1L, 2L);
     var now = LocalDateTime.now(java.time.ZoneId.of("Asia/Shanghai"));
     var row = new HashMap<String, Object>(Map.of("created_by", 2L, "version", 1,
-        "requirement_type", initialRequirement, "start_at", future ? now.plusHours(1) : now.minusDays(2),
+        "questions_json", "[]", "requirement_type", initialRequirement, "start_at", future ? now.plusHours(1) : now.minusDays(2),
         "end_at", ended ? now.minusDays(1) : now.plusDays(1)));
     when(repository.findById(eq(1L), anyBoolean())).thenReturn(List.of(row));
     when(repository.countSurveyResponses(1L)).thenReturn(List.of(0L));
