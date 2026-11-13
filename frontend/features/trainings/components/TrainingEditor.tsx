@@ -419,20 +419,20 @@ export function TrainingEditor({ id, copyFrom, initialPaperId }: { id?: string; 
                 <Card bodyStyle={{ padding: 0 }} className="">
                   <div className="flex items-center gap-3 p-4">
                     <Switch
-                      disabled={busy || !!adding}
+                      disabled={busy || !!adding || started}
                       checked={training.surveyEnabled}
                       onChange={(surveyEnabled) => change({ surveyEnabled, questions: !surveyEnabled && !locked ? [] : training.questions })}
                       aria-label="开启满意度评估"
                     />
                     <span>开启满意度评估</span>
-                    <Tooltip trigger="click" position="topLeft" content="开启后请至少添加一道评估题。关闭评估会清空尚可编辑的题目。培训开始或已有反馈后，关闭只停止填写，历史题目与反馈保留。">
+                    <Tooltip trigger="click" position="topLeft" content="开启后请至少添加一道评估题。关闭评估会清空尚可编辑的题目。培训开始后不能切换评估开关或修改题目；未开始但已有反馈时，关闭仅停止填写，保留历史记录。">
                       <Button theme="borderless" type="tertiary" size="small" icon={<IconHelpCircleStroked />} aria-label="满意度评估说明" />
                     </Tooltip>
                   </div>
                 </Card>
                 {locked && (
                   <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
-                    {started ? "培训已开始，评估题目不可修改。" : "已有反馈，题目内容和顺序已锁定。你仍可修改培训信息或关闭评估。"}
+                    {started ? "培训已开始，评估开关和题目不可修改。" : "已有反馈，题目内容和顺序已锁定。你仍可修改培训信息或关闭评估。"}
                   </p>
                 )}
                 {training.surveyEnabled && <fieldset

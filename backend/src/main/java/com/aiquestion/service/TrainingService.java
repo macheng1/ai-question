@@ -200,7 +200,10 @@ public class TrainingService {
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "培训已被修改，请刷新后重试");
             long responseCount = count(id);
             var originalStart = com.aiquestion.repository.RepositoryRows.localDateTime(old.get("start_at"));
-            boolean surveyLocked = responseCount > 0 || (originalStart != null && !originalStart.isAfter(BusinessTime.now()));
+            boolean trainingStarted = originalStart != null && !originalStart.isAfter(BusinessTime.now());
+            if (trainingStarted && enabled(old) != command.surveyEnabled())
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "培训已开始，不能切换满意度评估开关");
+            boolean surveyLocked = responseCount > 0 || trainingStarted;
             if (!command.surveyEnabled() && surveyLocked) surveyQuestions = questions(old);
             if (responseCount > 0 && !questions(old).equals(surveyQuestions))
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "已有反馈，不能修改题目；请新建培训");
