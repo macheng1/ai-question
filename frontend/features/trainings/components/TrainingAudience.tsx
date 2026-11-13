@@ -102,7 +102,7 @@ export function TrainingAudience({
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-1">
         <strong>学习范围</strong>
-        <Tooltip trigger="click" position="topLeft" content="范围随培训一起保存，学习与本培训考试共用此名单。按保存时的在用员工生成名单。必修培训会自动补入范围内的新增学员；编辑时只能追加原范围内的部门或人员，不能移除原选择或切换范围类型；已结束后不可追加。">
+        <Tooltip trigger="click" position="topLeft" content="范围随培训一起保存，学习与本培训考试共用此名单。按保存时的在用员工生成名单。必修培训会自动补入范围内的新增学员；未开始时可修改范围、增加或移除学员；进行中只能追加，不能移除或切换范围；已结束不可修改。已有学习、考试记录的名单仍受保护。">
           <Button
             theme="borderless"
             type="tertiary"
@@ -175,7 +175,6 @@ export function TrainingAudience({
       {!!value.type && !locked && !inactive && <p className="m-0 text-sm text-slate-500">
         当前范围可分配 {summary.eligible} 人，因当前考试分配规则排除 {summary.excluded} 人。
       </p>}
-      {!locked && !inactive && validationError && <Banner type="warning" description={validationError} />}
       {!locked && eligibilityLoading && <p className="m-0 text-sm text-slate-500">正在检查人员资格…</p>}
 
     </div>

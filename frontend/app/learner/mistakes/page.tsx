@@ -17,7 +17,7 @@ export default function Mistakes() {
   }, []);
   return (
     <div className="flex flex-col gap-5">
-      <Typography.Title heading={2}>我的错题</Typography.Title>
+      <Typography.Title heading={2} className="!m-0 !text-[28px] !font-semibold !text-[#183f35]">我的错题</Typography.Title>
       <Typography.Text type="secondary">
         仅展示已公布成绩的考试错题。
       </Typography.Text>
@@ -25,17 +25,17 @@ export default function Mistakes() {
       {loading ? (
         <Spin />
       ) : !rows.length ? (
-        <Empty description="暂无错题" />
+        <Card><Empty description="暂无错题" className="py-8" /></Card>
       ) : (
         rows.map((row) => (
           <Card key={row.id}>
             <Typography.Text type="secondary">{row.examName}</Typography.Text>
-            <h3 className="my-4 whitespace-pre-wrap break-words font-semibold">
+            <h3 className="my-4 whitespace-pre-wrap [overflow-wrap:anywhere] font-semibold">
               {row.stem}
             </h3>
             <ul className="mb-4 space-y-2">
               {row.options.map((option) => (
-                <li key={option.optionKey} className="whitespace-pre-wrap break-words">
+                <li key={option.optionKey} className="whitespace-pre-wrap [overflow-wrap:anywhere]">
                   {option.optionKey.trim().toUpperCase() === "TRUE"
                     ? "A. 正确"
                     : option.optionKey.trim().toUpperCase() === "FALSE"
@@ -49,7 +49,7 @@ export default function Mistakes() {
             </p>
             <p>正确答案：{answerLabel(row.correctAnswer)}</p>
             {row.analysis && (
-              <p className="mt-3 whitespace-pre-wrap break-words text-slate-500">
+              <p className="mt-3 whitespace-pre-wrap [overflow-wrap:anywhere] text-slate-500">
                 解析：{row.analysis}
               </p>
             )}

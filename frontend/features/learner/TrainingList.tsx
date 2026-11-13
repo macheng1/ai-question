@@ -70,23 +70,24 @@ export function TrainingList({
   return (
     <div className="flex flex-col gap-5">
       <SurveyFeedbackModal id={surveyId} onClose={() => setSurveyId(undefined)} />
-      <div className="flex items-center justify-between gap-3">
-        <Typography.Title heading={2}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Typography.Title heading={2} className="!m-0 !text-[28px] !font-semibold !text-[#183f35]">
           {surveys ? "满意度评估" : exams ? "我的考试" : "我的培训"}
         </Typography.Title>
         <Button onClick={() => setReload((n) => n + 1)} loading={loading}>
           刷新
         </Button>
       </div>
-      <div className="flex flex-wrap gap-3">
+      <Card bodyStyle={{ padding: 20 }}><div className="flex flex-wrap gap-3">
         <Input
           aria-label="搜索培训"
           placeholder="搜索培训或考试名称"
           value={keyword}
           onChange={setKeyword}
-          className="!w-full sm:!w-72"
+          className="!w-full sm:!w-auto sm:!min-w-60 sm:!flex-1"
         />
         <Select
+          className="!w-full sm:!w-44"
           placeholder="全部学习要求"
           showClear
           value={requirement}
@@ -98,6 +99,7 @@ export function TrainingList({
         />
         {!surveys && (
           <Select
+          className="!w-full sm:!w-44"
             placeholder={exams ? "全部考试状态" : "全部学习状态"}
             showClear
             value={status}
@@ -108,19 +110,20 @@ export function TrainingList({
           />
         )}
       </div>
+      </Card>
       {error && <Banner type="danger" description={error} />}
       {loading ? (
         <Spin />
       ) : surveys ? (
-        <Card bodyStyle={{ padding: 0 }}>
+        <Card bodyStyle={{ padding: 0 }} className="overflow-hidden">
           <Table<LearnerTraining>
             rowKey="id"
             dataSource={visible}
-            pagination={{ pageSize: 10 }}
-            className="[&_table]:!w-full [&_table]:!table-fixed"
+            pagination={{ pageSize: 10, showTotal: true, style: { padding: "16px 20px", margin: 0 } }}
+            className="[&_table]:!w-full [&_table]:!min-w-[900px] [&_table]:!table-fixed"
             scroll={{ x: 900 }}
             columns={[
-              { title: "培训名称", dataIndex: "name", render: (name: string) => <span className="break-words font-medium">{name}</span> },
+              { title: "培训名称", dataIndex: "name", render: (name: string) => <span className="[overflow-wrap:anywhere] font-medium">{name}</span> },
               { title: "学习要求", width: 100, render: (_, row) => row.requirementType === "REQUIRED" ? "必修" : "选修" },
               { title: "学习进度", width: 130, render: (_, row) => `${row.progress}%` },
               { title: "学习完成时间", width: 190, render: (_, row) => formatTime(row.completedAt) },
@@ -132,19 +135,19 @@ export function TrainingList({
           />
         </Card>
       ) : !exams ? (
-        <Card bodyStyle={{ padding: 0 }}>
+        <Card bodyStyle={{ padding: 0 }} className="overflow-hidden">
           <Table<LearnerTraining>
             rowKey="id"
             dataSource={visible}
-            pagination={{ pageSize: 10 }}
-            className="[&_table]:!w-full [&_table]:!table-fixed [&_.semi-table-thead>tr>th]:whitespace-nowrap"
+            pagination={{ pageSize: 10, showTotal: true, style: { padding: "16px 20px", margin: 0 } }}
+            className="[&_table]:!w-full [&_table]:!min-w-[1200px] [&_table]:!table-fixed [&_.semi-table-thead>tr>th]:whitespace-nowrap"
             scroll={{ x: 1200 }}
             columns={[
               {
                 title: "培训名称",
                 dataIndex: "name",
                 render: (name: string, row) => <div className="min-w-0">
-                  <p className="break-words font-medium">{name}</p>
+                  <p className="[overflow-wrap:anywhere] font-medium">{name}</p>
                   <p className="mt-1 text-xs text-slate-500">{row.assessmentId ? "培训 + 考试" : "独立培训"}</p>
                 </div>,
               },
@@ -156,7 +159,7 @@ export function TrainingList({
               </div> },
               { title: "有效学习时长", width: 140, render: (_, row) => formatDuration(row.studiedSeconds) },
               { title: "关联考试", width: 230, render: (_, row) => row.assessmentId ? <div>
-                <p className="mb-2 break-words text-sm">{row.examName}</p>
+                <p className="mb-2 [overflow-wrap:anywhere] text-sm">{row.examName}</p>
                 <Tag color={row.examStatus === "PASSED" ? "green" : row.examStatus === "FAILED" ? "red" : "blue"}>{examLabels[row.examStatus || ""] || "待考试"}</Tag>
                 <p className="mt-1 text-xs text-slate-500">已考 {row.attemptCount} 次{row.score != null ? ` · 成绩 ${row.score}/${row.totalScore}` : ""}</p>
               </div> : "—" },
@@ -167,17 +170,17 @@ export function TrainingList({
           />
         </Card>
       ) : (
-        <Card bodyStyle={{ padding: 0 }}>
+        <Card bodyStyle={{ padding: 0 }} className="overflow-hidden">
           <Table<LearnerTraining>
             rowKey="id"
             dataSource={visible}
-            pagination={{ pageSize: 10 }}
-            className="[&_table]:!w-full [&_table]:!table-fixed [&_.semi-table-thead>tr>th]:whitespace-nowrap"
+            pagination={{ pageSize: 10, showTotal: true, style: { padding: "16px 20px", margin: 0 } }}
+            className="[&_table]:!w-full [&_table]:!min-w-[1250px] [&_table]:!table-fixed [&_.semi-table-thead>tr>th]:whitespace-nowrap"
             scroll={{ x: 1250 }}
             columns={[
-              { title: "考试名称", dataIndex: "examName", render: (name: string) => <span className="break-words font-medium">{name}</span> },
+              { title: "考试名称", dataIndex: "examName", render: (name: string) => <span className="[overflow-wrap:anywhere] font-medium">{name}</span> },
               { title: "所属培训", width: 170, render: (_, row) => <div>
-                <p className="break-words">{row.name}</p>
+                <p className="[overflow-wrap:anywhere]">{row.name}</p>
                 <p className="mt-1 text-xs text-slate-500">{learningLabels[row.learningStatus]} · {row.progress}%</p>
               </div> },
               { title: "学习要求", width: 100, render: (_, row) => row.requirementType === "REQUIRED" ? "必修" : "选修" },

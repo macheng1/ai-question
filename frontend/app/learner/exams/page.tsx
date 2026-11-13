@@ -34,19 +34,18 @@ export default function Exams() {
           <Card bodyStyle={{padding:0}} className="overflow-hidden">
           <Table<ExamRecord>
             style={{width:"100%"}}
-            className="[&_table]:!w-full [&_table]:!table-fixed"
+            className="[&_table]:!w-full [&_table]:!min-w-[960px] [&_table]:!table-fixed"
             rowKey="id"
             loading={loading}
             dataSource={rows}
             pagination={{ pageSize: 10, showTotal: true, style: {padding:"16px 20px",margin:0} }}
-            scroll={{ x: 880 }}
+            scroll={{ x: 960 }}
             columns={[
-              { title: "操作", width: 110, render: (_, row) => row.status === "SUBMITTED" ? <Link href={`/kaoshi/${row.taskId}/result?attemptId=${row.id}${trainingIds[row.taskId] ? `&trainingId=${trainingIds[row.taskId]}` : ""}`}>查看结果</Link> : "—" },
-              { title: "考试名称", dataIndex: "name", width: "30%", render: (_,row) => <span className="break-all">{row.name}</span> },
-              { title: "次数", dataIndex: "attemptNo", width: "10%", className:"whitespace-nowrap" },
+              { title: "考试名称", dataIndex: "name",  render: (_,row) => <span className="break-all">{row.name}</span> },
+              { title: "次数", dataIndex: "attemptNo", width: 70, className:"whitespace-nowrap" },
               {
                 title: "成绩",
-                width: "13%", className:"whitespace-nowrap",
+                width: 110, className:"whitespace-nowrap",
                 render: (_, row) =>
                   row.status !== "SUBMITTED"
                     ? "未交卷"
@@ -56,7 +55,7 @@ export default function Exams() {
               },
               {
                 title: "结果",
-                width: "12%", className:"whitespace-nowrap",
+                width: 110, className:"whitespace-nowrap",
                 render: (_, row) =>
                   row.status !== "SUBMITTED"
                     ? "答题中"
@@ -66,15 +65,16 @@ export default function Exams() {
                         ? <Tag color="green">通过</Tag>
                         : <Tag color="orange">未通过</Tag>,
               },
-              { title: "提交时间", width: "22%", className:"whitespace-nowrap", render:(_,row)=>dateTime(row.submittedAt) },
+              { title: "提交时间", width: 190, className:"whitespace-nowrap", render:(_,row)=>dateTime(row.submittedAt) },
               {
                 title: "考试用时",
-                width: "13%", className:"whitespace-nowrap",
+                width: 110, className:"whitespace-nowrap",
                 render: (_, row) =>
                   row.durationSeconds == null
                     ? "—"
                     : `${Math.floor(row.durationSeconds / 60)}分${row.durationSeconds % 60}秒`,
               },
+              { title: "操作", width: 110, render: (_, row) => row.status === "SUBMITTED" ? <Link href={`/kaoshi/${row.taskId}/result?attemptId=${row.id}${trainingIds[row.taskId] ? `&trainingId=${trainingIds[row.taskId]}` : ""}`}>查看结果</Link> : "—" },
             ]}
           />
           </Card>

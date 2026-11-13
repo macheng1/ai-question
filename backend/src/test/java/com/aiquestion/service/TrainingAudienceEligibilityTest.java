@@ -50,6 +50,27 @@ class TrainingAudienceEligibilityTest {
     assertRosterUntouched();
   }
 
+  @Test void futureTrainingCanReplaceAssignedPeopleAndChangeScope() {
+    when(repository.lockTraining(1L)).thenReturn(List.of(Map.of("assessment_id", 9L,
+        "start_at", java.sql.Timestamp.valueOf(java.time.LocalDateTime.now().plusDays(1)))));
+    when(repository.findScopeTargetIds(1L)).thenReturn(List.of(3L));
+    when(repository.findAssignments(1L)).thenReturn(List.of(Map.of("employee_id", 3L)));
+    service.save(1L, 2L, new TrainingAudienceService.Scope("DEPARTMENT", List.of(5L)));
+    verify(repository).deleteAudience(1L);
+    verify(repository).updateAudienceType("DEPARTMENT", 1L);
+    verify(repository).insertAssignment(1L, 4L, "乙", "13900000002", 5L, "研发部", null);
+  }
+
+  @Test void startedTrainingCannotRemoveAssignedPeople() {
+    when(repository.lockTraining(1L)).thenReturn(List.of(Map.of("assessment_id", 9L,
+        "start_at", java.sql.Timestamp.valueOf(java.time.LocalDateTime.now().minusHours(1)))));
+    when(repository.findScopeTargetIds(1L)).thenReturn(List.of(3L));
+    when(repository.findAssignments(1L)).thenReturn(List.of(Map.of("employee_id", 3L)));
+    assertThrows(BusinessException.class, () -> service.save(1L, 2L,
+        new TrainingAudienceService.Scope("USERS", List.of(4L))));
+    assertRosterUntouched();
+  }
+
   private void assertRosterUntouched() {
     verify(repository, never()).deleteAudience(anyLong());
     verify(repository, never()).deleteScopeTargets(anyLong());

@@ -391,7 +391,7 @@ export function TrainingEditor({ id, copyFrom, initialPaperId }: { id?: string; 
                     onValidationChange={setAudienceError}
                     assessmentId={training.exam ? undefined : training.assessmentId}
                     locked={ended}
-                    originalScope={id ? originalAudience : undefined}
+                    originalScope={id && (started || training.learningLocked || training.examLocked) ? originalAudience : undefined}
                     value={training.audience || { type: "ALL", ids: [] }}
                     disabled={busy || ended}
                     onChange={(audience) => change({ audience })}

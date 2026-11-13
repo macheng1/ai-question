@@ -172,7 +172,7 @@ export default function TrainingDetail({
                 }
                 dataSource={data.materials}
                 pagination={false}
-                className="[&_.semi-table-thead>tr>th]:whitespace-nowrap [&_.semi-table-tbody>tr>td]:align-middle [&_table]:!w-full [&_table]:!table-fixed"
+                className="[&_.semi-table-thead>tr>th]:whitespace-nowrap [&_.semi-table-tbody>tr>td]:align-middle [&_table]:!w-full [&_table]:!min-w-[900px] [&_table]:!table-fixed"
                 scroll={{ x: 900 }}
                 columns={[
                   {
@@ -253,7 +253,7 @@ export default function TrainingDetail({
                     rowKey="id"
                     dataSource={data.attempts}
                     pagination={{ pageSize: 5 }}
-                    className="[&_.semi-table-thead>tr>th]:whitespace-nowrap [&_table]:!w-full [&_table]:!table-fixed"
+                    className="[&_.semi-table-thead>tr>th]:whitespace-nowrap [&_table]:!w-full [&_table]:!min-w-[800px] [&_table]:!table-fixed"
                     scroll={{ x: 800 }}
                     columns={[
                       { title: "次数", dataIndex: "attemptNo", width: 70 },

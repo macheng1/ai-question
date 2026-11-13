@@ -48,7 +48,9 @@ public class TrainingAudienceService {
         var previousAssignments = persistence.findAssignments(id);
         var previousIds = new HashSet<Long>();
         for (var previous : previousAssignments) previousIds.add(((Number) previous.get("employee_id")).longValue());
-        boolean appendOnly = !previousAssignments.isEmpty()
+        boolean notStarted = course.get("start_at") instanceof java.sql.Timestamp start
+            && start.toLocalDateTime().isAfter(java.time.LocalDateTime.now());
+        boolean appendOnly = (!notStarted && !previousAssignments.isEmpty())
             || com.aiquestion.repository.RepositoryRows.one(persistence.countLearningSessions(id)) > 0
             || (course.get("assessment_id") instanceof Number && com.aiquestion.repository.RepositoryRows.one(persistence.countExamParticipants(id)) > 0);
         if (appendOnly) {
@@ -56,7 +58,7 @@ public class TrainingAudienceService {
             if (course.get("end_at") instanceof java.sql.Timestamp end && !end.toLocalDateTime().isAfter(java.time.LocalDateTime.now()))
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "培训已结束，不能追加学员");
             if (!Objects.equals(existing.type(), scope.type()) || !requestedIds.containsAll(existing.ids()))
-                throw new BusinessException(ErrorCode.BAD_REQUEST, "编辑时只能追加，不能移除原有部门或学员，也不能切换学习范围类型");
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "培训已开始或已有学习、考试记录，只能追加，不能移除原有部门或学员，也不能切换学习范围类型");
         }
         var employees = persistence.findActiveEmployees(user);
         Set<Long> ids = new HashSet<>(scope.ids());
