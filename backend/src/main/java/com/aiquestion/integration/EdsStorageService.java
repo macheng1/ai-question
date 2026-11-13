@@ -20,6 +20,7 @@ import org.springframework.web.multipart.MultipartFile;
 /** EDS 的 S3 适配，保留 TLS 证书和主机名校验。 */
 @Service
 public class EdsStorageService implements ObjectStorage {
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(EdsStorageService.class);
   private final EdsProperties properties;
   public EdsStorageService(EdsProperties properties) { this.properties = properties; }
   @Override public String provider() { return "eds"; }
@@ -64,6 +65,7 @@ public class EdsStorageService implements ObjectStorage {
       client.putObject(new PutObjectRequest(properties.bucket(), key, input, metadata)
           .withCannedAcl(CannedAccessControlList.Private));
     } catch (Exception ex) {
+      logUploadFailure(ex, key, mime, file.getSize());
       throw new BusinessException(ErrorCode.SYSTEM_ERROR, "EDS 文件上传失败，请检查存储连接和权限");
     } finally { client.shutdown(); }
   }
@@ -90,6 +92,24 @@ public class EdsStorageService implements ObjectStorage {
     try { client.deleteObject(properties.bucket(), key); }
     catch (Exception ex) { throw new BusinessException(ErrorCode.SYSTEM_ERROR, "EDS 文件删除失败"); }
     finally { client.shutdown(); }
+  }
+
+  private void logUploadFailure(Exception failure, String key, String mime, long size) {
+    var trace = new java.io.StringWriter();
+    failure.printStackTrace(new java.io.PrintWriter(trace));
+    String details = "EDS upload failed: endpoint=" + properties.endpoint()
+        + ", bucket=" + properties.bucket() + ", region=" + properties.region()
+        + ", objectKey=" + key + ", contentType=" + mime + ", size=" + size;
+    if (failure instanceof com.amazonaws.AmazonServiceException serviceError) {
+      details += ", status=" + serviceError.getStatusCode()
+          + ", errorCode=" + serviceError.getErrorCode()
+          + ", requestId=" + serviceError.getRequestId();
+    }
+    // SDK errors can echo credentials (for example InvalidAccessKeyId). Redact before logging.
+    String message = details + System.lineSeparator() + trace;
+    if (!blank(properties.accessKeyId())) message = message.replace(properties.accessKeyId(), "[REDACTED]");
+    if (!blank(properties.secretKey())) message = message.replace(properties.secretKey(), "[REDACTED]");
+    log.error("{}", message);
   }
 
   private boolean blank(String value) { return value == null || value.isBlank(); }

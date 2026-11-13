@@ -11,6 +11,41 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class EdsStorageServiceTest {
+  @Test void uploadFailureLogsStorageDetailsAndRedactsCredentials() {
+    var logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(EdsStorageService.class);
+    var appender = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+    appender.start();
+    logger.addAppender(appender);
+    AmazonS3 client = mock(AmazonS3.class);
+    var failure = new com.amazonaws.services.s3.model.AmazonS3Exception("Denied credential-id credential-secret");
+    failure.setStatusCode(403);
+    failure.setErrorCode("AccessDenied");
+    failure.setRequestId("request-123");
+    failure.initCause(new java.io.IOException("connection detail"));
+    when(client.putObject(any(com.amazonaws.services.s3.model.PutObjectRequest.class))).thenThrow(failure);
+    var storage = new EdsStorageService(new EdsProperties("http://localhost", "bucket", "credential-id", "credential-secret", "us-east-1")) {
+      @Override protected AmazonS3 createClient() { return client; }
+    };
+    try {
+      var error = assertThrows(BusinessException.class, () -> storage.put(
+          new MockMultipartFile("file", new byte[]{1}), "application/pdf", "training-materials/test.pdf"));
+      assertEquals("EDS 文件上传失败，请检查存储连接和权限", error.getMessage());
+      String logs = appender.list.stream().map(ch.qos.logback.classic.spi.ILoggingEvent::getFormattedMessage)
+          .collect(java.util.stream.Collectors.joining("\n"));
+      assertTrue(logs.contains("AccessDenied"));
+      assertTrue(logs.contains("403"));
+      assertTrue(logs.contains("request-123"));
+      assertTrue(logs.contains("connection detail"));
+      assertTrue(logs.contains("training-materials/test.pdf"));
+      assertFalse(logs.contains("credential-id"));
+      assertFalse(logs.contains("credential-secret"));
+      verify(client).shutdown();
+    } finally {
+      logger.detachAppender(appender);
+      appender.stop();
+    }
+  }
+
   @Test void sdkUploadsReadsAndDeletesThroughPathStyleEndpoint() throws Exception {
     var server = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
     byte[] data = {1, 2, 3};
