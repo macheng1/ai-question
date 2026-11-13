@@ -26,6 +26,8 @@ public class LearnerRecordService {
         var rows = persistence.findAssignedTrainings(identity.accountId(), identity.enterpriseId());
         var now = java.time.LocalDateTime.now(java.time.ZoneOffset.UTC);
         for (var row : rows) {
+            normalizeTime(row, "videoCompletedAt");
+            normalizeTime(row, "readingCompletedAt");
             String learning = LearnerTaskStatus.learning(row.get("sessionId") != null, number(row, "totalUnits"), number(row, "completedUnits"), row.get("confirmedAt") != null);
             row.put("learningStatus", learning);
             row.put("started", row.get("sessionId") != null);
@@ -40,6 +42,7 @@ public class LearnerRecordService {
             row.remove("videoCompletedAt");
             row.remove("readingCompletedAt");
             row.remove("confirmedAt");
+            row.put("trainingEnded", flag(row.get("trainingEnded")));
             row.put("purpose", row.get("assessmentId") == null ? "STANDALONE" : "EXAM");
             if (row.get("assessmentId") != null) {
                 var start = date(row.get("examStartAt"));
@@ -59,6 +62,11 @@ public class LearnerRecordService {
             row.remove("resultVisible");
         }
         return rows;
+    }
+
+    private static void normalizeTime(Map<String, Object> row, String key) {
+        if (row.get(key) instanceof Number millis)
+            row.put(key, new java.sql.Timestamp(millis.longValue()));
     }
 
     private static long number(Map<String, Object> row, String key) {
@@ -81,6 +89,7 @@ public class LearnerRecordService {
         var training = trainings(identity).stream().filter(r -> ((Number) r.get("id")).longValue() == trainingId).findFirst().orElseThrow(() -> new com.aiquestion.common.BusinessException(com.aiquestion.common.ErrorCode.NOT_FOUND, "培训不存在或未分配给你"));
         Object session = training.get("sessionId");
         var materials = persistence.findTrainingMaterials(com.aiquestion.repository.RepositoryRows.nullableLong(session), trainingId, com.aiquestion.repository.RepositoryRows.nullableLong(session), trainingId);
+        materials.forEach(row -> normalizeTime(row, "completedAt"));
         var attempts = exams(identity).stream().filter(r -> Objects.equals(r.get("taskId"), training.get("assessmentId"))).toList();
         return Map.of("training", training, "materials", materials, "attempts", attempts);
     }

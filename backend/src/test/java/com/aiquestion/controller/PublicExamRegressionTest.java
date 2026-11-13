@@ -20,6 +20,22 @@ class PublicExamRegressionTest {
         when(repository.lockAttempt(1L)).thenReturn(List.of(Map.of("status", status, "duration", 30)));
     }
 
+    @Test void trainingDeadlineBlocksAnswersEvenWhenExamDeadlineIsLater() {
+        attempt("IN_PROGRESS");
+        var now = java.time.LocalDateTime.now(java.time.ZoneOffset.UTC);
+        when(repository.lockAttempt(1L)).thenReturn(List.of(Map.of("status", "IN_PROGRESS", "duration", 30,
+            "endAt", now.plusDays(1), "trainingEndAt", now.minusSeconds(1))));
+        var error = assertThrows(BusinessException.class, () -> service.answer(1L, 999L, new PublicExamController.AnswerCommand("A")));
+        assertEquals("培训已结束，不能继续学习或考试", error.getMessage());
+    }
+    @Test void aggregateTrainingTimesUseAbsoluteInstants() {
+        long epoch = java.time.Instant.parse("2026-11-12T07:52:00Z").toEpochMilli();
+        when(repository.findTaskDetails(1L)).thenReturn(List.of(Map.of("trainingStartAt", new java.math.BigDecimal(epoch))));
+        var data = service.get(1L, false, null).data();
+        assertEquals(java.time.Instant.parse("2026-11-12T07:52:00Z"), ((java.sql.Timestamp)data.get("trainingStartAt")).toInstant());
+        assertEquals(java.time.LocalDateTime.parse("2026-11-12T07:52:00"),
+            ReflectionTestUtils.invokeMethod(PublicExamService.class, "toLocalDateTime", new java.math.BigDecimal(epoch)));
+    }
     @Test void foreignQuestionReturnsBusinessError() {
         attempt("IN_PROGRESS");
         var error = assertThrows(BusinessException.class, () -> service.answer(1L, 999L, new PublicExamController.AnswerCommand("A")));

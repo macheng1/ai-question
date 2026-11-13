@@ -16,7 +16,7 @@ class TrainingAudienceInheritanceTest {
     when(repository.findAudienceType(1L)).thenReturn(List.of("USERS"));
     when(repository.findScopeTargetIds(1L)).thenReturn(List.of(3L));
     when(repository.countLearningSessions(1L)).thenReturn(List.of(0));
-    when(repository.countExamParticipants(9L)).thenReturn(List.of(1));
+    when(repository.countExamParticipants(1L)).thenReturn(List.of(1));
     assertDoesNotThrow(() -> service.save(1L, 2L, new TrainingAudienceService.Scope("USERS", List.of(3L))));
     assertThrows(BusinessException.class, () -> service.save(1L, 2L, new TrainingAudienceService.Scope("USERS", List.of(4L))));
     verify(repository, never()).deleteAudience(anyLong());

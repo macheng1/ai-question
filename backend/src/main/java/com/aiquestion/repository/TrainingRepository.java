@@ -8,14 +8,16 @@ import org.apache.ibatis.annotations.Param;
 /** Persistence operations for TrainingService. SQL is defined in the matching mapper XML. */
 @Mapper
 public interface TrainingRepository {
+  List<String> findOwnSurveyAnswers(@Param("trainingId") long trainingId, @Param("accountId") long accountId, @Param("employeeIdentity") boolean employeeIdentity);
+  List<Integer> countTrainingAttempts(@Param("trainingId") Long trainingId);
+  int bumpVersion(@Param("trainingId") Long trainingId);
+  List<Integer> countOtherTrainingReferences(@Param("assessmentId") Long assessmentId, @Param("trainingId") Long trainingId);
   List<Map<String, Object>> findById(@Param("trainingId") Long trainingId, @Param("lock") boolean lock);
   List<Long> countSurveyResponses(@Param("trainingId") Long trainingId);
   List<Map<String, Object>> findByOwner(@Param("ownerId") Long ownerId);
-  List<Integer> countExamParticipants(@Param("assessmentId") Long assessmentId);
+  List<Integer> countExamParticipants(@Param("trainingId") Long trainingId);
   List<Integer> countTrainingLearningSessions(@Param("trainingId") Long trainingId);
   List<Integer> countOwnedAssessments(@Param("assessmentId") Long assessmentId, @Param("ownerId") Long ownerId);
-  List<Integer> countOtherTrainingReferences(@Param("assessmentId") Long assessmentId, @Param("excludedTrainingId") Long excludedTrainingId);
-  List<Long> countAssessmentActivity(@Param("assessmentId") Long assessmentId, @Param("sessionAssessmentId") Long sessionAssessmentId);
   int insertTraining(
       @Param("name") String name,
       @Param("description") String description,
@@ -24,7 +26,7 @@ public interface TrainingRepository {
       @Param("ownerId") Long ownerId,
       @Param("generated") GeneratedId generated);
   List<Integer> countLearningBeforeRebind(@Param("trainingId") Long trainingId, @Param("assessmentId") Long assessmentId);
-  List<Integer> countParticipantsBeforeRebind(@Param("assessmentId") Long assessmentId);
+  List<Integer> countParticipantsBeforeRebind(@Param("trainingId") Long trainingId);
   int updateContent(
       @Param("name") String name,
       @Param("description") String description,
@@ -41,7 +43,7 @@ public interface TrainingRepository {
       @Param("trainingId") Long trainingId);
   int clearCopiedAssessment(@Param("trainingId") Long trainingId);
   List<Integer> countUpcomingTrainings(@Param("trainingId") Long trainingId);
-  List<Integer> countParticipantsBeforeDelete(@Param("assessmentId") Long assessmentId);
+  List<Integer> countParticipantsBeforeDelete(@Param("trainingId") Long trainingId);
   List<Integer> countSessionsBeforeDelete(@Param("trainingId") Long trainingId);
   List<Integer> countMaterials(@Param("trainingId") Long trainingId);
   int deleteTraining(@Param("trainingId") Long trainingId);
@@ -76,6 +78,10 @@ public interface TrainingRepository {
   List<Integer> countCandidateVideoProgress(@Param("videoId") Long videoId);
   List<Integer> countAdministratorVideoProgress(@Param("videoId") Long videoId);
   int deleteVideo(@Param("videoId") Long videoId, @Param("trainingId") Long trainingId);
+  int syncEndedExamSchedule(@Param("trainingId") Long trainingId);
+
+  int endTraining(@Param("trainingId") Long trainingId);
+  List<Map<String, Object>> findReviewVideos(@Param("trainingId") Long trainingId);
   List<Long> findVideoIds(@Param("trainingId") Long trainingId);
   int updateVideoOrder(@Param("sortOrder") int sortOrder, @Param("trainingId") Long trainingId, @Param("videoId") Long videoId);
   List<String> findVideoStoragePaths(@Param("trainingId") Long trainingId);

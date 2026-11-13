@@ -4,6 +4,7 @@
   <select id="findAssignedTrainings" resultType="java.util.LinkedHashMap">
     SELECT t.id,t.name,t.description,t.category,t.requirement_type requirementType,
   t.assessment_id assessmentId,t.survey_enabled surveyEnabled,ta.assigned_at assignedAt,
+  (t.end_at IS NOT NULL AND t.end_at&lt;=CURRENT_TIMESTAMP(3)) trainingEnded,
   EXISTS(SELECT 1 FROM training_survey_response r WHERE r.training_id=t.id AND r.employee_id=#{employeeId}) surveySubmitted,
   s.id sessionId,s.started_at startedAt,s.completed_at confirmedAt,
   (SELECT COUNT(*) FROM training_video v WHERE v.training_id=t.id)
@@ -12,8 +13,8 @@
     +(SELECT COUNT(*) FROM candidate_material_progress p JOIN training_material m ON m.id=p.material_id WHERE p.session_id=s.id AND m.training_id=t.id AND p.completed=1) completedUnits,
   COALESCE((SELECT SUM(p.studied_seconds) FROM candidate_video_progress p JOIN training_video v ON v.id=p.video_id WHERE v.training_id=t.id AND p.session_id=s.id),0)
     +COALESCE((SELECT SUM(p.studied_seconds) FROM candidate_material_progress p JOIN training_material m ON m.id=p.material_id WHERE m.training_id=t.id AND p.session_id=s.id),0) studiedSeconds,
-  (SELECT MAX(p.completed_at) FROM candidate_video_progress p JOIN training_video v ON v.id=p.video_id WHERE v.training_id=t.id AND p.session_id=s.id) videoCompletedAt,
-  (SELECT MAX(p.completed_at) FROM candidate_material_progress p JOIN training_material m ON m.id=p.material_id WHERE m.training_id=t.id AND p.session_id=s.id) readingCompletedAt,
+  (SELECT MAX(UNIX_TIMESTAMP(p.completed_at)*1000) FROM candidate_video_progress p JOIN training_video v ON v.id=p.video_id WHERE v.training_id=t.id AND p.session_id=s.id) videoCompletedAt,
+  (SELECT MAX(UNIX_TIMESTAMP(p.completed_at)*1000) FROM candidate_material_progress p JOIN training_material m ON m.id=p.material_id WHERE m.training_id=t.id AND p.session_id=s.id) readingCompletedAt,
   a.name examName,a.start_at examStartAt,a.end_at examEndAt,a.status examLifecycle,
   a.allow_retake allowRetake,a.max_attempts maxAttempts,a.show_result_immediately resultVisible,
   aa.id attemptId,aa.status attemptStatus,aa.score,aa.total_score totalScore,aa.passed,
@@ -30,12 +31,12 @@ ORDER BY ta.assigned_at DESC,t.id DESC
 
   </select>
   <select id="findTrainingMaterials" resultType="java.util.LinkedHashMap">
-    SELECT v.id,v.title,'VIDEO' materialType,1 totalUnits,COALESCE(p.completed,0) completedUnits,COALESCE(p.studied_seconds,0) studiedSeconds,p.completed_at completedAt
+    SELECT v.id,v.title,'VIDEO' materialType,1 totalUnits,COALESCE(p.completed,0) completedUnits,COALESCE(p.studied_seconds,0) studiedSeconds,UNIX_TIMESTAMP(p.completed_at)*1000 completedAt
 FROM training_video v LEFT JOIN candidate_video_progress p ON p.video_id=v.id AND p.session_id=#{videoSessionId} WHERE v.training_id=#{trainingId}
 UNION ALL
 SELECT m.id,m.title,m.material_type materialType,m.page_count totalUnits,
   COALESCE(SUM(p.completed),0) completedUnits,COALESCE(SUM(p.studied_seconds),0) studiedSeconds,
-  CASE WHEN SUM(p.completed)=m.page_count THEN MAX(p.completed_at) END completedAt
+  CASE WHEN SUM(p.completed)=m.page_count THEN MAX(UNIX_TIMESTAMP(p.completed_at)*1000) END completedAt
 FROM training_material m LEFT JOIN candidate_material_progress p ON p.material_id=m.id AND p.session_id=#{materialSessionId}
 WHERE m.training_id=#{materialTrainingId} GROUP BY m.id,m.title,m.material_type,m.page_count
 
@@ -51,15 +52,18 @@ WHERE t.created_by=#{enterpriseId} AND p.employee_id=#{employeeId} ORDER BY a.id
 
   </select>
   <select id="findLatestMistakes" resultType="java.util.LinkedHashMap">
-    SELECT aa.id,q.id questionId,t.name examName,q.stem,aa.answer_text userAnswer,q.answer_text correctAnswer,q.analysis
-FROM assessment_answer aa JOIN assessment_attempt a ON a.id=aa.attempt_id
-JOIN assessment_task t ON t.id=a.task_id JOIN assessment_participant p ON p.id=a.participant_id
-JOIN question_item q ON q.id=aa.question_id
-WHERE t.created_by=#{enterpriseId} AND p.employee_id=#{employeeId} AND a.status='SUBMITTED'
-  AND t.show_result_immediately=1 AND COALESCE(aa.is_correct,0)=0
-  AND a.id=(SELECT MAX(a2.id) FROM assessment_attempt a2 WHERE a2.participant_id=p.id AND a2.status='SUBMITTED')
-ORDER BY aa.id DESC
-
+    SELECT aq.id,q.id questionId,t.name examName,q.stem,
+      COALESCE(aa.answer_text,'') userAnswer,q.answer_text correctAnswer,q.analysis
+    FROM assessment_attempt_question aq
+    JOIN assessment_attempt a ON a.id=aq.attempt_id
+    JOIN assessment_task t ON t.id=a.task_id
+    JOIN assessment_participant p ON p.id=a.participant_id
+    JOIN question_item q ON q.id=aq.question_id
+    LEFT JOIN assessment_answer aa ON aa.attempt_id=aq.attempt_id AND aa.question_id=aq.question_id
+    WHERE t.created_by=#{enterpriseId} AND p.employee_id=#{employeeId} AND a.status='SUBMITTED'
+      AND t.show_result_immediately=1 AND COALESCE(aa.is_correct,0)=0
+      AND a.id=(SELECT MAX(a2.id) FROM assessment_attempt a2 WHERE a2.participant_id=p.id AND a2.status='SUBMITTED')
+    ORDER BY a.id DESC,aq.sort_no,aq.id
   </select>
   <select id="findQuestionOptions" resultType="java.util.LinkedHashMap">
     SELECT question_id questionId,option_key optionKey,option_text optionText

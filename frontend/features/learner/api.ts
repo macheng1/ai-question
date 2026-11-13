@@ -7,6 +7,7 @@ export type LearnerTraining = {
   requirementType: string;
   purpose: string;
   assessmentId?: number;
+  trainingEnded?: boolean;
   learningStatus: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
   progress: number;
   studiedSeconds: number;

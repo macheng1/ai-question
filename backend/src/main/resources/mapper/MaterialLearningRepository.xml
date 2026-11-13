@@ -5,13 +5,13 @@
     SELECT * FROM candidate_learning_session WHERE <choose><when test="examTask">task_id</when><otherwise>training_id</otherwise></choose>=#{taskId} AND token=#{token}
   </select>
   <select id="findMaterials" resultType="java.util.LinkedHashMap">
-    SELECT m.id,m.training_id trainingId,m.title,m.material_type materialType,m.page_count pageCount FROM training_material m JOIN training t ON t.id=m.training_id WHERE <choose><when test="examTask">t.assessment_id=#{taskId}</when><otherwise>t.id=#{taskId}</otherwise></choose> ORDER BY t.id,m.sort_order,m.id
+    SELECT m.id,m.training_id trainingId,m.title,m.material_type materialType,m.page_count pageCount FROM training_material m JOIN training t ON t.id=m.training_id WHERE <choose><when test="examTask">t.assessment_id=#{taskId}</when><otherwise>t.id=#{taskId}</otherwise></choose> AND EXISTS (SELECT 1 FROM candidate_learning_session learner JOIN training_audience r ON r.candidate_name=learner.candidate_name AND r.phone=learner.phone WHERE learner.id=#{sessionId} AND r.training_id=t.id) ORDER BY t.id,m.sort_order,m.id
   </select>
   <select id="findPageProgress" resultType="java.util.LinkedHashMap">
     SELECT p.page_number pageNumber,p.required_seconds requiredSeconds,COALESCE(s.studied_seconds,0) studiedSeconds,COALESCE(s.completed,FALSE) completed FROM training_material_page p LEFT JOIN candidate_material_progress s ON s.material_id=p.material_id AND s.page_number=p.page_number AND s.session_id=#{sessionId} WHERE p.material_id=#{materialId} ORDER BY p.page_number
   </select>
   <select id="countAuthorizedPage" resultType="java.lang.Integer">
-    SELECT COUNT(*) FROM training_material m JOIN training t ON t.id=m.training_id WHERE m.id=#{materialId} AND <choose><when test="examTask">t.assessment_id=#{taskId}</when><otherwise>t.id=#{taskId}</otherwise></choose> AND #{pageNumber} BETWEEN 1 AND m.page_count
+    SELECT COUNT(*) FROM training_material m JOIN training t ON t.id=m.training_id WHERE m.id=#{materialId} AND <choose><when test="examTask">t.assessment_id=#{taskId}</when><otherwise>t.id=#{taskId}</otherwise></choose> AND EXISTS (SELECT 1 FROM candidate_learning_session learner JOIN training_audience r ON r.candidate_name=learner.candidate_name AND r.phone=learner.phone WHERE learner.id=#{sessionId} AND r.training_id=t.id) AND #{pageNumber} BETWEEN 1 AND m.page_count
   </select>
   <select id="countIncompleteEarlierPages" resultType="java.lang.Integer">
     SELECT COUNT(*) FROM training_material_page p WHERE p.material_id=#{materialId} AND p.page_number&lt;#{pageNumber} AND NOT EXISTS (SELECT 1 FROM candidate_material_progress s WHERE s.session_id=#{sessionId} AND s.material_id=p.material_id AND s.page_number=p.page_number AND s.completed=TRUE)

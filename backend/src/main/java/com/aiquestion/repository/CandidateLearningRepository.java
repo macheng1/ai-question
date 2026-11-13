@@ -8,6 +8,7 @@ import org.apache.ibatis.annotations.Param;
 /** Persistence operations for CandidateLearningService. SQL is defined in the matching mapper XML. */
 @Mapper
 public interface CandidateLearningRepository {
+  List<Map<String, Object>> findCandidateTrainings(@Param("taskId") Long taskId, @Param("examTask") boolean examTask, @Param("candidateName") String candidateName, @Param("phone") String phone);
   List<Map<String, Object>> findTrainings(@Param("taskId") Long taskId, @Param("examTask") boolean examTask);
   List<Integer> countIncompleteVideos(@Param("taskId") Long taskId, @Param("sessionTaskId") Long sessionTaskId, @Param("candidateName") String candidateName, @Param("phone") String phone, @Param("examTask") boolean examTask);
   List<Integer> countIncompletePages(@Param("taskId") Long taskId, @Param("sessionTaskId") Long sessionTaskId, @Param("candidateName") String candidateName, @Param("phone") String phone, @Param("examTask") boolean examTask);

@@ -13,13 +13,24 @@ export const trainingCategories = [
   { value: "POLICY", label: "制度培训" },
 ];
 export type TrainingAudienceScope = {
-  type: "ALL" | "DEPARTMENT" | "USERS";
+  type: "" | "ALL" | "DEPARTMENT" | "USERS";
   ids: number[];
 };
+export type TrainingExam = {
+  name?: string;
+  enabled: boolean; paperId: number | null; startAt: string | null; endAt: string | null;
+  durationMinutes: number; allowRetake: boolean; maxAttempts: number;
+  shuffleQuestions: boolean; shuffleOptions: boolean; showResultImmediately: boolean;
+};
 export type Training = {
+  exam?: TrainingExam;
+  examStatus?: string | null;
+  examEndAt?: string | null;
+  examShared?: boolean;
   audience?: TrainingAudienceScope;
   purpose?: "STANDALONE" | "EXAM";
   learningLocked?: boolean;
+  examLocked?: boolean;
   category?: string;
   requirementType?: "REQUIRED" | "ELECTIVE";
   id: number;
@@ -33,10 +44,11 @@ export type Training = {
   version: number;
   responseCount?: number;
   submitted?: boolean;
+  submittedAnswers?: Record<string, string>;
 };
 export type SaveTraining = Omit<
   Training,
-  "id" | "responseCount" | "submitted" | "version"
+  "id" | "responseCount" | "submitted" | "submittedAnswers" | "version"
 > & { version?: number };
 export type SurveyResponse = {
   id: number;
@@ -75,7 +87,11 @@ export type ReminderResult = { employeeId: number; name: string; status: "SENT" 
 export const getReminderPreview = (id: number) => apiClient.get<ReminderPreview>(`/management/trainings/${id}/reminders`);
 export const sendReminders = (id: number, requestId: string, employeeIds: number[]) => apiClient.post<ReminderResult[]>(`/management/trainings/${id}/reminders`, { requestId, employeeIds }, { timeout: 900000 });
 
-export const copyTraining = (id: number) => apiClient.post<Training>(`/management/trainings/${id}/copy`, undefined, { timeout: 900000 });
+export const copyTraining = (id: number, sourceVersion: number, training: SaveTraining) => apiClient.post<Training>(`/management/trainings/${id}/copy`, { sourceVersion, training }, { timeout: 900000 });
 
 export const getTrainingExcludedEmployees = (assessmentId: number, trainingId?: number) =>
   apiClient.get<number[]>("/management/trainings/audience-eligibility", { assessmentId, trainingId });
+
+export const endTrainingExam = (id: number) => apiClient.post<Training>(`/management/trainings/${id}/exam/end`);
+
+export const endTraining = (id: number) => apiClient.post<Training>(`/management/trainings/${id}/end`);

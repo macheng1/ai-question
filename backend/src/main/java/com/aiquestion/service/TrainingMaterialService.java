@@ -42,11 +42,38 @@ public class TrainingMaterialService {
     }
 
     @Transactional
-    public void upload(long training, long user, MultipartFile file) throws IOException {
+    public long upload(long training, long user, MultipartFile file) throws IOException {
         trainings.get(training, user);
         com.aiquestion.repository.RepositoryRows.one(persistence.lockTrainingForUpload(training));
         if (com.aiquestion.repository.RepositoryRows.one(persistence.countTrainingSessions(training)) > 0)
             throw new BusinessException(ErrorCode.BAD_REQUEST, "已有学习记录，不能新增材料，请新建培训");
+        var info = inspect(file);
+        String title = info.title(), type = info.type(), mime = info.mime(), extension = info.extension();
+        int pages = info.pageCount();
+        String key = oss.uploadMaterial(file, mime, extension, "training-materials");
+        org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {
+            public void afterCompletion(int status) {
+                if (status != STATUS_COMMITTED) try { oss.delete(key); } catch (RuntimeException ignored) { }
+            }
+        });
+        try {
+            var inserted1 = new com.aiquestion.repository.GeneratedId();
+            persistence.insertMaterial(training, title, type, key, pages, inserted1);
+            Long id = inserted1.getId();
+            for (int page = 1; page <= pages; page++) persistence.insertPage(id, page);
+            return id;
+        } catch (RuntimeException e) {
+            try {
+                oss.delete(key);
+            } catch (RuntimeException ignored) {
+            }
+            throw e;
+        }
+    }
+
+    public record Inspection(String title, String type, String mime, String extension, int pageCount) {}
+
+    public Inspection inspect(MultipartFile file) throws IOException {
         if (file.isEmpty() || file.getSize() > 20 * 1024 * 1024)
             throw new BusinessException(ErrorCode.BAD_REQUEST, "PDF和图片不能超过20MB");
         byte[] bytes = file.getBytes();
@@ -88,19 +115,7 @@ public class TrainingMaterialService {
             type = "IMAGE";
             mime = "png".equals(extension) ? "image/png" : "image/jpeg";
         }
-        String key = oss.uploadMaterial(file, mime, extension, "training-materials");
-        try {
-            var inserted1 = new com.aiquestion.repository.GeneratedId();
-            persistence.insertMaterial(training, title, type, key, pages, inserted1);
-            Long id = inserted1.getId();
-            for (int page = 1; page <= pages; page++) persistence.insertPage(id, page);
-        } catch (RuntimeException e) {
-            try {
-                oss.delete(key);
-            } catch (RuntimeException ignored) {
-            }
-            throw e;
-        }
+        return new Inspection(title, type, mime, extension, pages);
     }
 
     public byte[] page(long training, long id, int page) throws IOException {

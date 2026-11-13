@@ -64,6 +64,11 @@ public class TrainingEndpointService {
         return ApiResponse.ok(null);
     }
 
+    public ApiResponse<?> inspectMaterial(org.springframework.web.multipart.MultipartFile file, String auth) throws java.io.IOException {
+        user(auth);
+        return ApiResponse.ok(materials.inspect(file));
+    }
+
     public ApiResponse<?> uploadMaterial(long id, org.springframework.web.multipart.MultipartFile file, String auth) throws java.io.IOException {
         materials.upload(id, user(auth), file);
         return ApiResponse.ok(materials.list(id));
@@ -98,11 +103,39 @@ public class TrainingEndpointService {
     }
 
     public ApiResponse<?> create(TrainingService.SaveTraining command, String auth) {
+        command.requireSchedule();
         return ApiResponse.ok(service.save(null, command, user(auth)));
     }
 
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
+    public ApiResponse<?> createWithMaterials(TrainingService.SaveTraining command,
+        List<org.springframework.web.multipart.MultipartFile> videos,
+        List<org.springframework.web.multipart.MultipartFile> documents, List<List<TrainingMaterialService.PageTime>> materialTimings, String auth) throws java.io.IOException {
+        long uid = user(auth);
+        command.requireSchedule();
+        var saved = service.save(null, command, uid);
+        long id = ((Number) saved.get("id")).longValue();
+        if (videos != null) for (var file : videos) upload(id, file, auth);
+        if (materialTimings != null && materialTimings.size() != (documents == null ? 0 : documents.size()))
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "材料与阅读时长配置不匹配");
+        if (documents != null) for (int index = 0; index < documents.size(); index++) {
+            long material = materials.upload(id, uid, documents.get(index));
+            if (materialTimings != null) materials.timings(id, material, uid, materialTimings.get(index));
+        }
+        return ApiResponse.ok(service.get(id, uid));
+    }
+
     public ApiResponse<?> update(long id, TrainingService.SaveTraining command, String auth) {
+        command.requireSchedule();
         return ApiResponse.ok(service.save(id, command, user(auth)));
+    }
+
+    public ApiResponse<?> endTraining(long id, String auth) {
+        return ApiResponse.ok(service.endTraining(id, user(auth)));
+    }
+
+    public ApiResponse<?> endExam(long id, String auth) {
+        return ApiResponse.ok(service.endExam(id, user(auth)));
     }
 
     public ApiResponse<?> delete(long id, String auth) {
@@ -156,6 +189,10 @@ public class TrainingEndpointService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "视频文件内容与扩展名不匹配");
         String type = mp4 ? "video/mp4" : "video/webm";
         String key = storage.upload(file, type);
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive())
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {
+                public void afterCompletion(int status) { if (status != STATUS_COMMITTED) cleanupVideo(key); }
+            });
         try {
             service.addVideo(id, uid, name.substring(0, Math.min(name.length(), 255)), key, type);
         } catch (RuntimeException e) {

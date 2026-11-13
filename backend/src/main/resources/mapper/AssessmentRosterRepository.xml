@@ -8,7 +8,7 @@
     SELECT COUNT(*) FROM training WHERE assessment_id=#{taskId}
   </select>
   <select id="findTrainingRoster" resultType="java.util.LinkedHashMap">
-    SELECT r.employee_id employeeId,r.department_id departmentId,r.department_name departmentName,r.candidate_name candidateName,r.phone,EXISTS(SELECT 1 FROM assessment_participant p JOIN assessment_attempt a ON a.participant_id=p.id WHERE p.task_id=t.assessment_id AND p.phone=r.phone AND a.submitted_at IS NOT NULL) submitted FROM training_audience r JOIN training t ON t.id=r.training_id WHERE t.assessment_id=#{taskId} ORDER BY r.employee_id
+    SELECT DISTINCT r.employee_id employeeId,r.department_id departmentId,r.department_name departmentName,r.candidate_name candidateName,r.phone,EXISTS(SELECT 1 FROM assessment_participant p JOIN assessment_attempt a ON a.participant_id=p.id WHERE p.task_id=t.assessment_id AND p.phone=r.phone AND a.submitted_at IS NOT NULL) submitted FROM training_audience r JOIN training t ON t.id=r.training_id WHERE t.assessment_id=#{taskId} ORDER BY r.employee_id
   </select>
   <select id="countTask" resultType="java.lang.Integer">
     SELECT COUNT(*) FROM assessment_task WHERE id=#{taskId}

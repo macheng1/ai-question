@@ -48,11 +48,11 @@ export function TrainingReminderModal({ training, onClose }: { training: Trainin
         <strong>逾期未完成规则</strong>
         <p>培训：超过培训结束时间，仍未完成全部材料学习（无材料培训需确认完成）。</p>
         <p>考试：超过关联考试结束时间，尚未参加、未交卷或最后一次成绩未通过。</p>
-        <p>两类时间独立判断，未开始的员工也包含在内；满意度评估不计入。同一员工的多个原因合并为一封邮件。</p>
-        <p>培训结束后仍可补学；考试结束后请联系管理员安排后续考试。</p>
+        <p>培训与考试使用相同起止时间，未开始学习的员工也包含在内；满意度评估不计入。同一员工的多个原因合并为一封邮件。</p>
+        <p>结束后可回看材料，不再记录学习进度或参加考试；需要重新学习或考试，请联系管理员安排新培训。</p>
       </div>} />
       {preview && <Space wrap><Typography.Text>培训结束：{dateText(preview.trainingEndAt)}</Typography.Text><Typography.Text>考试结束：{dateText(preview.examEndAt)}</Typography.Text></Space>}
-      {preview && !preview.trainingEndAt && <Banner type="warning" description="未设置培训结束时间，不判定培训逾期；关联考试仍按考试结束时间独立判定。" />}
+      {preview && !preview.trainingEndAt && <Banner type="warning" description="历史培训未设置结束时间，无法判定培训逾期，请联系管理员核查。" />}
       {preview && !preview.mailConfigured && <Banner type="warning" description="邮件服务未配置完整，请配置发件邮箱和平台访问地址后发送。" />}
       {error && <Banner type="danger" description={error} />}
       <p className="text-sm text-slate-500">每次最多选择 50 人。缺少有效邮箱的员工不可选；发送前再次检查完成情况。刷新名单后再次发送会产生新的提醒。</p>

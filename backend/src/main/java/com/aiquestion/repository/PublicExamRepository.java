@@ -8,6 +8,7 @@ import org.apache.ibatis.annotations.Param;
 /** Persistence operations for PublicExamService. SQL is defined in the matching mapper XML. */
 @Mapper
 public interface PublicExamRepository {
+  List<Long> findOpenTaskAttempts(@Param("taskId") Long taskId);
   List<Map<String, Object>> findAttemptStatus(@Param("attemptId") Long attemptId, @Param("taskId") Long taskId);
   List<Map<String, Object>> findAttemptCandidate(@Param("attemptId") Long attemptId, @Param("taskId") Long taskId);
   List<Map<String, Object>> findQuestionOptions(@Param("questionId") Long questionId);

@@ -26,3 +26,10 @@ test('unauthorized exam load fails without returning a fallback paper', async t 
   t.mock.method(globalThis,'fetch',async()=>({ok:false,status:401,json:async()=>({success:false,message:'请先确认身份'})}));
   await assert.rejects(loadExamPaper('1'), /请先确认身份/);
 });
+test('server TRUE and FALSE answers highlight the matching judge option', async t => {
+  for (const [answer, expected] of [['TRUE','A'],['FALSE','B']]) {
+    const q = await loadQuestion(t, {id:1,kind:'judge',options:[{key:'TRUE',text:'正确'},{key:'FALSE',text:'错误'}],answer:[answer]});
+    assert.deepEqual(q.answer,[expected]);
+    assert.ok(q.options.some(option=>option.key===q.answer[0]));
+  }
+});

@@ -9,7 +9,7 @@ import Link from "next/link";
 import "@douyinfe/semi-ui/react19-adapter";
 import { Button, Input, Modal, Select, Toast, InputNumber } from "@douyinfe/semi-ui";
 import { ProfileShell } from "@/components/layout/ProfileShell";
-import { ArrangeAssessmentModal } from "@/features/assessments/components/ArrangeAssessmentModal";
+import { useRouter } from "next/navigation";
 import {
   copyPaper,
   createPaper,
@@ -36,7 +36,7 @@ export default function PapersPage() {
   const [copyOpen, setCopyOpen] = useState(false);
   const [editing, setEditing] = useState<Paper | null>(null);
   const [copying, setCopying] = useState<Paper | null>(null);
-  const [arrange, setArrange] = useState<Paper | null>(null);
+  const router = useRouter();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [mode, setMode] = useState("FIXED");
@@ -157,7 +157,7 @@ export default function PapersPage() {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <Typography.Title heading={1} className="!m-0 !text-[28px] !font-semibold !text-[#183f35]">试卷管理</Typography.Title>
-              <p className="mt-2 text-sm text-slate-400">创建固定或随机试卷，并安排考试。</p>
+              <p className="mt-2 text-sm text-slate-400">创建固定或随机试卷，在培训中安排考试。</p>
             </div>
             <Button theme="solid" type="warning" onClick={openCreate}><IconPlus aria-hidden="true" /> 创建试卷</Button>
           </div>
@@ -197,7 +197,7 @@ export default function PapersPage() {
                   </div>
                   <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4 text-sm">
                     <Link href={`/profile/papers/${paper.id}/compose`} className={`rounded-lg px-4 py-2 font-semibold no-underline ${locked ? "bg-slate-100 text-slate-400" : "bg-blue-50 text-blue-600"}`}>组卷{locked ? "（已锁定）" : ""}</Link>
-                    <Button theme="borderless" className="text-slate-700" onClick={() => setArrange(paper)} disabled={!completed}>安排考试</Button>
+                    <Button theme="borderless" className="text-slate-700" onClick={() => router.push(`/profile/trainings/new?paperId=${paper.id}`)} disabled={!completed}>用于培训</Button>
                     <Button theme="borderless" className="text-slate-600" onClick={() => openEdit(paper)}>编辑</Button>
                     <Button theme="borderless" className="text-slate-600" onClick={() => openCopy(paper)}>复制</Button>
                     <Button theme="borderless" className="text-red-500" onClick={() => remove(paper)}>删除</Button>
@@ -212,7 +212,6 @@ export default function PapersPage() {
         <div className="flex flex-col gap-4 py-2"><Input value={name} onChange={setName} placeholder="试卷名称" /><Input value={description} onChange={setDescription} placeholder="描述（可选）" /><Select value={mode} onChange={(value) => setMode(String(value))} optionList={modeOptions} className="w-full" /><div className="grid grid-cols-3 gap-4 "><div className="min-w-0 col-span-1"><InputNumber value={totalScore} onChange={value => setTotalScore(String(value ?? ""))} prefix="总分" /></div><div className="min-w-0 col-span-1"><InputNumber value={duration} onChange={value => setDuration(String(value ?? ""))} prefix="时长" /></div><div className="min-w-0 col-span-1"><InputNumber value={passScore} onChange={value => setPassScore(String(value ?? ""))} prefix="及格" /></div></div></div>
       </Modal>
       <Modal bodyStyle={{ maxHeight: "calc(100dvh - 240px)", overflowY: "auto" }} width="min(480px, calc(100vw - 24px))" title="复制试卷" visible={copyOpen} onCancel={() => setCopyOpen(false)} footer={<Space wrap ><Button className="modal-cancel-button" onClick={() => setCopyOpen(false)}>取消</Button><Button theme="solid" type="warning" loading={saving} onClick={copy}>复制</Button></Space>}><div className="flex flex-col gap-4 py-2"><p className="text-sm text-slate-500">来源：{copying?.name}</p><Input value={name} onChange={setName} placeholder="副本名称" /><Input value={description} onChange={setDescription} placeholder="描述（可选）" /></div></Modal>
-      <ArrangeAssessmentModal paper={arrange} visible={Boolean(arrange)} onClose={() => setArrange(null)} onDone={load} />
     </ProfileShell>
   );
 }

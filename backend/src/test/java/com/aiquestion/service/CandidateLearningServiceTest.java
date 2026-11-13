@@ -18,7 +18,7 @@ class CandidateLearningServiceTest {
   org.mockito.Mockito.when(repository.countIncompletePages(1L,1L,"A","1",true)).thenReturn(java.util.List.of(0));
   var service = new CandidateLearningService(repository, org.mockito.Mockito.mock(AssessmentRosterService.class), org.mockito.Mockito.mock(LearningClock.class), org.mockito.Mockito.mock(MaterialLearningService.class), audience);
   assertDoesNotThrow(()->service.requireComplete(1,"A","1"));
-  org.mockito.Mockito.verify(audience).requireTask(1L,"A","1");
+  org.mockito.Mockito.verify(audience).requireOpenTask(1L,"A","1");
   org.mockito.Mockito.verify(repository).confirmSessionsCompleted(1L,"A","1",true);
  }
  @Test void repeatedRequestsDoNotReceiveRepeatedTolerance() {

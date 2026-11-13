@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.aiquestion.repository.PublicExamRepository">
+  <select id="findOpenTaskAttempts" resultType="java.lang.Long">SELECT id FROM assessment_attempt WHERE task_id=#{taskId} AND status='IN_PROGRESS' ORDER BY id</select>
   <select id="findAttemptStatus" resultType="java.util.LinkedHashMap">
     SELECT status FROM assessment_attempt WHERE id=#{attemptId} AND task_id=#{taskId}
   </select>
@@ -83,7 +84,7 @@
     SELECT question_id questionId,answer_text answerText,is_correct isCorrect,score FROM assessment_answer WHERE attempt_id=#{attemptId} ORDER BY question_id
   </select>
   <select id="findTaskDetails" resultType="java.util.LinkedHashMap">
-    SELECT a.id,a.name title,p.name subtitle,p.id paperId,p.mode paperMode,CASE WHEN p.mode='RANDOM' THEN COALESCE((SELECT SUM(r.single_count+r.multiple_count+r.true_false_count) FROM test_paper_random_bank r WHERE r.paper_id=p.id),0) ELSE (SELECT COUNT(*) FROM test_paper_question pq WHERE pq.paper_id=p.id) END questionCount,a.duration_minutes duration,p.total_score totalScore,p.pass_score passScore,a.allow_retake allowRetake,a.max_attempts maxAttempts,a.start_at startAt,a.end_at endAt,CASE WHEN a.end_at&lt;=CURRENT_TIMESTAMP(3) THEN 'ENDED' ELSE a.status END taskStatus,a.show_result_immediately reviewEnabled FROM assessment_task a JOIN test_paper p ON p.id=a.paper_id WHERE a.id=#{taskId}
+    SELECT a.id,a.name title,p.name subtitle,p.id paperId,p.mode paperMode,CASE WHEN p.mode='RANDOM' THEN COALESCE((SELECT SUM(r.single_count+r.multiple_count+r.true_false_count) FROM test_paper_random_bank r WHERE r.paper_id=p.id),0) ELSE (SELECT COUNT(*) FROM test_paper_question pq WHERE pq.paper_id=p.id) END questionCount,a.duration_minutes duration,p.total_score totalScore,p.pass_score passScore,a.allow_retake allowRetake,a.max_attempts maxAttempts,a.start_at startAt,a.end_at endAt,(SELECT UNIX_TIMESTAMP(tr.start_at)*1000 FROM training tr WHERE tr.assessment_id=a.id) trainingStartAt,(SELECT UNIX_TIMESTAMP(tr.end_at)*1000 FROM training tr WHERE tr.assessment_id=a.id) trainingEndAt,CASE WHEN a.end_at&lt;=CURRENT_TIMESTAMP(3) THEN 'ENDED' ELSE a.status END taskStatus,a.show_result_immediately reviewEnabled FROM assessment_task a JOIN test_paper p ON p.id=a.paper_id WHERE a.id=#{taskId}
   </select>
   <select id="findQuestions" resultType="java.util.LinkedHashMap">
     <choose><when test="paperQuestions">SELECT q.id,q.question_type,q.stem,q.answer_text,q.analysis,pq.score FROM assessment_task a JOIN test_paper_question pq ON pq.paper_id=a.paper_id JOIN question_item q ON q.id=pq.question_id WHERE a.id=#{sourceId} ORDER BY pq.sort_no,pq.id</when><otherwise>SELECT q.id,q.question_type,q.stem,q.answer_text,q.analysis,aq.score FROM assessment_attempt_question aq JOIN question_item q ON q.id=aq.question_id WHERE aq.attempt_id=#{sourceId} ORDER BY aq.sort_no,aq.id</otherwise></choose>
@@ -110,6 +111,6 @@
     SELECT p.task_id,p.candidate_name,p.phone FROM assessment_participant p JOIN assessment_attempt a ON a.participant_id=p.id WHERE a.id=#{attemptId}
   </select>
   <select id="lockAttempt" resultType="java.util.LinkedHashMap">
-    SELECT a.id,a.status,a.started_at startedAt,t.duration_minutes duration,t.status taskStatus,t.start_at startAt,t.end_at endAt FROM assessment_attempt a JOIN assessment_task t ON t.id=a.task_id WHERE a.id=#{attemptId} FOR UPDATE
+    SELECT a.id,a.status,a.started_at startedAt,t.duration_minutes duration,t.status taskStatus,t.start_at startAt,t.end_at endAt,(SELECT UNIX_TIMESTAMP(tr.start_at)*1000 FROM training tr WHERE tr.assessment_id=t.id) trainingStartAt,(SELECT UNIX_TIMESTAMP(tr.end_at)*1000 FROM training tr WHERE tr.assessment_id=t.id) trainingEndAt FROM assessment_attempt a JOIN assessment_task t ON t.id=a.task_id WHERE a.id=#{attemptId} FOR UPDATE
   </select>
 </mapper>

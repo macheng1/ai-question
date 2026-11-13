@@ -85,7 +85,7 @@ public class TrainingReminderMailer {
             + trainingEnd
             + "\n考试结束时间："
             + examEnd
-            + "\n\n培训逾期后仍可补学。若考试已经结束，请联系管理员安排后续考试。"
+            + "\n\n培训结束后可回看材料，不再记录学习进度或参加考试。如需重新学习或考试，请联系管理员安排新培训。"
             + "\n请登录员工账号查看："
             + publicUrl.replaceAll("/+$", "")
             + "/training/"

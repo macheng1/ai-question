@@ -13,6 +13,9 @@ import { useLearnerStore } from "@/features/auth/store";
 export function ExamAttemptPage({ id, attemptId, mode }: { id: string; attemptId?: string; mode: "answer" | "result" | "details" }) {
   const [paper, setPaper] = useState<ExamPaper>();
   const [error, setError] = useState("");
+  const [trainingId, setTrainingId] = useState<string | null>(null);
+  useEffect(() => { setTrainingId(new URLSearchParams(window.location.search).get("trainingId")); }, []);
+  const entry = `/kaoshi/${id}${trainingId ? `?trainingId=${encodeURIComponent(trainingId)}` : ""}`;
   useEffect(() => {
     let active = true;
     if (!attemptId || !/^\d+$/.test(attemptId)) { setError("缺少有效的答题记录，请从考试入口进入。"); return; }
@@ -22,8 +25,8 @@ export function ExamAttemptPage({ id, attemptId, mode }: { id: string; attemptId
     return () => { active = false; };
   }, [id, attemptId, mode]);
   const user = useLearnerStore(state => state.user);
-  return <H5Shell title={mode === "answer" ? "考试答题" : mode === "details" ? "考试详情" : "考试结果"} backHref={mode === "answer" ? `/kaoshi/${id}` : "/learner"}>
-    {error ? <div className="h5-empty"><Banner type="danger" description={error} /><Button className="!mt-4" onClick={() => window.location.assign(`/kaoshi/${id}`)}>返回考试入口</Button></div>
+  return <H5Shell title={mode === "answer" ? "考试答题" : mode === "details" ? "考试详情" : "考试结果"} backHref={trainingId ? `/training/${trainingId}` : mode === "answer" ? entry : "/learner"}>
+    {error ? <div className="h5-empty"><Banner type="danger" description={error} /><Button className="!mt-4" onClick={() => window.location.assign(entry)}>返回考试入口</Button></div>
       : !paper ? <div className="h5-empty"><Spin /><p>正在加载答题记录…</p></div>
       : mode === "answer" ? <ExamRunner key={attemptId} paper={paper} initialStage="answer" initialName={user?.name || ""} initialPhone={user?.phone || ""} initialAttemptId={Number(attemptId)} />
       : <ResultLoader paper={paper} attemptId={attemptId!} details={mode === "details"} />}

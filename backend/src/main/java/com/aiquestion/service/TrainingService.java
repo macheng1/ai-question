@@ -14,15 +14,31 @@ public class TrainingService {
     private final TrainingRepository persistence;
 
     private final ObjectMapper json;
+    private final TrainingExamService exams;
 
-    public TrainingService(TrainingRepository persistence, ObjectMapper json, AssessmentRosterService assessmentRosterService, TrainingAudienceService trainingAudienceService) {
+    public TrainingService(TrainingRepository persistence, ObjectMapper json, AssessmentRosterService assessmentRosterService, TrainingAudienceService trainingAudienceService, TrainingExamService exams) {
+        this.exams = exams;
         this.persistence = persistence;
         this.json = json;
         this.assessmentRosterService = assessmentRosterService;
         this.trainingAudienceService = trainingAudienceService;
     }
 
-    public record SaveTraining(String name, String description, boolean surveyEnabled, List<TrainingSurveyRules.Question> questions, Integer version, Long assessmentId, String category, String requirementType, TrainingAudienceService.Scope audience, java.time.LocalDateTime endAt, java.time.LocalDateTime startAt) {
+    public record SaveTraining(String name, String description, boolean surveyEnabled, List<TrainingSurveyRules.Question> questions, Integer version, Long assessmentId, String category, String requirementType, TrainingAudienceService.Scope audience, java.time.LocalDateTime endAt, java.time.LocalDateTime startAt, TrainingExamService.Settings exam) {
+        public SaveTraining {
+            if (startAt != null) startAt = startAt.truncatedTo(java.time.temporal.ChronoUnit.MILLIS);
+            if (endAt != null) endAt = endAt.truncatedTo(java.time.temporal.ChronoUnit.MILLIS);
+        }
+        public SaveTraining(String name, String description, boolean surveyEnabled, List<TrainingSurveyRules.Question> questions, Integer version, Long assessmentId, String category, String requirementType, TrainingAudienceService.Scope audience, java.time.LocalDateTime endAt, java.time.LocalDateTime startAt) {
+            this(name, description, surveyEnabled, questions, version, assessmentId, category, requirementType, audience, endAt, startAt, null);
+        }
+        public void requireSchedule() {
+            if (startAt == null || endAt == null || !endAt.isAfter(startAt))
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "请填写培训开始和结束时间，结束时间须晚于开始时间");
+        }
+        SaveTraining withAssessment(Long task) {
+            return new SaveTraining(name, description, surveyEnabled, questions, version, task, category, requirementType, audience, endAt, startAt, null);
+        }
     }
 
     public record Submission(Integer version, Map<String, String> answers) {
@@ -81,6 +97,9 @@ public class TrainingService {
         data.put("category", row.get("category"));
         data.put("requirementType", row.get("requirement_type"));
         data.put("assessmentId", row.get("assessment_id"));
+        data.put("examStatus", row.get("exam_status"));
+        data.put("examEndAt", row.get("exam_end_at") instanceof java.sql.Timestamp time ? time.toLocalDateTime() : row.get("exam_end_at"));
+        data.put("examShared", row.get("exam_reference_count") instanceof Number n && n.intValue() > 1);
         data.put("startAt", row.get("start_at") instanceof java.sql.Timestamp time ? time.toLocalDateTime() : row.get("start_at"));
         data.put("endAt", row.get("end_at") instanceof java.sql.Timestamp time ? time.toLocalDateTime() : row.get("end_at"));
         data.put("surveyEnabled", enabled(row));
@@ -103,7 +122,9 @@ public class TrainingService {
         var v = view(r);
         v.put("responseCount", count(id));
         v.put("audience", trainingAudienceService.get(id, user));
-        v.put("learningLocked", (r.get("assessment_id") instanceof Number task && com.aiquestion.repository.RepositoryRows.one(persistence.countExamParticipants(task.longValue())) > 0) || com.aiquestion.repository.RepositoryRows.one(persistence.countTrainingLearningSessions(id)) > 0);
+        v.put("exam", exams.get(assessmentId(r), user));
+        v.put("examLocked", com.aiquestion.repository.RepositoryRows.one(persistence.countTrainingAttempts(id)) > 0);
+        v.put("learningLocked", (r.get("assessment_id") instanceof Number task && com.aiquestion.repository.RepositoryRows.one(persistence.countExamParticipants(id)) > 0) || com.aiquestion.repository.RepositoryRows.one(persistence.countTrainingLearningSessions(id)) > 0);
         return v;
     }
 
@@ -114,8 +135,26 @@ public class TrainingService {
         if (command.name() == null || command.name().isBlank() || command.name().length() > 160 || (command.description() != null && command.description().length() > 2000))
             throw new BusinessException(ErrorCode.BAD_REQUEST, "请检查培训名称和简介长度");
         trainingAudienceService.lockAllocationOwner(user);
+        if (command.exam() != null) {
+            command.requireSchedule();
+            Long previous = null;
+            boolean locked = false;
+            if (id != null) {
+                var current = row(id, false);
+                owner(current, user);
+                if (!Objects.equals(command.version(), ((Number) current.get("version")).intValue()))
+                    throw new BusinessException(ErrorCode.BAD_REQUEST, "培训已被修改，请刷新后重试");
+                previous = assessmentId(current);
+                if (previous != null) assessmentRosterService.lockTask(previous);
+                persistence.syncEndedExamSchedule(id);
+                locked = com.aiquestion.repository.RepositoryRows.one(persistence.countTrainingAttempts(id)) > 0;
+            }
+            command = command.withAssessment(exams.save(previous, command.exam().withSchedule(command.startAt(), command.endAt()), command.name(), user, locked));
+        }
         if (command.assessmentId() != null && com.aiquestion.repository.RepositoryRows.one(persistence.countOwnedAssessments(command.assessmentId(), user)) == 0)
             throw new BusinessException(ErrorCode.BAD_REQUEST, "只能关联自己创建的考试");
+        if (command.assessmentId() != null && com.aiquestion.repository.RepositoryRows.one(persistence.countOtherTrainingReferences(command.assessmentId(), id)) > 0)
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "该考试属于其他培训，请在本培训选择试卷重新配置");
         // Use the same task-before-training lock order as starting learning or an exam.
         var assessmentLocks = new TreeSet<Long>();
         Long previousAssessment = null;
@@ -132,15 +171,6 @@ public class TrainingService {
             assessmentLocks.add(command.assessmentId());
         for (long task : assessmentLocks) assessmentRosterService.lockTask(task);
         String purpose = command.assessmentId() == null ? "STANDALONE" : "EXAM";
-        if (command.assessmentId() != null) {
-            if (com.aiquestion.repository.RepositoryRows.one(persistence.countOtherTrainingReferences(command.assessmentId(), id == null ? 0 : id)) > 0)
-                throw new BusinessException(ErrorCode.BAD_REQUEST, "该考试已关联其他培训");
-        }
-        if (command.assessmentId() != null) {
-            boolean associationChanged = id == null || !Objects.equals(row(id, false).get("assessment_id"), command.assessmentId());
-            if (associationChanged && com.aiquestion.repository.RepositoryRows.one(persistence.countAssessmentActivity(command.assessmentId(), command.assessmentId())) > 0)
-                throw new BusinessException(ErrorCode.BAD_REQUEST, "该考试已有学习或答题记录，不能新增关联培训");
-        }
         String category = Objects.toString(command.category(), "UNCATEGORIZED");
         String requirement = Objects.toString(command.requirementType(), "REQUIRED");
         if (!Set.of("UNCATEGORIZED", "ONBOARDING", "SAFETY", "POLICY").contains(category) || !Set.of("REQUIRED", "ELECTIVE").contains(requirement))
@@ -162,7 +192,7 @@ public class TrainingService {
                 copiedAssessment = copiedAssessmentId(old);
             if ((!Objects.equals(oldAssessment, command.assessmentId())) && com.aiquestion.repository.RepositoryRows.one(persistence.countLearningBeforeRebind(id, oldAssessment)) > 0)
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "已有学习记录，不能变更关联考试");
-            if ((!Objects.equals(oldAssessment, command.assessmentId())) && oldAssessment != null && com.aiquestion.repository.RepositoryRows.one(persistence.countParticipantsBeforeRebind(oldAssessment)) > 0)
+            if ((!Objects.equals(oldAssessment, command.assessmentId())) && oldAssessment != null && com.aiquestion.repository.RepositoryRows.one(persistence.countParticipantsBeforeRebind(id)) > 0)
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "已有考试记录，不能变更关联考试");
             if (!Objects.equals(command.version(), ((Number) old.get("version")).intValue()))
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "培训已被修改，请刷新后重试");
@@ -170,6 +200,10 @@ public class TrainingService {
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "已有反馈，不能修改题目；请新建培训");
             var scope = command.audience();
             var originalScope = trainingAudienceService.get(id, user);
+            if (old.get("end_at") instanceof java.sql.Timestamp end && !end.toLocalDateTime().isAfter(java.time.LocalDateTime.now())
+                && scope != null && (!Objects.equals(scope.type(), originalScope.type())
+                    || scope.ids() == null || !new HashSet<>(scope.ids()).equals(new HashSet<>(originalScope.ids()))))
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "培训已结束，不能追加学员");
             if (scope != null && scope.type() != null && scope.ids() != null && scope.ids().stream().noneMatch(Objects::isNull)
                     && originalScope != null && Objects.equals(oldAssessment, command.assessmentId())
                     && Objects.equals(scope.type(), originalScope.type())
@@ -185,6 +219,43 @@ public class TrainingService {
             persistence.clearCopiedAssessment(id);
             deleteCopiedAssessment(copiedAssessment, user);
         }
+        if (previousAssessment != null && !Objects.equals(previousAssessment, command.assessmentId())) exams.retireIfUnlinked(previousAssessment);
+        return get(id, user);
+    }
+
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
+    public Map<String, Object> endTraining(long id, long user) {
+        trainingAudienceService.lockAllocationOwner(user);
+        var current = row(id, false);
+        owner(current, user);
+        Long task = assessmentId(current);
+        if (task != null) assessmentRosterService.lockTask(task);
+        var locked = row(id, true);
+        if (!Objects.equals(task, assessmentId(locked)))
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "考试关联已变更，请刷新后重试");
+        Object start = locked.get("start_at");
+        java.time.LocalDateTime startAt = start instanceof java.sql.Timestamp timestamp ? timestamp.toLocalDateTime() : start instanceof java.time.LocalDateTime time ? time : null;
+        if (startAt != null && startAt.isAfter(java.time.LocalDateTime.now()))
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "培训尚未开始，不能结束培训");
+        if (task != null) exams.end(task, user);
+        persistence.endTraining(id);
+        persistence.syncEndedExamSchedule(id);
+        return get(id, user);
+    }
+
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
+    public Map<String, Object> endExam(long id, long user) {
+        trainingAudienceService.lockAllocationOwner(user);
+        var current = row(id, false);
+        owner(current, user);
+        Long task = assessmentId(current);
+        if (task == null) throw new BusinessException(ErrorCode.BAD_REQUEST, "本培训未开启考试");
+        assessmentRosterService.lockTask(task);
+        var locked = row(id, true);
+        if (!Objects.equals(task, assessmentId(locked)))
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "考试关联已变更，请刷新后重试");
+        exams.end(task, user);
+        persistence.bumpVersion(id);
         return get(id, user);
     }
 
@@ -202,7 +273,7 @@ public class TrainingService {
         Integer notStarted = com.aiquestion.repository.RepositoryRows.one(persistence.countUpcomingTrainings(id));
         if (!Integer.valueOf(1).equals(notStarted))
             throw new BusinessException(ErrorCode.BAD_REQUEST, "只有未开始的培训可以删除");
-        if (previousAssessment != null && com.aiquestion.repository.RepositoryRows.one(persistence.countParticipantsBeforeDelete(previousAssessment)) > 0)
+        if (previousAssessment != null && com.aiquestion.repository.RepositoryRows.one(persistence.countParticipantsBeforeDelete(id)) > 0)
             throw new BusinessException(ErrorCode.BAD_REQUEST, "已有考试记录，不能删除培训");
         if (count(id) > 0)
             throw new BusinessException(ErrorCode.BAD_REQUEST, "已有反馈，不能删除培训，可关闭评估");
@@ -211,6 +282,7 @@ public class TrainingService {
         if (com.aiquestion.repository.RepositoryRows.one(persistence.countMaterials(id)) > 0)
             throw new BusinessException(ErrorCode.BAD_REQUEST, "请先删除培训材料，再删除培训");
         persistence.deleteTraining(id);
+        if (previousAssessment != null) exams.retireIfUnlinked(previousAssessment);
         Long copiedAssessment = copiedAssessmentId(r);
         if (copiedAssessment != null)
             deleteCopiedAssessment(copiedAssessment, user);
@@ -230,7 +302,7 @@ public class TrainingService {
 
     private void deleteCopiedAssessment(long task, long user) {
         if (com.aiquestion.repository.RepositoryRows.one(persistence.countAssessmentReferences(task)) > 0 || com.aiquestion.repository.RepositoryRows.one(persistence.countCopiedExamParticipants(task)) > 0 || com.aiquestion.repository.RepositoryRows.one(persistence.countCopiedExamSessions(task)) > 0)
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "副本考试已被使用，不能自动删除");
+            return; // A shared or used exam must survive unlinking this training.
         persistence.deleteOwnedAssessment(task, user);
     }
 
@@ -265,6 +337,14 @@ public class TrainingService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "此培训尚未开启或已关闭评估");
         var result = view(r);
         result.put("submitted", submitted(id, identityColumn, accountId));
+        var ownAnswers = persistence.findOwnSurveyAnswers(id, accountId, "employee_id".equals(identityColumn));
+        if (!ownAnswers.isEmpty()) {
+            try {
+                result.put("submittedAnswers", json.readValue(ownAnswers.get(0), new TypeReference<Map<String, String>>() {}));
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+        }
         return result;
     }
 

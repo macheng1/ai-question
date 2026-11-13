@@ -20,9 +20,16 @@ export const formatTime = (value?: string) =>
 export const formatDuration = (seconds: number) =>
   `${Math.floor(seconds / 60)}分${Math.floor(seconds % 60)}秒`;
 export function learningAction(row: LearnerTraining) {
+  if (row.trainingEnded) return "回看培训";
   if (row.learningStatus === "NOT_STARTED") return "开始学习";
   if (row.learningStatus === "IN_PROGRESS") return "继续学习";
   if (row.examStatus === "READY") return "进入考试";
   if (row.examStatus === "IN_PROGRESS") return "继续考试";
   return "回看培训";
+}
+
+export function learningHref(row: LearnerTraining) {
+  const mode = row.trainingEnded ? "review" : row.learningStatus !== "COMPLETED" ? "resume" :
+    ["READY", "IN_PROGRESS"].includes(row.examStatus || "") ? "exam" : "review";
+  return `/training/${row.id}?${mode}=1`;
 }

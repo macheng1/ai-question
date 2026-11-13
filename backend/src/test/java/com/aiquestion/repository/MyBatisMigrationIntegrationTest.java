@@ -46,6 +46,7 @@ class MyBatisMigrationIntegrationTest {
     registry.add("spring.datasource.password", () -> System.getenv("MYBATIS_TEST_PASSWORD"));
   }
 
+  @Autowired QuestionItemRepository questionItems;
   @Autowired MockMvc mvc;
   @Autowired ObjectMapper json;
   @Autowired DataSource dataSource;
@@ -55,6 +56,10 @@ class MyBatisMigrationIntegrationTest {
   @Autowired RequiredTrainingAssignmentService automaticAssignments;
   @Autowired CandidateLearningService learning;
   @Autowired MaterialLearningService reading;
+  @Autowired TrainingLogService trainingLogs;
+  @Autowired LearnerRecordService learnerRecords;
+  @Autowired PublicExamService publicExams;
+  @Autowired AssessmentRosterService assessmentRoster;
   @MockitoBean com.aiquestion.integration.TrainingReminderMailer mailer;
   @MockitoBean FileStorageService storage;
   @MockitoBean TrainingFileCopyService files;
@@ -131,7 +136,7 @@ class MyBatisMigrationIntegrationTest {
     assertEquals("eds:training-materials/copied.pdf", copiedMaterial.get("storage_key"));
     assertEquals(List.of(5, 5), jdbc.queryForList("SELECT required_seconds FROM training_material_page WHERE material_id=? ORDER BY page_number", Integer.class, copiedMaterial.get("id")));
     verify(storage, never()).delete(anyString());
-    var secondCopy = request(post("/management/trainings/" + training + "/copy").header("Authorization", authorization), Map.of());
+    var secondCopy = request(post("/management/trainings/" + training + "/copy").header("Authorization", authorization), Map.of("sourceVersion", trainings.get(training, owner).get("version"), "training", trainingCommand(null, true)));
     assertTrue(secondCopy.path("assessmentId").isNull());
     assertNotEquals(copied, secondCopy.path("id").asLong());
     assertEquals(examCount, jdbc.queryForObject("SELECT COUNT(*) FROM assessment_task WHERE created_by=?", Long.class, owner));
@@ -179,6 +184,41 @@ class MyBatisMigrationIntegrationTest {
     mvc.perform(post("/management/trainings").header("Authorization", authorization).contentType(MediaType.APPLICATION_JSON)
         .content(json.writeValueAsString(command))).andExpect(status().isBadRequest());
     assertEquals(before, jdbc.queryForObject("SELECT COUNT(*) FROM training WHERE created_by=?", Long.class, owner));
+  }
+
+  @Test void mistakesIncludeUnansweredSnapshotQuestionsAndOnlyLatestVisibleSubmission() {
+    long exam = createExam();
+    jdbc.update("UPDATE assessment_task SET show_result_immediately=1 WHERE id=?", exam);
+    long bank = insert("INSERT INTO question_bank(name,category,created_by,created_at,updated_at) VALUES('错题回归','安全',?,CURRENT_TIMESTAMP(3),CURRENT_TIMESTAMP(3))", owner);
+    long correct = insert("INSERT INTO question_item(bank_id,question_type,stem,answer_text,score,created_by) VALUES(?,'SINGLE','正确题','A',25,?)", bank, owner);
+    long wrong = insert("INSERT INTO question_item(bank_id,question_type,stem,answer_text,score,created_by) VALUES(?,'SINGLE','错误题','A',25,?)", bank, owner);
+    long skipped = insert("INSERT INTO question_item(bank_id,question_type,stem,answer_text,score,created_by) VALUES(?,'MULTIPLE','未答题','A,B',25,?)", bank, owner);
+    long cleared = insert("INSERT INTO question_item(bank_id,question_type,stem,answer_text,score,created_by) VALUES(?,'JUDGE','清空题','TRUE',25,?)", bank, owner);
+    long participant = insert("INSERT INTO assessment_participant(task_id,candidate_name,phone,employee_id) VALUES(?,'测试学员',?,?)", exam, phone, employee);
+    long attempt = insert("INSERT INTO assessment_attempt(task_id,participant_id,attempt_no,status,started_at) VALUES(?,?,1,'IN_PROGRESS',CURRENT_TIMESTAMP(3))", exam, participant);
+    for (long q : List.of(correct, wrong, skipped, cleared))
+      jdbc.update("INSERT INTO assessment_attempt_question(attempt_id,question_id,score) VALUES(?,?,25)", attempt, q);
+    jdbc.update("INSERT INTO assessment_answer(attempt_id,question_id,answer_text,is_correct,score) VALUES(?,?,'A',1,25),(?,?,'B',0,0),(?,?,'',0,0)", attempt, correct, attempt, wrong, attempt, cleared);
+    var identity = new AccountIdentity(employee, AccountType.EMPLOYEE, owner);
+    assertTrue(learnerRecords.mistakes(identity).isEmpty());
+    jdbc.update("UPDATE assessment_attempt SET status='SUBMITTED',submitted_at=CURRENT_TIMESTAMP(3) WHERE id=?", attempt);
+    var mistakes = learnerRecords.mistakes(identity);
+    assertEquals(3, mistakes.size());
+    assertEquals(Set.of(wrong, skipped, cleared), mistakes.stream().map(r -> ((Number)r.get("questionId")).longValue()).collect(java.util.stream.Collectors.toSet()));
+    assertEquals("", mistakes.stream().filter(r -> ((Number)r.get("questionId")).longValue()==skipped).findFirst().orElseThrow().get("userAnswer"));
+    assertEquals(3, mistakes.stream().map(r -> r.get("id")).distinct().count());
+    jdbc.update("UPDATE assessment_task SET show_result_immediately=0 WHERE id=?", exam);
+    assertTrue(learnerRecords.mistakes(identity).isEmpty());
+    jdbc.update("UPDATE assessment_task SET show_result_immediately=1 WHERE id=?", exam);
+    long retry = insert("INSERT INTO assessment_attempt(task_id,participant_id,attempt_no,status,started_at) VALUES(?,?,2,'IN_PROGRESS',CURRENT_TIMESTAMP(3))", exam, participant);
+    jdbc.update("INSERT INTO assessment_attempt_question(attempt_id,question_id,score) VALUES(?,?,100)", retry, correct);
+    assertEquals(3, learnerRecords.mistakes(identity).size());
+    jdbc.update("UPDATE assessment_attempt SET status='SUBMITTED',submitted_at=CURRENT_TIMESTAMP(3) WHERE id=?", retry);
+    var latest = learnerRecords.mistakes(identity);
+    assertEquals(1, latest.size());
+    assertEquals(correct, ((Number)latest.get(0).get("questionId")).longValue());
+    assertEquals("", latest.get(0).get("userAnswer"));
+    assertTrue(learnerRecords.mistakes(new AccountIdentity(employee, AccountType.EMPLOYEE, owner + 99999)).isEmpty());
   }
 
   @Test void examAttemptAnswerSubmissionAndLearnerRecordsPreserveContract() throws Exception {
@@ -393,6 +433,10 @@ class MyBatisMigrationIntegrationTest {
       questions.add(q);
       jdbc.update("INSERT INTO test_paper_question(paper_id,question_id,score) VALUES(?,?,10)", paper, q);
     }
+    var emptyStats = statisticsDetail(exam, false);
+    assertEquals(30, emptyStats.path("overview").path("totalScore").asInt());
+    assertEquals(20, emptyStats.path("overview").path("passScore").asInt());
+    assertEquals(0, emptyStats.path("overview").path("participantCount").asInt());
     var identity = request(post("/learner/session"), Map.of("type", "EXAM", "id", exam, "name", "测试学员", "phone", phone));
     String learner = "Bearer " + identity.path("token").path("accessToken").asText();
     long first = request(post("/public/exams/" + exam + "/start").header("Authorization", learner), Map.of("name", "测试学员", "phone", phone)).path("attemptId").asLong();
@@ -403,6 +447,10 @@ class MyBatisMigrationIntegrationTest {
     mvc.perform(put("/public/exams/attempts/" + first + "/answers/" + questions.get(0)).header("Authorization", learner).contentType(MediaType.APPLICATION_JSON).content("{\"answer\":\"B\"}")).andExpect(status().isBadRequest());
     long second = request(post("/public/exams/" + exam + "/start").header("Authorization", learner), Map.of("name", "测试学员", "phone", phone)).path("attemptId").asLong();
     assertNotEquals(first, second);
+    var inProgressStats = statisticsDetail(exam, false);
+    assertEquals(1, inProgressStats.path("overview").path("participantCount").asInt());
+    assertEquals(30, inProgressStats.path("overview").path("averageScore").asInt());
+
     jdbc.update("UPDATE assessment_attempt SET started_at=DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 2 MINUTE) WHERE id=?", second);
     request(post("/public/exams/attempts/" + second + "/submit").header("Authorization", learner), Map.of());
     assertEquals(0, jdbc.queryForObject("SELECT score FROM assessment_attempt WHERE id=?", Integer.class, second));
@@ -416,6 +464,33 @@ class MyBatisMigrationIntegrationTest {
     assertEquals(2, allStats.path("totalCount").asInt());
     assertEquals(15, allStats.path("averageScore").asDouble());
     assertEquals(1, allStats.path("passedCount").asInt());
+    jdbc.update("UPDATE assessment_attempt SET started_at='2026-11-12 10:00:00',submitted_at='2026-11-12 10:02:00' WHERE id=?", first);
+    jdbc.update("UPDATE assessment_attempt SET started_at='2026-11-12 10:03:00',submitted_at='2026-11-12 10:06:00' WHERE id=?", second);
+    var detail = statisticsDetail(exam, false);
+    assertEquals(1, detail.path("overview").path("participantCount").asInt());
+    assertEquals(0, detail.path("overview").path("averageScore").asDouble());
+    assertEquals(0, detail.path("overview").path("passRate").asDouble());
+    assertEquals(180, detail.path("overview").path("averageDurationSeconds").asDouble());
+    assertEquals(1, detail.path("submissionTrend").size());
+    assertEquals(3, detail.path("typeScore").size());
+    assertEquals(3, detail.path("difficultQuestions").size());
+    for (var type : detail.path("typeScore")) assertEquals(0, type.path("correctRate").asDouble());
+    for (var question : detail.path("difficultQuestions")) assertEquals(0, question.path("correctRate").asDouble());
+    var allDetail = statisticsDetail(exam, true);
+    assertEquals(2, allDetail.path("overview").path("participantCount").asInt());
+    assertEquals(15, allDetail.path("overview").path("averageScore").asDouble());
+    assertEquals(50, allDetail.path("overview").path("passRate").asDouble());
+    assertEquals(30, allDetail.path("overview").path("highestScore").asDouble());
+    assertEquals(0, allDetail.path("overview").path("lowestScore").asDouble());
+    assertEquals(150, allDetail.path("overview").path("averageDurationSeconds").asDouble());
+    assertEquals(2, allDetail.path("submissionTrend").size());
+    assertEquals(2, allDetail.path("passDistribution").size());
+    assertEquals(2, allDetail.path("scoreDistribution").size());
+    for (var type : allDetail.path("typeScore")) assertEquals(50, type.path("correctRate").asDouble());
+    for (var question : allDetail.path("difficultQuestions")) assertEquals(50, question.path("correctRate").asDouble());
+    long otherTask = insert("INSERT INTO assessment_task(name,paper_id,created_by,start_at,end_at) VALUES('另一期',?,?,CURRENT_TIMESTAMP(3),DATE_ADD(CURRENT_TIMESTAMP(3),INTERVAL 1 DAY))", paper, owner);
+    assertEquals(0, statisticsDetail(otherTask, true).path("overview").path("participantCount").asInt());
+
   }
 
   @Test void reminderDeliveryIsIdempotentAndStoresFailureWithoutSendingRealMail() throws Exception {
@@ -505,8 +580,9 @@ class MyBatisMigrationIntegrationTest {
     var edit = trainingCommand(exam, false);
     edit.put("version", current.get("version"));
     edit.put("audience", Map.of("type", "USERS", "ids", List.of(employee)));
-    request(put("/management/trainings/" + first).header("Authorization", authorization), edit);
-    assertEquals(List.of(employee), jdbc.queryForList("SELECT employee_id FROM training_audience WHERE training_id=?", Long.class, first));
+    var before = jdbc.queryForList("SELECT employee_id FROM training_audience WHERE training_id=? ORDER BY employee_id", Long.class, first);
+    mvc.perform(put("/management/trainings/" + first).header("Authorization", authorization).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(edit))).andExpect(status().isBadRequest());
+    assertEquals(before, jdbc.queryForList("SELECT employee_id FROM training_audience WHERE training_id=? ORDER BY employee_id", Long.class, first));
   }
 
   @Test void concurrentTrainingSavesCannotBindSameLearnerAndPaperTwice() throws Exception {
@@ -575,13 +651,15 @@ class MyBatisMigrationIntegrationTest {
   @Test void automaticAndManualAllocationSerializeWithoutDuplicatingOrDeadlocking() throws Exception {
     long exam = createExam();
     createTraining(exam, false);
-    insert("INSERT INTO organization_employee(created_by,department_id,name,phone) VALUES(?,?,'第二人',?)", owner, department, "137" + String.format("%08d", SEQUENCE.incrementAndGet()));
+    long secondEmployee = insert("INSERT INTO organization_employee(created_by,department_id,name,phone) VALUES(?,?,'第二人',?)", owner, department, "137" + String.format("%08d", SEQUENCE.incrementAndGet()));
     long secondExam = samePaperExam(exam);
-    long second = createTraining(secondExam, false);
+    var initial = trainingCommand(secondExam, false);
+    initial.put("audience", Map.of("type", "USERS", "ids", List.of(secondEmployee)));
+    long second = request(post("/management/trainings").header("Authorization", authorization), initial).path("id").asLong();
     long newcomer = insert("INSERT INTO organization_employee(created_by,department_id,name,phone) VALUES(?,?,'竞争分配',?)", owner, department, "137" + String.format("%08d", SEQUENCE.incrementAndGet()));
     var body = trainingCommand(secondExam, false);
     body.put("version", trainings.get(second, owner).get("version"));
-    body.put("audience", Map.of("type", "USERS", "ids", List.of(newcomer)));
+    body.put("audience", Map.of("type", "USERS", "ids", List.of(secondEmployee, newcomer)));
     var command = json.convertValue(body, TrainingService.SaveTraining.class);
     var gate = new java.util.concurrent.CountDownLatch(1);
     var pool = java.util.concurrent.Executors.newFixedThreadPool(2);
@@ -605,6 +683,447 @@ class MyBatisMigrationIntegrationTest {
     return "Bearer " + identity.path("token").path("accessToken").asText();
   }
 
+  @Test void anExamCannotBeAttachedToAnotherTrainingEvenWhenLegacyUnmanaged() throws Exception {
+    long exam = createExam();
+    long first = createTraining(exam, false);
+    var body = trainingCommand(exam, true);
+    mvc.perform(post("/management/trainings").header("Authorization", authorization)
+        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)))
+        .andExpect(status().isBadRequest());
+    long second = createTraining(null, true);
+    body.put("version", trainings.get(second, owner).get("version"));
+    mvc.perform(put("/management/trainings/" + second).header("Authorization", authorization)
+        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)))
+        .andExpect(status().isBadRequest());
+    assertEquals(exam, ((Number)trainings.get(first, owner).get("assessmentId")).longValue());
+    assertNull(trainings.get(second, owner).get("assessmentId"));
+  }
+
+  @Test void databaseRejectsSharedExamButAllowsIndependentExamsUsingSamePaper() throws Exception {
+    long exam = createExam();
+    long first = createTraining(exam, false);
+    long secondExam = samePaperExam(exam);
+    jdbc.update("UPDATE assessment_task SET training_managed=TRUE WHERE id IN (?,?)", exam, secondExam);
+    long second = createTraining(secondExam, true);
+    assertThrows(org.springframework.dao.DuplicateKeyException.class,
+        () -> jdbc.update("UPDATE training SET assessment_id=? WHERE id=?", exam, second));
+    assertDoesNotThrow(() -> learning.learning(exam, "测试学员", phone));
+    jdbc.update("UPDATE training SET end_at=DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 1 DAY) WHERE id=?", second);
+    assertDoesNotThrow(() -> learning.learning(exam, "测试学员", phone));
+    assertEquals(exam, ((Number)trainings.get(first, owner).get("assessmentId")).longValue());
+  }
+
+  @Test void reviewVideosUseConfiguredOrderAndDoNotExposeStoragePaths() throws Exception {
+    long training = createTraining(null, false);
+    insert("INSERT INTO training_video(training_id,title,storage_path,content_type,sort_order) VALUES(?,'later','private1','video/mp4',2)", training);
+    insert("INSERT INTO training_video(training_id,title,storage_path,content_type,sort_order) VALUES(?,'first','private2','video/mp4',1)", training);
+    var result = json.readTree(mvc.perform(get("/learner/trainings/" + training + "/review")
+        .header("Authorization", learnerToken(training))).andExpect(status().isOk())
+        .andReturn().getResponse().getContentAsString()).path("data");
+    assertEquals("first", result.path("videos").get(0).path("title").asText());
+    assertEquals("later", result.path("videos").get(1).path("title").asText());
+    assertFalse(result.toString().contains("private"));
+  }
+
+  @Test void copyFormOnlyCreatesOnValidFinalSubmission() throws Exception {
+    long source = createTraining(null, false);
+    material(source);
+    when(files.copyMaterial(anyMap())).thenReturn("eds:training-materials/form-copy.pdf");
+    long before = jdbc.queryForObject("SELECT COUNT(*) FROM training WHERE created_by=?", Long.class, owner);
+    mvc.perform(get("/management/trainings/" + source).header("Authorization", authorization)).andExpect(status().isOk());
+    assertEquals(before, jdbc.queryForObject("SELECT COUNT(*) FROM training WHERE created_by=?", Long.class, owner));
+    var command = trainingCommand(null, true);
+    command.put("name", "表单修改后的副本");
+    command.put("audience", Map.of("type", "USERS", "ids", List.of(employee)));
+    var saved = request(post("/management/trainings/" + source + "/copy").header("Authorization", authorization), Map.of("sourceVersion", trainings.get(source, owner).get("version"), "training", command));
+    assertEquals("表单修改后的副本", saved.path("name").asText());
+    assertEquals(before + 1, jdbc.queryForObject("SELECT COUNT(*) FROM training WHERE created_by=?", Long.class, owner));
+    assertEquals(List.of(employee), jdbc.queryForList("SELECT employee_id FROM training_audience WHERE training_id=?", Long.class, saved.path("id").asLong()));
+    assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM training_material WHERE training_id=?", Integer.class, saved.path("id").asLong()));
+    assertNotEquals("表单修改后的副本", trainings.get(source, owner).get("name"));
+    command.put("name", "");
+    mvc.perform(post("/management/trainings/" + source + "/copy").header("Authorization", authorization).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("sourceVersion", trainings.get(source, owner).get("version"), "training", command)))).andExpect(status().isBadRequest());
+    assertEquals(before + 1, jdbc.queryForObject("SELECT COUNT(*) FROM training WHERE created_by=?", Long.class, owner));
+  }
+
+  @Test void copyDraftEditsMaterialsBeforeCreatingAndKeepsSourceUnchanged() throws Exception {
+    long source = createTraining(null, false);
+    long first = material(source), removed = material(source), last = material(source);
+    when(files.copyMaterial(anyMap())).thenAnswer(call -> "eds:copy/" + ((Map<?, ?>) call.getArgument(0)).get("id"));
+    when(storage.uploadMaterial(any(), anyString(), anyString(), anyString())).thenReturn("eds:copy/new.png");
+    var imageBytes = new java.io.ByteArrayOutputStream();
+    javax.imageio.ImageIO.write(new java.awt.image.BufferedImage(2, 2, java.awt.image.BufferedImage.TYPE_INT_RGB), "png", imageBytes);
+    var upload = new org.springframework.mock.web.MockMultipartFile("files", "new.png", "image/png", imageBytes.toByteArray());
+    var times = List.of(Map.of("pageNumber", 1, "requiredSeconds", 45), Map.of("pageNumber", 2, "requiredSeconds", 90));
+    var items = List.of(Map.of("kind", "materials", "sourceId", last, "pages", times),
+      Map.of("kind", "materials", "uploadIndex", 0, "pages", List.of(Map.of("pageNumber", 1, "requiredSeconds", 30))),
+      Map.of("kind", "materials", "sourceId", first, "pages", times));
+    var copy = Map.of("sourceVersion", trainings.get(source, owner).get("version"), "training", trainingCommand(null, false));
+    var draft = new org.springframework.mock.web.MockMultipartFile("draft", "draft.json", "application/json", json.writeValueAsBytes(Map.of("copy", copy, "items", items)));
+    long before = jdbc.queryForObject("SELECT COUNT(*) FROM training WHERE created_by=?", Long.class, owner);
+    var response = mvc.perform(multipart("/management/trainings/" + source + "/copy-with-materials").file(draft).file(upload).header("Authorization", authorization)).andExpect(status().isOk()).andReturn();
+    long created = json.readTree(response.getResponse().getContentAsString()).path("data").path("id").asLong();
+    assertTrue(created > 0);
+    assertEquals(before + 1, jdbc.queryForObject("SELECT COUNT(*) FROM training WHERE created_by=?", Long.class, owner));
+    assertEquals(List.of("eds:copy/" + last, "eds:copy/new.png", "eds:copy/" + first), jdbc.queryForList("SELECT storage_key FROM training_material WHERE training_id=? ORDER BY sort_order,id", String.class, created));
+    assertEquals(List.of(45,90,30,45,90), jdbc.queryForList("SELECT p.required_seconds FROM training_material m JOIN training_material_page p ON p.material_id=m.id WHERE m.training_id=? ORDER BY m.sort_order,p.page_number", Integer.class, created));
+    assertEquals(3, jdbc.queryForObject("SELECT COUNT(*) FROM training_material WHERE training_id=?", Integer.class, source));
+    assertEquals(List.of(5,5), jdbc.queryForList("SELECT required_seconds FROM training_material_page WHERE material_id=? ORDER BY page_number", Integer.class, removed));
+    assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM candidate_learning_session WHERE training_id=?", Integer.class, created));
+  }
+
+  @Test void copyDraftMixesExistingAndUploadedVideosInSelectedOrder() throws Exception {
+    long source = createTraining(null, false);
+    trainings.addVideo(source, owner, "original.mp4", "old.mp4", "video/mp4");
+    long video = jdbc.queryForObject("SELECT id FROM training_video WHERE training_id=?", Long.class, source);
+    when(files.copyVideo(anyMap())).thenReturn("eds:training-videos/copied.mp4");
+    when(storage.uploadMaterial(any(), anyString(), anyString(), anyString())).thenReturn("eds:training-videos/uploaded.mp4");
+    var upload = new org.springframework.mock.web.MockMultipartFile("files", "new.mp4", "video/mp4", new byte[]{0,0,0,12,'f','t','y','p',0,0,0,0});
+    var request = new TrainingCopyService.CopyRequest(((Number) trainings.get(source, owner).get("version")).intValue(), json.convertValue(trainingCommand(null, false), TrainingService.SaveTraining.class));
+    var result = copies.copyDraft(source, owner, request, List.of(
+      new TrainingCopyService.MaterialSelection("videos", null, 0, null),
+      new TrainingCopyService.MaterialSelection("videos", video, null, null)), List.of(upload), authorization);
+    assertEquals(List.of("new.mp4", "original.mp4"), jdbc.queryForList("SELECT title FROM training_video WHERE training_id=? ORDER BY sort_order,id", String.class, result.get("id")));
+    assertEquals(List.of("old.mp4"), jdbc.queryForList("SELECT storage_path FROM training_video WHERE training_id=?", String.class, source));
+  }
+
+  @Test void copyDraftRejectsForeignMaterialAndRollsBackEarlierCopies() throws Exception {
+    long source = createTraining(null, false), other = createTraining(null, false);
+    long ownMaterial = material(source), foreign = material(other);
+    when(files.copyMaterial(anyMap())).thenReturn("eds:copy/rollback.pdf");
+    var times = List.of(new TrainingMaterialService.PageTime(1,45), new TrainingMaterialService.PageTime(2,90));
+    var request = new TrainingCopyService.CopyRequest(((Number) trainings.get(source, owner).get("version")).intValue(), json.convertValue(trainingCommand(null, false), TrainingService.SaveTraining.class));
+    long before = jdbc.queryForObject("SELECT COUNT(*) FROM training WHERE created_by=?", Long.class, owner);
+    assertThrows(BusinessException.class, () -> copies.copyDraft(source, owner, request, List.of(
+      new TrainingCopyService.MaterialSelection("materials", ownMaterial, null, times),
+      new TrainingCopyService.MaterialSelection("materials", foreign, null, times)), List.of(), authorization));
+    assertEquals(before, jdbc.queryForObject("SELECT COUNT(*) FROM training WHERE created_by=?", Long.class, owner));
+    verify(storage).delete("eds:copy/rollback.pdf");
+    var empty = copies.copyDraft(source, owner, request, List.of(), List.of(), authorization);
+    assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM training_material WHERE training_id=?", Integer.class, empty.get("id")));
+    assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM training_material WHERE training_id=?", Integer.class, source));
+  }
+
+  @Test void copyFormStorageFailureRollsBackTrainingRosterAndBinding() throws Exception {
+    long source = createTraining(null, false);
+    material(source); material(source);
+    long exam = createExam();
+    long before = jdbc.queryForObject("SELECT COUNT(*) FROM training WHERE created_by=?", Long.class, owner);
+    var command = json.convertValue(trainingCommand(exam, true), TrainingService.SaveTraining.class);
+    var request = new TrainingCopyService.CopyRequest(((Number)trainings.get(source, owner).get("version")).intValue(), command);
+    when(files.copyMaterial(anyMap())).thenReturn("eds:training-materials/form-rollback.pdf").thenThrow(new IllegalStateException("copy failed"));
+    assertThrows(IllegalStateException.class, () -> copies.copyAndSave(source, owner, request));
+    assertEquals(before, jdbc.queryForObject("SELECT COUNT(*) FROM training WHERE created_by=?", Long.class, owner));
+    assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM learner_paper_binding WHERE owner_id=?", Integer.class, owner));
+    verify(storage).delete("eds:training-materials/form-rollback.pdf");
+    assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM training_material WHERE training_id=?", Integer.class, source));
+  }
+
+  @Test void copyFormRejectsMissingConfigurationStaleSourceAndOtherOwner() throws Exception {
+    long source = createTraining(null, false);
+    long before = jdbc.queryForObject("SELECT COUNT(*) FROM training WHERE created_by=?", Long.class, owner);
+    mvc.perform(post("/management/trainings/" + source + "/copy").header("Authorization", authorization).contentType(MediaType.APPLICATION_JSON).content("{}")).andExpect(status().isBadRequest());
+    mvc.perform(post("/management/trainings/" + source + "/copy").header("Authorization", authorization).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("sourceVersion", -1, "training", trainingCommand(null, true))))).andExpect(status().isBadRequest());
+    var request = new TrainingCopyService.CopyRequest(((Number)trainings.get(source, owner).get("version")).intValue(), json.convertValue(trainingCommand(null, true), TrainingService.SaveTraining.class));
+    assertThrows(BusinessException.class, () -> copies.copyAndSave(source, owner + 100000, request));
+    assertEquals(before, jdbc.queryForObject("SELECT COUNT(*) FROM training WHERE created_by=?", Long.class, owner));
+    verifyNoInteractions(files);
+  }
+
+  @Test void trainingExamIsSavedAtomicallyAndReusesPaperAcrossTrainings() throws Exception {
+    long original = createExam();
+    long paper = jdbc.queryForObject("SELECT paper_id FROM assessment_task WHERE id=?", Long.class, original);
+    jdbc.update("UPDATE test_paper SET status='PUBLISHED' WHERE id=?", paper);
+    var body = trainingCommand(null, false);
+    body.put("exam", examSettings(paper));
+    var first = request(post("/management/trainings").header("Authorization", authorization), body);
+    assertTrue(first.path("assessmentId").asLong() > 0, "Final save must create a training-specific exam");
+    assertEquals(paper, first.path("exam").path("paperId").asLong());
+    var second = request(post("/management/trainings").header("Authorization", authorization), body);
+    assertNotEquals(first.path("assessmentId").asLong(), second.path("assessmentId").asLong());
+    assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM test_paper WHERE id=?", Integer.class, paper));
+    assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM training_audience WHERE training_id=? AND employee_id=?", Integer.class, second.path("id").asLong(), employee));
+    long tasks = jdbc.queryForObject("SELECT COUNT(*) FROM assessment_task WHERE created_by=?", Long.class, owner);
+    body.put("audience", Map.of("type", "USERS", "ids", List.of()));
+    mvc.perform(post("/management/trainings").header("Authorization", authorization).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)))
+        .andExpect(status().isBadRequest());
+    assertEquals(tasks, jdbc.queryForObject("SELECT COUNT(*) FROM assessment_task WHERE created_by=?", Long.class, owner));
+    body.put("audience", Map.of("type", "ALL", "ids", List.of()));
+    body.put("version", first.path("version").asInt());
+    var updated = request(put("/management/trainings/" + first.path("id").asLong()).header("Authorization", authorization), body);
+    assertEquals(first.path("assessmentId").asLong(), updated.path("assessmentId").asLong());
+    assertEquals(tasks, jdbc.queryForObject("SELECT COUNT(*) FROM assessment_task WHERE created_by=?", Long.class, owner));
+  }
+
+  @Test void trainingExamRejectsInvalidSettingsForeignPapersAndStaleUpdates() throws Exception {
+    long original = createExam();
+    long paper = jdbc.queryForObject("SELECT paper_id FROM assessment_task WHERE id=?", Long.class, original);
+    jdbc.update("UPDATE test_paper SET status='PUBLISHED' WHERE id=?", paper);
+    var body = trainingCommand(null, false);
+    var settings = new HashMap<>(examSettings(paper));
+    settings.put("durationMinutes", 0); body.put("exam", settings);
+    mvc.perform(post("/management/trainings").header("Authorization", authorization).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body))).andExpect(status().isBadRequest());
+    settings.put("durationMinutes", 30); settings.put("paperId", 999999999L);
+    mvc.perform(post("/management/trainings").header("Authorization", authorization).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body))).andExpect(status().isNotFound());
+    assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM assessment_task WHERE created_by=?", Integer.class, owner));
+    settings.put("paperId", paper);
+    var saved = request(post("/management/trainings").header("Authorization", authorization), body);
+    body.put("version", 0); settings.put("durationMinutes", 45);
+    mvc.perform(put("/management/trainings/" + saved.path("id").asLong()).header("Authorization", authorization).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body))).andExpect(status().isBadRequest());
+    assertEquals(30, jdbc.queryForObject("SELECT duration_minutes FROM assessment_task WHERE id=?", Integer.class, saved.path("assessmentId").asLong()));
+    var steal = trainingCommand(saved.path("assessmentId").asLong(), false);
+    mvc.perform(post("/management/trainings").header("Authorization", authorization).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(steal))).andExpect(status().isBadRequest());
+  }
+
+  @Test void copyingTrainingCreatesItsOwnExamOnlyOnFinalSaveAndRollsBackOnFileFailure() throws Exception {
+    long original = createExam();
+    long paper = jdbc.queryForObject("SELECT paper_id FROM assessment_task WHERE id=?", Long.class, original);
+    jdbc.update("UPDATE test_paper SET status='PUBLISHED' WHERE id=?", paper);
+    var body = trainingCommand(null, false); body.put("exam", examSettings(paper));
+    var source = request(post("/management/trainings").header("Authorization", authorization), body);
+    long sourceId = source.path("id").asLong();
+    var copied = request(post("/management/trainings/" + sourceId + "/copy").header("Authorization", authorization), Map.of("sourceVersion", source.path("version").asInt(), "training", body));
+    assertNotEquals(source.path("assessmentId").asLong(), copied.path("assessmentId").asLong());
+    assertEquals(paper, copied.path("exam").path("paperId").asLong());
+    material(sourceId);
+    when(files.copyMaterial(anyMap())).thenThrow(new IllegalStateException("test storage failure"));
+    long count = jdbc.queryForObject("SELECT COUNT(*) FROM assessment_task WHERE created_by=?", Long.class, owner);
+    mvc.perform(post("/management/trainings/" + sourceId + "/copy").header("Authorization", authorization).contentType(MediaType.APPLICATION_JSON)
+        .content(json.writeValueAsString(Map.of("sourceVersion", source.path("version").asInt(), "training", body)))).andExpect(status().is5xxServerError());
+    assertEquals(count, jdbc.queryForObject("SELECT COUNT(*) FROM assessment_task WHERE created_by=?", Long.class, owner));
+  }
+
+  @Test void trainingExamLocksRulesAfterParticipationAndRetiresUnlinkedTasks() throws Exception {
+    long original = createExam();
+    long paper = jdbc.queryForObject("SELECT paper_id FROM assessment_task WHERE id=?", Long.class, original);
+    jdbc.update("UPDATE test_paper SET status='PUBLISHED' WHERE id=?", paper);
+    var body = trainingCommand(null, false); body.put("exam", examSettings(paper));
+    var saved = request(post("/management/trainings").header("Authorization", authorization), body);
+    long training = saved.path("id").asLong(), exam = saved.path("assessmentId").asLong();
+    long participant = insert("INSERT INTO assessment_participant(task_id,candidate_name,phone,employee_id) VALUES(?,'测试学员',?,?)", exam, phone, employee);
+    body.put("version", saved.path("version").asInt());
+    var beforeExam = json.convertValue(saved.path("exam"), new com.fasterxml.jackson.core.type.TypeReference<Map<String,Object>>() {});
+    beforeExam.put("durationMinutes", 45); body.put("exam", beforeExam);
+    saved = request(put("/management/trainings/" + training).header("Authorization", authorization), body);
+    assertEquals(45, saved.path("exam").path("durationMinutes").asInt());
+    insert("INSERT INTO assessment_attempt(task_id,participant_id,attempt_no,status,started_at) VALUES(?,?,1,'IN_PROGRESS',CURRENT_TIMESTAMP(3))", exam, participant);
+    body.put("version", saved.path("version").asInt());
+    var settings = json.convertValue(saved.path("exam"), new com.fasterxml.jackson.core.type.TypeReference<Map<String,Object>>() {});
+    settings.put("durationMinutes", 60); body.put("exam", settings);
+    mvc.perform(put("/management/trainings/" + training).header("Authorization", authorization).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body))).andExpect(status().isBadRequest());
+    settings.put("durationMinutes", 45); body.put("endAt", LocalDateTime.now().plusDays(4).toString());
+    request(put("/management/trainings/" + training).header("Authorization", authorization), body);
+    var anotherBody = trainingCommand(null, false); anotherBody.put("exam", examSettings(paper));
+    var another = request(post("/management/trainings").header("Authorization", authorization), anotherBody);
+    anotherBody.put("version", another.path("version").asInt()); anotherBody.put("exam", Map.of("enabled", false));
+    var unlinked = request(put("/management/trainings/" + another.path("id").asLong()).header("Authorization", authorization), anotherBody);
+    assertTrue(unlinked.path("assessmentId").isNull());
+    assertEquals("DISABLED", jdbc.queryForObject("SELECT status FROM assessment_task WHERE id=?", String.class, another.path("assessmentId").asLong()));
+  }
+
+  @Test void questionKeywordSearchSupportsBankFilteringAndEmptyResults() throws Exception {
+    long bank = insert("INSERT INTO question_bank(name,category,created_by,created_at,updated_at) VALUES('搜索回归','安全',?,CURRENT_TIMESTAMP(3),CURRENT_TIMESTAMP(3))", owner);
+    insert("INSERT INTO question_item(bank_id,question_type,stem,answer_text,score,created_by) VALUES(?,'SINGLE','选择 A','A',100,?)", bank, owner);
+    var query = new com.aiquestion.common.PageQuery();
+    query.setKeyword("选择");
+    assertEquals(1, questionItems.count(bank, query));
+    assertEquals(1, questionItems.findPage(bank, query).size());
+    query.setPageNo(2);
+    assertTrue(questionItems.findPage(bank, query).isEmpty());
+    query.setKeyword("不存在的题目");
+    assertEquals(0, questionItems.count(bank, query));
+    assertTrue(questionItems.findPage(bank, query).isEmpty());
+  }
+
+  @Test void endingTrainingExamOnlyStopsItsOwnTask() throws Exception {
+    long original = createExam();
+    long paper = jdbc.queryForObject("SELECT paper_id FROM assessment_task WHERE id=?", Long.class, original);
+    jdbc.update("UPDATE test_paper SET status='PUBLISHED' WHERE id=?", paper);
+    var body = trainingCommand(null, false); body.put("exam", examSettings(paper));
+    var first = request(post("/management/trainings").header("Authorization", authorization), body);
+    var second = request(post("/management/trainings").header("Authorization", authorization), body);
+    long firstTask = first.path("assessmentId").asLong();
+    long participant = insert("INSERT INTO assessment_participant(task_id,candidate_name,phone,employee_id) VALUES(?,'测试学员',?,?)", firstTask, phone, employee);
+    long activeAttempt = insert("INSERT INTO assessment_attempt(task_id,participant_id,attempt_no,status,started_at) VALUES(?,?,1,'IN_PROGRESS',CURRENT_TIMESTAMP(3))", firstTask, participant);
+    request(post("/management/trainings/" + first.path("id").asLong() + "/end").header("Authorization", authorization), Map.of());
+    assertTrue(jdbc.queryForObject("SELECT end_at <= CURRENT_TIMESTAMP(3) FROM training WHERE id=?", Boolean.class, first.path("id").asLong()));
+    assertEquals(jdbc.queryForObject("SELECT end_at FROM training WHERE id=?", java.sql.Timestamp.class, first.path("id").asLong()),
+        jdbc.queryForObject("SELECT end_at FROM assessment_task WHERE id=?", java.sql.Timestamp.class, firstTask));
+    body.put("version", jdbc.queryForObject("SELECT version FROM training WHERE id=?", Integer.class, first.path("id").asLong()));
+    body.put("startAt", jdbc.queryForObject("SELECT start_at FROM training WHERE id=?", java.sql.Timestamp.class, first.path("id").asLong()).toLocalDateTime().toString());
+    body.put("endAt", jdbc.queryForObject("SELECT end_at FROM training WHERE id=?", java.sql.Timestamp.class, first.path("id").asLong()).toLocalDateTime().toString());
+    request(put("/management/trainings/" + first.path("id").asLong()).header("Authorization", authorization), body);
+    // Historical force-ended trainings may still have the original future exam deadline.
+    jdbc.update("UPDATE assessment_task SET end_at=DATE_ADD(end_at,INTERVAL 1 DAY) WHERE id=?", firstTask);
+    body.put("version", jdbc.queryForObject("SELECT version FROM training WHERE id=?", Integer.class, first.path("id").asLong()));
+    request(put("/management/trainings/" + first.path("id").asLong()).header("Authorization", authorization), body);
+    assertEquals("DISABLED", jdbc.queryForObject("SELECT status FROM assessment_task WHERE id=?", String.class, firstTask));
+    assertEquals(jdbc.queryForObject("SELECT end_at FROM training WHERE id=?", java.sql.Timestamp.class, first.path("id").asLong()),
+        jdbc.queryForObject("SELECT end_at FROM assessment_task WHERE id=?", java.sql.Timestamp.class, firstTask));
+    long pure = createTraining(null, false);
+    request(post("/management/trainings/" + pure + "/end").header("Authorization", authorization), Map.of());
+    assertTrue(jdbc.queryForObject("SELECT end_at <= CURRENT_TIMESTAMP(3) FROM training WHERE id=?", Boolean.class, pure));
+    assertEquals("SUBMITTED", jdbc.queryForObject("SELECT status FROM assessment_attempt WHERE id=?", String.class, activeAttempt));
+    assertNotNull(jdbc.queryForObject("SELECT submitted_at FROM assessment_attempt WHERE id=?", java.sql.Timestamp.class, activeAttempt));
+    assertEquals("DISABLED", jdbc.queryForObject("SELECT status FROM assessment_task WHERE id=?", String.class, first.path("assessmentId").asLong()));
+    assertNotEquals("DISABLED", jdbc.queryForObject("SELECT status FROM assessment_task WHERE id=?", String.class, second.path("assessmentId").asLong()));
+    var list = json.readTree(mvc.perform(get("/management/trainings").header("Authorization", authorization)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("data");
+    assertTrue(java.util.stream.StreamSupport.stream(list.spliterator(), false).anyMatch(t -> t.path("id").asLong()==first.path("id").asLong() && "DISABLED".equals(t.path("examStatus").asText())));
+
+  }
+
+  @Test void unpublishedPaperCannotBeUsedForNewTrainingExam() throws Exception {
+    long original = createExam();
+    long paper = jdbc.queryForObject("SELECT paper_id FROM assessment_task WHERE id=?", Long.class, original);
+    var body = trainingCommand(null, false); body.put("exam", examSettings(paper));
+    mvc.perform(post("/management/trainings").header("Authorization", authorization).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body))).andExpect(status().isBadRequest());
+    assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM assessment_task WHERE created_by=?", Integer.class, owner));
+  }
+
+  @Test void createTrainingWithFilesIsAtomic() throws Exception {
+    when(storage.uploadMaterial(any(), anyString(), anyString(), anyString())).thenReturn("eds:training-videos/11111111-1111-1111-1111-111111111111.mp4");
+    var command = new org.springframework.mock.web.MockMultipartFile("training", "training.json", "application/json", json.writeValueAsBytes(trainingCommand(null, false)));
+    var video = new org.springframework.mock.web.MockMultipartFile("videos", "intro.mp4", "video/mp4", new byte[]{0,0,0,12,'f','t','y','p',0,0,0,0});
+    var imageBytes = new java.io.ByteArrayOutputStream();
+    javax.imageio.ImageIO.write(new java.awt.image.BufferedImage(2, 2, java.awt.image.BufferedImage.TYPE_INT_RGB), "png", imageBytes);
+    var image = new org.springframework.mock.web.MockMultipartFile("materials", "guide.png", "image/png", imageBytes.toByteArray());
+    var response = mvc.perform(multipart("/management/trainings/with-materials").file(command).file(video).file(image).header("Authorization", authorization)).andExpect(status().isOk()).andReturn();
+    long id = json.readTree(response.getResponse().getContentAsString()).path("data").path("id").asLong();
+    assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM training_video WHERE training_id=?", Integer.class, id));
+    assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM training_material WHERE training_id=?", Integer.class, id));
+    long before = jdbc.queryForObject("SELECT COUNT(*) FROM training WHERE created_by=?", Long.class, owner);
+    var invalid = new org.springframework.mock.web.MockMultipartFile("materials", "bad.pdf", "application/pdf", new byte[]{1,2,3});
+    mvc.perform(multipart("/management/trainings/with-materials").file(command).file(video).file(invalid).header("Authorization", authorization)).andExpect(result -> assertTrue(result.getResponse().getStatus() >= 400));
+    assertEquals(before, jdbc.queryForObject("SELECT COUNT(*) FROM training WHERE created_by=?", Long.class, owner));
+    verify(storage).delete("eds:training-videos/11111111-1111-1111-1111-111111111111.mp4");
+  }
+
+  @Test void draftPdfInspectionAndPageTimingsPersistOnCreate() throws Exception {
+    var bytes = new java.io.ByteArrayOutputStream();
+    try (var pdf = new org.apache.pdfbox.pdmodel.PDDocument()) {
+      pdf.addPage(new org.apache.pdfbox.pdmodel.PDPage()); pdf.addPage(new org.apache.pdfbox.pdmodel.PDPage()); pdf.save(bytes);
+    }
+    var inspection = new org.springframework.mock.web.MockMultipartFile("file", "guide.pdf", "application/pdf", bytes.toByteArray());
+    var checked = mvc.perform(multipart("/management/trainings/materials/inspect").file(inspection).header("Authorization", authorization)).andExpect(status().isOk()).andReturn();
+    assertEquals(2, json.readTree(checked.getResponse().getContentAsString()).path("data").path("pageCount").asInt());
+    verifyNoInteractions(storage);
+    when(storage.uploadMaterial(any(), anyString(), anyString(), anyString())).thenReturn("eds:training-materials/test.pdf");
+    var file = new org.springframework.mock.web.MockMultipartFile("materials", "guide.pdf", "application/pdf", bytes.toByteArray());
+    var command = new org.springframework.mock.web.MockMultipartFile("training", "training.json", "application/json", json.writeValueAsBytes(trainingCommand(null, false)));
+    var timings = new org.springframework.mock.web.MockMultipartFile("materialTimings", "times.json", "application/json", "[[{\"pageNumber\":1,\"requiredSeconds\":45},{\"pageNumber\":2,\"requiredSeconds\":90}]]".getBytes());
+    var result = mvc.perform(multipart("/management/trainings/with-materials").file(command).file(file).file(timings).header("Authorization", authorization)).andExpect(status().isOk()).andReturn();
+    long id = json.readTree(result.getResponse().getContentAsString()).path("data").path("id").asLong();
+    assertEquals(List.of(45,90), jdbc.queryForList("SELECT p.required_seconds FROM training_material_page p JOIN training_material m ON m.id=p.material_id WHERE m.training_id=? ORDER BY p.page_number", Integer.class, id));
+    long before = jdbc.queryForObject("SELECT COUNT(*) FROM training WHERE created_by=?", Long.class, owner);
+    var invalid = new org.springframework.mock.web.MockMultipartFile("materialTimings", "times.json", "application/json", "[[{\"pageNumber\":1,\"requiredSeconds\":0}]]".getBytes());
+    mvc.perform(multipart("/management/trainings/with-materials").file(command).file(file).file(invalid).header("Authorization", authorization)).andExpect(status().isBadRequest());
+    assertEquals(before, jdbc.queryForObject("SELECT COUNT(*) FROM training WHERE created_by=?", Long.class, owner));
+  }
+
+  @Test void trainingStatisticsSumOnlyOwnMaterialsAndDoNotDuplicateReentry() throws Exception {
+    long first = createTraining(null, false), second = createTraining(null, false);
+    long material = material(first), otherMaterial = material(second);
+    long video = insert("INSERT INTO training_video(training_id,title,storage_path,content_type) VALUES(?,'统计视频','stats.mp4','video/mp4')", first);
+    var entry = learning.learning(-first, "测试学员", phone);
+    learning.learning(-first, "测试学员", phone);
+    long session = jdbc.queryForObject("SELECT id FROM candidate_learning_session WHERE token=?", Long.class, entry.get("token"));
+    jdbc.update("UPDATE candidate_video_progress SET studied_seconds=45,completed=TRUE WHERE session_id=? AND video_id=?", session, video);
+    jdbc.update("INSERT INTO candidate_material_progress(session_id,material_id,page_number,studied_seconds,completed) VALUES(?,?,1,60,TRUE),(?,?,2,120,FALSE)", session, material, session, material);
+    var otherEntry = learning.learning(-second, "测试学员", phone);
+    long otherSession = jdbc.queryForObject("SELECT id FROM candidate_learning_session WHERE token=?", Long.class, otherEntry.get("token"));
+    jdbc.update("INSERT INTO candidate_material_progress(session_id,material_id,page_number,studied_seconds,completed) VALUES(?,?,1,999,TRUE)", otherSession, otherMaterial);
+    var rows = trainingLogs.list(first, owner);
+    assertEquals(1, rows.size());
+    assertEquals(225.0, ((Number) rows.get(0).get("studiedSeconds")).doubleValue(), 0.001);
+    assertEquals(false, rows.get(0).get("completed"));
+    assertFalse(trainingLogs.completedParticipants(first, owner).contains(phone + "|测试学员"));
+    jdbc.update("UPDATE candidate_material_progress SET completed=TRUE WHERE session_id=?", session);
+    assertEquals(true, trainingLogs.list(first, owner).get(0).get("completed"));
+    assertTrue(trainingLogs.completedParticipants(first, owner).contains(phone + "|测试学员"));
+    jdbc.update("UPDATE candidate_video_progress SET studied_seconds=NULL WHERE session_id=?", session);
+    assertEquals(180.0, ((Number) trainingLogs.list(first, owner).get(0).get("studiedSeconds")).doubleValue(), 0.001);
+    long empty = createTraining(null, false);
+    assertTrue(trainingLogs.list(empty, owner).isEmpty());
+    learning.learning(-empty, "测试学员", phone);
+    assertEquals(false, trainingLogs.list(empty, owner).get(0).get("completed"));
+    learning.requireComplete(-empty, "测试学员", phone);
+    assertEquals(true, trainingLogs.list(empty, owner).get(0).get("completed"));
+  }
+
+  @Test void trainingStatisticsKeepSamePaperExamTrainingsIndependent() throws Exception {
+    long original = createExam();
+    long paper = jdbc.queryForObject("SELECT paper_id FROM assessment_task WHERE id=?", Long.class, original);
+    jdbc.update("UPDATE test_paper SET status='PUBLISHED' WHERE id=?", paper);
+    var body = trainingCommand(null, false); body.put("exam", examSettings(paper));
+    var first = request(post("/management/trainings").header("Authorization", authorization), body);
+    var second = request(post("/management/trainings").header("Authorization", authorization), body);
+    long training = first.path("id").asLong(), other = second.path("id").asLong();
+    long material = material(training); material(other);
+    var entry = learning.learning(first.path("assessmentId").asLong(), "测试学员", phone);
+    long session = jdbc.queryForObject("SELECT id FROM candidate_learning_session WHERE token=?", Long.class, entry.get("token"));
+    jdbc.update("INSERT INTO candidate_material_progress(session_id,material_id,page_number,studied_seconds,completed) VALUES(?,?,1,30,TRUE)", session, material);
+    assertEquals(30.0, ((Number) trainingLogs.list(training, owner).get(0).get("studiedSeconds")).doubleValue(), 0.001);
+    assertTrue(trainingLogs.list(other, owner).isEmpty());
+    learning.learning(second.path("assessmentId").asLong(), "测试学员", phone);
+    assertEquals(0.0, ((Number) trainingLogs.list(other, owner).get(0).get("studiedSeconds")).doubleValue(), 0.001);
+    assertEquals(false, trainingLogs.list(other, owner).get(0).get("completed"));
+  }
+
+  @Test void trainingTimesAreRequiredAndOverrideExamTimes() throws Exception {
+    var missing = trainingCommand(null, false); missing.remove("startAt");
+    mvc.perform(post("/management/trainings").header("Authorization", authorization).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(missing))).andExpect(status().isBadRequest());
+    long original = createExam();
+    long paper = jdbc.queryForObject("SELECT paper_id FROM assessment_task WHERE id=?", Long.class, original);
+    jdbc.update("UPDATE test_paper SET status='PUBLISHED' WHERE id=?", paper);
+    var body = trainingCommand(null, false);
+    var namedExam = new HashMap<String,Object>(examSettings(paper));
+    namedExam.put("name", "独立考试名称");
+    body.put("exam", namedExam);
+    var created = request(post("/management/trainings").header("Authorization", authorization), body);
+    assertEquals("独立考试名称", created.path("exam").path("name").asText());
+    body.put("name", "修改后的培训名称");
+    assertEquals(created.path("startAt").asText(), created.path("exam").path("startAt").asText());
+    assertEquals(created.path("endAt").asText(), created.path("exam").path("endAt").asText());
+    body.put("version", created.path("version").asInt()); body.put("endAt", LocalDateTime.now().plusDays(8).toString());
+    var edited = request(put("/management/trainings/" + created.path("id").asLong()).header("Authorization", authorization), body);
+    assertEquals(edited.path("endAt").asText(), edited.path("exam").path("endAt").asText());
+    assertEquals("独立考试名称", edited.path("exam").path("name").asText());
+    assertEquals("独立考试名称", jdbc.queryForObject("SELECT name FROM assessment_task WHERE id=?", String.class, edited.path("assessmentId").asLong()));
+    body.remove("endAt");
+    mvc.perform(put("/management/trainings/" + created.path("id").asLong()).header("Authorization", authorization).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body))).andExpect(status().isBadRequest());
+  }
+
+  private Map<String, Object> examSettings(long paper) {
+    return Map.of("enabled", true, "paperId", paper, "startAt", LocalDateTime.now().plusDays(1).toString(),
+        "endAt", LocalDateTime.now().plusDays(2).toString(), "durationMinutes", 30,
+        "allowRetake", true, "maxAttempts", 2, "shuffleQuestions", true, "shuffleOptions", true, "showResultImmediately", true);
+  }
+
+  @Test void aggregatedTimesKeepAbsoluteInstantsAndTrainingDeadlineBlocksLearning() throws Exception {
+    long exam = createExam(), course = createTraining(exam, false);
+    var task = publicExams.get(exam, false, null).data();
+    var expectedStart = jdbc.queryForObject("SELECT start_at FROM training WHERE id=?", java.sql.Timestamp.class, course);
+    assertEquals(expectedStart.toInstant(), ((java.sql.Timestamp) task.get("trainingStartAt")).toInstant());
+    long doc = material(course);
+    long video = insert("INSERT INTO training_video(training_id,title,storage_path,content_type) VALUES(?,'时区视频','time.mp4','video/mp4')", course);
+    var entry = learning.learning(exam, "测试学员", phone);
+    long session = jdbc.queryForObject("SELECT id FROM candidate_learning_session WHERE token=?", Long.class, entry.get("token"));
+    var completed = java.sql.Timestamp.from(java.time.Instant.parse("2026-11-12T09:02:21Z"));
+    jdbc.update("UPDATE candidate_video_progress SET completed=TRUE,completed_at=? WHERE session_id=? AND video_id=?", completed, session, video);
+    jdbc.update("INSERT INTO candidate_material_progress(session_id,material_id,page_number,studied_seconds,completed,completed_at) VALUES(?,?,1,5,TRUE,?),(?,?,2,5,TRUE,?)", session, doc, completed, session, doc, completed);
+    var identity = new AccountIdentity(employee, AccountType.EMPLOYEE, owner);
+    var row = learnerRecords.trainings(identity).stream().filter(r -> ((Number)r.get("id")).longValue()==course).findFirst().orElseThrow();
+    assertEquals(completed.toInstant(), ((java.sql.Timestamp)row.get("completedAt")).toInstant());
+    var detail = learnerRecords.detail(identity, course);
+    for (var part : (List<Map<String,Object>>)detail.get("materials"))
+      assertEquals(completed.toInstant(), ((java.sql.Timestamp)part.get("completedAt")).toInstant());
+    jdbc.update("UPDATE training SET end_at=DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 1 SECOND) WHERE id=?", course);
+    assertThrows(BusinessException.class, () -> learning.learning(exam, "测试学员", phone));
+    assertThrows(BusinessException.class, () -> learning.progress(exam, video, (String)entry.get("token"), 0, 20, false));
+    assertThrows(BusinessException.class, () -> reading.session(exam, (String)entry.get("token")));
+    assertDoesNotThrow(() -> learnerRecords.detail(identity, course));
+  }
+
   private long createTraining(Long exam, boolean future) throws Exception {
     return request(post("/management/trainings").header("Authorization", authorization), trainingCommand(exam, future)).path("id").asLong();
   }
@@ -617,6 +1136,55 @@ class MyBatisMigrationIntegrationTest {
     body.put("startAt", LocalDateTime.now(ZoneOffset.UTC).plusDays(future ? 1 : -1).toString());
     body.put("endAt", LocalDateTime.now(ZoneOffset.UTC).plusDays(3).toString());
     return body;
+  }
+
+  @Test void editingAudienceOnlyAppendsAndPreservesExistingLearningAndRosterSnapshots() throws Exception {
+    for (Long exam : Arrays.asList(null, createExam())) {
+      var body = trainingCommand(exam, false);
+      body.put("audience", Map.of("type", "USERS", "ids", List.of(employee)));
+      long training = request(post("/management/trainings").header("Authorization", authorization), body).path("id").asLong();
+      var entry = learning.learning(exam == null ? -training : exam, "测试学员", phone);
+      var original = jdbc.queryForMap("SELECT * FROM training_audience WHERE training_id=? AND employee_id=?", training, employee);
+      String extraPhone = "136" + String.format("%08d", SEQUENCE.incrementAndGet());
+      long extra = insert("INSERT INTO organization_employee(created_by,department_id,name,phone) VALUES(?,?,'追加学员',?)", owner, department, extraPhone);
+      body.put("version", trainings.get(training, owner).get("version"));
+      body.put("audience", Map.of("type", "USERS", "ids", List.of(employee, extra)));
+      request(put("/management/trainings/" + training).header("Authorization", authorization), body);
+      assertEquals(original, jdbc.queryForMap("SELECT * FROM training_audience WHERE training_id=? AND employee_id=?", training, employee));
+      assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM training_audience WHERE training_id=?", Integer.class, training));
+      assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM candidate_learning_session WHERE token=?", Integer.class, entry.get("token")));
+      assertNotNull(learning.learning(exam == null ? -training : exam, "追加学员", extraPhone).get("token"));
+      body.put("version", trainings.get(training, owner).get("version"));
+      body.put("audience", Map.of("type", "USERS", "ids", List.of(extra)));
+      mvc.perform(put("/management/trainings/" + training).header("Authorization", authorization).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body))).andExpect(status().isBadRequest());
+      assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM training_audience WHERE training_id=?", Integer.class, training));
+      // A stale browser cannot reopen an ended training and append in one save.
+      jdbc.update("UPDATE training SET end_at=DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 1 SECOND) WHERE id=?", training);
+      body.put("audience", Map.of("type", "ALL", "ids", List.of()));
+      mvc.perform(put("/management/trainings/" + training).header("Authorization", authorization).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body))).andExpect(status().isBadRequest());
+    }
+  }
+
+  @Test void appendingDepartmentKeepsInactiveOriginalAssignments() throws Exception {
+    var body = trainingCommand(null, false);
+    body.put("audience", Map.of("type", "DEPARTMENT", "ids", List.of(department)));
+    long training = request(post("/management/trainings").header("Authorization", authorization), body).path("id").asLong();
+    var original = jdbc.queryForMap("SELECT * FROM training_audience WHERE training_id=? AND employee_id=?", training, employee);
+    jdbc.update("UPDATE organization_employee SET status='INACTIVE' WHERE id=?", employee);
+    long extraDepartment = insert("INSERT INTO organization_department(created_by,name) VALUES(?,'追加部门')", owner);
+    long extra = insert("INSERT INTO organization_employee(created_by,department_id,name,phone) VALUES(?,?,'追加人员',?)", owner, extraDepartment, "135" + String.format("%08d", SEQUENCE.incrementAndGet()));
+    body.put("version", trainings.get(training, owner).get("version"));
+    body.put("audience", Map.of("type", "DEPARTMENT", "ids", List.of(department, extraDepartment)));
+    request(put("/management/trainings/" + training).header("Authorization", authorization), body);
+    assertEquals(original, jdbc.queryForMap("SELECT * FROM training_audience WHERE training_id=? AND employee_id=?", training, employee));
+    assertEquals(List.of(employee, extra), jdbc.queryForList("SELECT employee_id FROM training_audience WHERE training_id=? ORDER BY employee_id", Long.class, training));
+    body.put("version", trainings.get(training, owner).get("version"));
+    body.put("audience", Map.of("type", "DEPARTMENT", "ids", List.of(extraDepartment)));
+    mvc.perform(put("/management/trainings/" + training).header("Authorization", authorization).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body))).andExpect(status().isBadRequest());
+  }
+
+  private JsonNode statisticsDetail(long task, boolean includeRetake) throws Exception {
+    return json.readTree(mvc.perform(get("/management/assessments/" + task + "/statistics/detail").param("includeRetake", Boolean.toString(includeRetake)).header("Authorization", authorization)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("data");
   }
 
   private long createExam() {

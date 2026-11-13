@@ -29,7 +29,7 @@ public class CandidateLearningService {
     }
 
     public void requireComplete(long task, String name, String phone) {
-        trainingAudienceService.requireTask(task, name, phone);
+        trainingAudienceService.requireOpenTask(task, name, phone);
         Integer missing = com.aiquestion.repository.RepositoryRows.one(persistence.countIncompleteVideos(Math.abs(task), Math.abs(task), name, phone, task > 0));
         missing += com.aiquestion.repository.RepositoryRows.one(persistence.countIncompletePages(Math.abs(task), Math.abs(task), name, phone, task > 0));
         if (missing != null && missing > 0)
@@ -46,7 +46,7 @@ public class CandidateLearningService {
             assessmentRosterService.requireEligible(task, name, phone);
         } else
             com.aiquestion.repository.RepositoryRows.one(persistence.lockStandaloneTraining(-task));
-        trainingAudienceService.requireTask(task, name, phone);
+        trainingAudienceService.requireOpenTask(task, name, phone);
         if (task > 0 && persistence.findTask(task).isEmpty())
             throw new BusinessException(ErrorCode.NOT_FOUND, "考试不存在");
         persistence.insertSessionIfAbsent(Math.abs(task), name.trim(), phone.trim(), UUID.randomUUID().toString(), task > 0);
@@ -54,7 +54,7 @@ public class CandidateLearningService {
         var session = com.aiquestion.repository.RepositoryRows.one(persistence.findCandidateSession(Math.abs(task), name.trim(), phone.trim(), task > 0));
         persistence.initializeVideoProgress(com.aiquestion.repository.RepositoryRows.nullableLong(session.get("id")), Math.abs(task), task > 0);
         var videos = persistence.findSessionVideos(com.aiquestion.repository.RepositoryRows.nullableLong(session.get("id")), Math.abs(task), task > 0);
-        return Map.of("videos", videos, "materials", materialLearningService.list(task, ((Number) session.get("id")).longValue()), "trainings", trainings(task), "token", session.get("token"));
+        return Map.of("videos", videos, "materials", materialLearningService.list(task, ((Number) session.get("id")).longValue()), "trainings", persistence.findCandidateTrainings(Math.abs(task), task > 0, name.trim(), phone.trim()), "token", session.get("token"));
     }
 
     public Map<String, Object> video(long task, long video, String token) {
@@ -64,7 +64,7 @@ public class CandidateLearningService {
         var identity = com.aiquestion.repository.RepositoryRows.one(persistence.findSessionIdentity(token, Math.abs(task), task > 0));
         if (task > 0)
             assessmentRosterService.requireEligible(task, String.valueOf(identity.get("candidate_name")), String.valueOf(identity.get("phone")));
-        trainingAudienceService.requireTask(task, String.valueOf(identity.get("candidate_name")), String.valueOf(identity.get("phone")));
+        trainingAudienceService.requireOpenTask(task, String.valueOf(identity.get("candidate_name")), String.valueOf(identity.get("phone")));
         return rows.get(0);
     }
 

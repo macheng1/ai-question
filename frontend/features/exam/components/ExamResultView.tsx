@@ -1,7 +1,7 @@
 "use client";
 import { Typography } from "@douyinfe/semi-ui";
 import { Layout } from "@douyinfe/semi-ui";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Banner } from "@douyinfe/semi-ui";
 import { IconTickCircle, IconAlertCircle, IconArrowLeft, IconArrowRight } from "@douyinfe/semi-icons";
 import type { ExamPaper, ExamQuestion } from "../types";
@@ -27,6 +27,10 @@ export function ExamResultView(props: ExamResultViewProps) {
   const answerLabel = (question: ExamQuestion, values: string[]) => values.map(value =>
     question.kind === "judge" ? (optionsFor(question).find(option => option.key === value)?.text || value) : value,
   ).join("、");
+  const [trainingId, setTrainingId] = useState("");
+  useEffect(() => { const id = new URLSearchParams(window.location.search).get("trainingId"); if (id && /^\d+$/.test(id)) setTrainingId(id); }, []);
+  const withContext = (path: string) => trainingId ? `${path}${path.includes("?") ? "&" : "?"}trainingId=${trainingId}` : path;
+  const canRetake = remainingAttempts > 0 && paper.taskStatus !== "ENDED" && paper.taskStatus !== "DISABLED" && (!paper.endAt || Date.now() < Date.parse(paper.endAt));
   const [wrongOnly, setWrongOnly] = useState(false);
   const [practiceDetails, setPracticeDetails] = useState(false);
   const reviewing = details || practiceDetails;
@@ -38,8 +42,8 @@ export function ExamResultView(props: ExamResultViewProps) {
   const correctCount = paper.questions.filter(q => gradeFor(q).isCorrect).length;
   const wrongCount = paper.questions.length - correctCount;
   const visibleQuestions = paper.questions.filter(q => !wrongOnly || !gradeFor(q).isCorrect);
-  const resultUrl = `/kaoshi/${paper.id}/result${attemptId ? `?attemptId=${attemptId}` : ""}`;
-  const detailsUrl = `/kaoshi/${paper.id}/result/details${attemptId ? `?attemptId=${attemptId}` : ""}`;
+  const resultUrl = withContext(`/kaoshi/${paper.id}/result${attemptId ? `?attemptId=${attemptId}` : ""}`);
+  const detailsUrl = withContext(`/kaoshi/${paper.id}/result/details${attemptId ? `?attemptId=${attemptId}` : ""}`);
   const stats = <div className="h5-stats h5-result-stats">
     <div><strong>{reviewing ? score : showAnswers ? correctCount : score}<small>{reviewing ? "" : showAnswers ? ` / ${paper.questions.length}` : "分"}</small></strong><span>{reviewing ? `得分 / ${paper.totalScore}` : showAnswers ? "答对题数" : "考试得分"}</span></div>
     <div><strong>{durationLabel(startedAt, submittedAt)}</strong><span>答题用时</span></div>
@@ -56,7 +60,7 @@ export function ExamResultView(props: ExamResultViewProps) {
       {!reviewing && <>
         <dl className="h5-result-meta"><div><dt>考生</dt><dd>{candidateName || "—"}{candidatePhone ? ` · ${candidatePhone}` : ""}</dd></div><div><dt>提交时间</dt><dd>{dateLabel(submittedAt)}</dd></div><div><dt>试卷</dt><dd>{paper.questions.length} 题 · 限时 {paper.duration} 分钟</dd></div><div><dt>答题次数</dt><dd>第 {attemptNo || 1} 次</dd></div></dl>
         {!practice && <TrainingExamLinks examId={paper.id} />}
-        <div className="h5-result-links print-hidden">{remainingAttempts > 0 && <a href={`/kaoshi/${paper.id}`}>重新考试（还可 {remainingAttempts} 次）</a>}<a href="/learner">返回个人中心</a></div>
+        <div className="h5-result-links print-hidden">{canRetake && <a href={trainingId ? `/training/${trainingId}?exam=1` : `/kaoshi/${paper.id}?direct=1`}>重新考试（还可 {remainingAttempts} 次）</a>}{trainingId && <a href={`/training/${trainingId}?review=1`}>回看培训材料</a>}<a href="/learner">返回个人中心</a></div>
       </>}
       {reviewing && (showAnswers ? <>
         <div className="h5-detail-tabs print-hidden"><Button theme="borderless" className={!wrongOnly ? "active" : ""} onClick={() => setWrongOnly(false)}>全部题目（{paper.questions.length}）</Button><Button theme="borderless" className={wrongOnly ? "active" : ""} onClick={() => setWrongOnly(true)}>只看错题（{wrongCount}）</Button></div>

@@ -15,6 +15,9 @@ import org.apache.ibatis.annotations.Param;
  * @author aiquestion
  */
 public interface AssessmentTaskRepository {
+  int maximumUsedAttempts(@Param("id") Long id);
+  int retireUnlinkedTrainingExam(@Param("id") Long id);
+  int markTrainingManaged(@Param("id") Long id);
   /**
    * 数据访问方法。
    *

@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.aiquestion.repository.TrainingRepository">
+  <select id="countTrainingAttempts" resultType="java.lang.Integer">SELECT COUNT(*) FROM assessment_attempt a JOIN training t ON t.assessment_id=a.task_id WHERE t.id=#{trainingId}</select>
+  <update id="bumpVersion">UPDATE training SET version=version+1 WHERE id=#{trainingId}</update>
+  <select id="countOtherTrainingReferences" resultType="java.lang.Integer">SELECT COUNT(*) FROM training t JOIN assessment_task a ON a.id=t.assessment_id WHERE a.id=#{assessmentId} AND (#{trainingId} IS NULL OR t.id!=#{trainingId})</select>
   <select id="findById" resultType="java.util.LinkedHashMap">
     SELECT * FROM training WHERE id=#{trainingId}<choose><when test="lock"> FOR UPDATE</when><otherwise></otherwise></choose>
   </select>
@@ -8,31 +11,25 @@
     SELECT COUNT(*) FROM training_survey_response WHERE training_id=#{trainingId}
   </select>
   <select id="findByOwner" resultType="java.util.LinkedHashMap">
-    SELECT * FROM training WHERE created_by=#{ownerId} ORDER BY id DESC
+    SELECT t.*, a.status exam_status, a.end_at exam_end_at, (SELECT COUNT(*) FROM training linked WHERE linked.assessment_id=t.assessment_id) exam_reference_count FROM training t LEFT JOIN assessment_task a ON a.id=t.assessment_id WHERE t.created_by=#{ownerId} ORDER BY t.id DESC
   </select>
   <select id="countExamParticipants" resultType="java.lang.Integer">
-    SELECT COUNT(*) FROM assessment_participant WHERE task_id=#{assessmentId}
+    SELECT COUNT(*) FROM assessment_participant p JOIN training t ON t.assessment_id=p.task_id WHERE t.id=#{trainingId} AND EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=t.id AND r.candidate_name=p.candidate_name AND r.phone=p.phone)
   </select>
   <select id="countTrainingLearningSessions" resultType="java.lang.Integer">
-    SELECT COUNT(*) FROM candidate_learning_session s JOIN training t ON (t.assessment_id=s.task_id OR t.id=s.training_id) WHERE t.id=#{trainingId}
+    SELECT COUNT(*) FROM candidate_learning_session s JOIN training t ON (t.assessment_id=s.task_id OR t.id=s.training_id) WHERE t.id=#{trainingId} AND (s.training_id=t.id OR EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=t.id AND r.candidate_name=s.candidate_name AND r.phone=s.phone))
   </select>
   <select id="countOwnedAssessments" resultType="java.lang.Integer">
     SELECT COUNT(*) FROM assessment_task WHERE id=#{assessmentId} AND created_by=#{ownerId}
-  </select>
-  <select id="countOtherTrainingReferences" resultType="java.lang.Integer">
-    SELECT COUNT(*) FROM training WHERE assessment_id=#{assessmentId} AND id&lt;&gt;#{excludedTrainingId}
-  </select>
-  <select id="countAssessmentActivity" resultType="java.lang.Long">
-    SELECT (SELECT COUNT(*) FROM assessment_participant WHERE task_id=#{assessmentId})+(SELECT COUNT(*) FROM candidate_learning_session WHERE task_id=#{sessionAssessmentId})
   </select>
   <insert id="insertTraining" useGeneratedKeys="true" keyProperty="generated.id" keyColumn="id">
     INSERT INTO training(name,description,survey_enabled,questions_json,created_by) VALUES(#{name},#{description},#{surveyEnabled},#{questionsJson},#{ownerId})
   </insert>
   <select id="countLearningBeforeRebind" resultType="java.lang.Integer">
-    SELECT COUNT(*) FROM candidate_learning_session s WHERE s.training_id=#{trainingId} OR s.task_id=#{assessmentId}
+    SELECT COUNT(*) FROM candidate_learning_session s WHERE s.training_id=#{trainingId} OR (s.task_id=#{assessmentId} AND EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=#{trainingId} AND r.candidate_name=s.candidate_name AND r.phone=s.phone))
   </select>
   <select id="countParticipantsBeforeRebind" resultType="java.lang.Integer">
-    SELECT COUNT(*) FROM assessment_participant WHERE task_id=#{assessmentId}
+    SELECT COUNT(*) FROM assessment_participant p JOIN training t ON t.assessment_id=p.task_id WHERE t.id=#{trainingId} AND EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=t.id AND r.candidate_name=p.candidate_name AND r.phone=p.phone)
   </select>
   <update id="updateContent">
     UPDATE training SET name=#{name},description=#{description},survey_enabled=#{surveyEnabled},questions_json=#{questionsJson},version=version+1 WHERE id=#{trainingId}
@@ -47,10 +44,10 @@
     SELECT COUNT(*) FROM training WHERE id=#{trainingId} AND start_at&gt;CURRENT_TIMESTAMP(3) AND (end_at IS NULL OR end_at&gt;=CURRENT_TIMESTAMP(3))
   </select>
   <select id="countParticipantsBeforeDelete" resultType="java.lang.Integer">
-    SELECT COUNT(*) FROM assessment_participant WHERE task_id=#{assessmentId}
+    SELECT COUNT(*) FROM assessment_participant p JOIN training t ON t.assessment_id=p.task_id WHERE t.id=#{trainingId} AND EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=t.id AND r.candidate_name=p.candidate_name AND r.phone=p.phone)
   </select>
   <select id="countSessionsBeforeDelete" resultType="java.lang.Integer">
-    SELECT COUNT(*) FROM candidate_learning_session s JOIN training t ON (t.assessment_id=s.task_id OR t.id=s.training_id) WHERE t.id=#{trainingId}
+    SELECT COUNT(*) FROM candidate_learning_session s JOIN training t ON (t.assessment_id=s.task_id OR t.id=s.training_id) WHERE t.id=#{trainingId} AND (s.training_id=t.id OR EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=t.id AND r.candidate_name=s.candidate_name AND r.phone=s.phone))
   </select>
   <select id="countMaterials" resultType="java.lang.Integer">
     SELECT COUNT(*) FROM training_material WHERE training_id=#{trainingId}
@@ -76,6 +73,11 @@
   <select id="countSubmittedSurvey" resultType="java.lang.Integer">
     SELECT COUNT(*) FROM training_survey_response WHERE training_id=#{trainingId} AND <choose><when test="employeeIdentity">employee_id</when><otherwise>user_id</otherwise></choose>=#{accountId}
   </select>
+  <select id="findOwnSurveyAnswers" resultType="java.lang.String">
+    SELECT answers_json FROM training_survey_response WHERE training_id=#{trainingId}
+    AND <choose><when test="employeeIdentity">employee_id</when><otherwise>user_id</otherwise></choose>=#{accountId}
+    ORDER BY id DESC LIMIT 1
+  </select>
   <insert id="insertSurveyResponse">
     INSERT INTO training_survey_response(training_id,<choose><when test="employeeIdentity">employee_id</when><otherwise>user_id</otherwise></choose>,answers_json) VALUES(#{trainingId},#{accountId},#{answersJson})
   </insert>
@@ -92,7 +94,7 @@
     SELECT * FROM training_video WHERE training_id=#{trainingId} AND id=#{videoId}
   </select>
   <select id="countSessionsBeforeAddingVideo" resultType="java.lang.Integer">
-    SELECT COUNT(*) FROM candidate_learning_session s JOIN training t ON (t.assessment_id=s.task_id OR t.id=s.training_id) WHERE t.id=#{trainingId}
+    SELECT COUNT(*) FROM candidate_learning_session s JOIN training t ON (t.assessment_id=s.task_id OR t.id=s.training_id) WHERE t.id=#{trainingId} AND (s.training_id=t.id OR EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=t.id AND r.candidate_name=s.candidate_name AND r.phone=s.phone))
   </select>
   <insert id="insertVideo">
     INSERT INTO training_video(training_id,title,storage_path,content_type) VALUES(#{trainingId},#{title},#{storagePath},#{contentType})
@@ -106,6 +108,9 @@
   <delete id="deleteVideo">
     DELETE FROM training_video WHERE id=#{videoId} AND training_id=#{trainingId}
   </delete>
+  <select id="findReviewVideos" resultType="java.util.LinkedHashMap">
+    SELECT id,title FROM training_video WHERE training_id=#{trainingId} ORDER BY sort_order,id
+  </select>
   <select id="findVideoIds" resultType="java.lang.Long">
     SELECT id FROM training_video WHERE training_id=#{trainingId}
   </select>
@@ -115,4 +120,12 @@
   <select id="findVideoStoragePaths" resultType="java.lang.String">
     SELECT storage_path FROM training_video WHERE training_id=#{trainingId}
   </select>
+  <update id="endTraining">UPDATE training SET end_at=LEAST(COALESCE(end_at,CURRENT_TIMESTAMP(3)),CURRENT_TIMESTAMP(3)),version=version+1 WHERE id=#{trainingId}</update>
+  <update id="syncEndedExamSchedule">
+    UPDATE assessment_task a JOIN training t ON t.assessment_id=a.id
+    SET a.end_at=t.end_at
+    WHERE t.id=#{trainingId} AND a.status='DISABLED'
+      AND t.end_at &lt;= CURRENT_TIMESTAMP(3) AND a.end_at &gt; t.end_at
+      AND NOT EXISTS (SELECT 1 FROM training other WHERE other.assessment_id=a.id AND other.id!=t.id)
+  </update>
 </mapper>

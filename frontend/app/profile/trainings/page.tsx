@@ -2,19 +2,17 @@
 import { useCompactViewport } from "@/lib/hooks/useCompactViewport";
 import { Typography } from "@douyinfe/semi-ui";
 import { Card } from "@douyinfe/semi-ui";
-import { IconPlus, IconChevronDown } from "@douyinfe/semi-icons";
+import { IconPlus, IconChevronDown, IconHelpCircleStroked } from "@douyinfe/semi-icons";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import "@douyinfe/semi-ui/react19-adapter";
-import { Banner, Button, Input, Modal, Toast, Table, Select, Tag, Dropdown } from "@douyinfe/semi-ui";
-import { trainingCategories, getTrainings, deleteTraining, copyTraining, type Training } from "@/features/trainings/api";
+import { Button, Input, Modal, Toast, Table, Select, Tag, Dropdown, Tooltip } from "@douyinfe/semi-ui";
+import { trainingCategories, getTrainings, endTraining, type Training } from "@/features/trainings/api";
 import { ProfileShell } from "@/components/layout/ProfileShell";
 import { TrainingReminderModal } from "@/features/trainings/components/TrainingReminderModal";
 export default function TrainingsPage() {
   const router = useRouter();
   const compact = useCompactViewport();
-  const [copyTarget, setCopyTarget] = useState<Training | null>(null);
-  const [copying, setCopying] = useState(false);
   const [reminder, setReminder] = useState<Training | null>(null);
   const [openMenu, setOpenMenu] = useState<number | null>(null);
   const [entry, setEntry] = useState<Training | null>(null);
@@ -49,30 +47,23 @@ export default function TrainingsPage() {
   const [error, setError] = useState("");
   const load = () => { setLoading(true); setError(""); getTrainings().then(setItems).catch(e => setError(e.message)).finally(() => setLoading(false)); };
   useEffect(() => { load(); }, []);
-  const remove = (item: Training) => Modal.confirm({ title: "删除培训", content: `确定删除“${item.name}”吗？此操作不可恢复。`, onOk: async () => { try { await deleteTraining(item.id); Toast.success("已删除"); load(); } catch(e) { Toast.error(e instanceof Error ? e.message : "删除失败"); } } });
-  const confirmCopy = async () => {
-    if (!copyTarget || copying) return;
-    setCopying(true);
-    try {
-      const created = await copyTraining(copyTarget.id);
-      setCopyTarget(null);
-      Toast.success("复制成功，请重新选择学习范围和人员后保存");
-      router.push(`/profile/trainings/${created.id}/edit`);
-    } catch (e) {
-      Toast.error(e instanceof Error ? e.message : "复制失败，请重试");
-    } finally {
-      setCopying(false);
-    }
-  };
+  const stopTraining = (item: Training) => Modal.confirm({
+    title: item.assessmentId ? "结束培训和考试" : "结束培训",
+    content: item.assessmentId
+      ? `确认结束“${item.name}”的培训和考试？进行中的答卷将结算，学习记录和成绩保留。结束后可回看材料，不再记录学习进度，也不能参加考试。`
+      : `确认结束“${item.name}”的培训？学习记录保留，结束后可回看材料，不再记录学习进度。`,
+    okText: item.assessmentId ? "结束培训和考试" : "结束培训", cancelText: "取消",
+    onOk: async () => { try { await endTraining(item.id); Toast.success(item.assessmentId ? "培训和考试已结束" : "培训已结束"); load(); } catch (e) { Toast.error(e instanceof Error ? e.message : "结束失败"); throw e; } },
+  });
   const visible = items.filter(item => item.name.includes(keyword.trim()) && (!category || item.category === category) && (!requirement || item.requirementType === requirement));
   const currentPage = Math.min(page, Math.max(1, Math.ceil(visible.length / pageSize)));
   const pageItems = visible.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  return <ProfileShell><div className="flex flex-wrap items-center justify-between gap-4"><div><Typography.Title heading={1} className="!m-0 !text-[28px] !font-semibold !text-[#183f35]">培训管理</Typography.Title><p className="mt-2 text-sm text-slate-500">维护培训信息和满意度评估，查看参与反馈</p></div><Button className="shrink-0" theme="solid" icon={<IconPlus />} onClick={() => router.push("/profile/trainings/new")}>新建培训</Button></div>
+  return <ProfileShell><div className="flex flex-wrap items-center justify-between gap-4"><div><Typography.Title heading={1} className="!m-0 !text-[28px] !font-semibold !text-[#183f35]">培训管理</Typography.Title><p className="mt-2 text-sm text-slate-500">统一管理学习、考试与满意度评估</p></div><div className="flex items-center gap-3"><Button className="shrink-0" theme="solid" icon={<IconPlus />} onClick={() => router.push("/profile/trainings/new")}>新建培训</Button></div></div>
   <Card bodyStyle={{ padding: 0 }} className="!my-5"><div className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-[200px_200px_minmax(0,1fr)]"><Select aria-label="分类筛选" placeholder="全部分类" showClear value={category} optionList={trainingCategories} onChange={v => { setCategory(v ? String(v) : undefined); setPage(1); }} /><Select aria-label="学习要求筛选" placeholder="全部学习要求" showClear value={requirement} optionList={[{value:"REQUIRED",label:"必修"},{value:"ELECTIVE",label:"选修"}]} onChange={v => { setRequirement(v ? String(v) : undefined); setPage(1); }} /><Input placeholder="搜索培训名称" value={keyword} onChange={value => { setKeyword(value); setPage(1); }} /></div></Card>
   {loading ? <p>加载中…</p> : error ? <div role="alert">{error}<Button onClick={load}>重试</Button></div> : !visible.length ? <Card bodyStyle={{ padding: 0 }} className="text-slate-500"><div className="p-12 text-center">{items.length ? "没有匹配的培训" : "还没有培训，点击右上角新建"}</div></Card> : <Card bodyStyle={{ padding: 0 }} className="overflow-x-auto"><Table<Training> rowKey="id" dataSource={pageItems} pagination={{ total: visible.length, style: { padding: "16px 20px", margin: 0, boxSizing: "border-box" }, currentPage, pageSize, showTotal: !compact, showSizeChanger: !compact, pageSizeOpts: [10, 20, 50], onPageChange: setPage, onPageSizeChange: size => { setPageSize(size); setPage(1); } }} scroll={{ x: 1200 }} columns={[
     { title: "培训名称", dataIndex: "name", width: 260, render: value => <span className="break-words">{value}</span> },
-    { title: "培训状态", width: 120, className: "whitespace-nowrap", render: (_, item) => {
-      if (item.endAt && now > new Date(item.endAt).getTime()) return <Tag color="blue">已结束</Tag>;
+    { title: <span className="inline-flex items-center gap-1">培训状态<Tooltip trigger="click" position="bottomLeft" content={<div className="max-w-[320px] text-sm leading-6"><strong>培训状态说明</strong><ul className="mt-2 list-disc space-y-1 pl-4"><li>未开始：还没到开始时间，暂不能学习。</li><li>进行中：已开始，可以参加学习。</li><li>已结束：培训已结束。</li></ul></div>}><Button aria-label="培训状态说明" theme="borderless" type="tertiary" size="small" icon={<IconHelpCircleStroked />} /></Tooltip></span>, width: 150, className: "whitespace-nowrap", render: (_, item) => {
+      if (item.endAt && now >= new Date(item.endAt).getTime()) return <Tag color="blue">已结束</Tag>;
       if (item.startAt && now < new Date(item.startAt).getTime()) return <Tag color="orange">未开始</Tag>;
       if (item.startAt || item.endAt) return <Tag color="green">进行中</Tag>;
       return <Tag color="grey">未设置</Tag>;
@@ -86,27 +77,15 @@ export default function TrainingsPage() {
       <Button theme="borderless" size="large" onClick={() => router.push(`/profile/trainings/${item.id}/edit`)}>编辑</Button>
       <Button theme="borderless" size="large" onClick={() => { setQrFailed(false); setEntry(item); }}>培训入口</Button>
       <Dropdown trigger="click" position="bottomRight" visible={openMenu === item.id} onVisibleChange={visible => setOpenMenu(visible ? item.id : null)} render={<Dropdown.Menu>
-        <Dropdown.Item onClick={() => { setOpenMenu(null); setCopyTarget(item); }}>复制</Dropdown.Item>
+        <Dropdown.Item onClick={() => { setOpenMenu(null); router.push(`/profile/trainings/${item.id}/copy`); }}>复制</Dropdown.Item>
+        <Dropdown.Item onClick={() => { setOpenMenu(null); router.push(`/profile/trainings/${item.id}/learning-records`); }}>培训统计</Dropdown.Item>
+        {item.assessmentId && <Dropdown.Item onClick={() => { setOpenMenu(null); router.push(`/profile/assessments/${item.assessmentId}/statistics`); }}>考试统计</Dropdown.Item>}
+        <Dropdown.Item disabled={!!item.examShared || !!(item.startAt && now < Date.parse(item.startAt)) || !!(item.endAt && now >= Date.parse(item.endAt) && (!item.assessmentId || item.examStatus === "DISABLED" || item.examStatus === "ENDED" || (item.examEndAt && now >= Date.parse(item.examEndAt))))} onClick={() => { setOpenMenu(null); stopTraining(item); }}>{item.assessmentId ? "结束培训和考试" : "结束培训"}</Dropdown.Item>
         <Dropdown.Item onClick={() => { setOpenMenu(null); setReminder(item); }}>一键提醒</Dropdown.Item>
         <Dropdown.Item onClick={() => router.push(`/profile/trainings/${item.id}/responses`)}>查看反馈</Dropdown.Item>
-        <Dropdown.Divider />
-        <Dropdown.Item type="danger" disabled={!!item.responseCount || !item.startAt || now >= new Date(item.startAt).getTime() || (!!item.endAt && now > new Date(item.endAt).getTime())} onClick={() => remove(item)}>删除</Dropdown.Item>
       </Dropdown.Menu>}><Button theme="borderless" size="large" icon={<IconChevronDown />} iconPosition="right">更多</Button></Dropdown>
     </div> }
   ]} /></Card>}
-  <Modal visible={!!copyTarget} title="确认复制培训？" width="min(520px, calc(100vw - 24px))"
-    okText={copying ? "正在复制" : "确认复制"} confirmLoading={copying}
-    cancelButtonProps={{ disabled: copying }} closable={!copying} maskClosable={!copying}
-    onOk={confirmCopy} onCancel={() => { if (!copying) setCopyTarget(null); }}>
-    <div className="space-y-3 text-sm leading-6">
-      <p className="break-words">将“{copyTarget?.name}”复制为一条新的培训，名称添加“（副本）”。</p>
-      <p>复制基本信息、培训时间、材料及阅读时长、满意度评估题目。</p>
-      <Banner type="warning" description="复制后需要重新选择学习范围和人员，原培训名单不会复制。" />
-      {copyTarget?.assessmentId && <p>不会新增考试或试卷，也不会继承原考试关联。副本如需考试，请保存前重新选择可关联的考试。</p>}
-      <p>学习、答题、成绩和评估反馈从零开始。复制完成后进入编辑页，请确认培训时间及是否需要关联考试。</p>
-      {copying && <Typography.Text type="secondary">正在复制材料，请勿关闭页面，文件较多时可能需要等待。</Typography.Text>}
-    </div>
-  </Modal>
   <Modal visible={!!entry} title="培训入口" width="min(480px, calc(100vw - 24px))" onCancel={() => setEntry(null)} bodyStyle={{ maxHeight: "calc(100dvh - 240px)", overflowY: "auto" }} footer={<div className="flex flex-wrap justify-end gap-2">
     <Button onClick={() => setEntry(null)}>关闭</Button>
     <Button onClick={() => window.open(entryLink, "_blank", "noopener,noreferrer")}>打开培训</Button>

@@ -4,7 +4,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-/** 培训与考试独立计时；满意度反馈不参与完成判定。 */
+/** 按培训与考试的截止时间判断逾期；满意度反馈不参与完成判定。 */
 public final class TrainingReminderRules {
   private TrainingReminderRules() {}
 

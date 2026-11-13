@@ -13,7 +13,7 @@ public interface TrainingAudienceRepository {
   List<Integer> countOwnedTrainings(@Param("trainingId") Long trainingId, @Param("ownerId") Long ownerId);
   List<Map<String, Object>> lockTraining(@Param("trainingId") Long trainingId);
   List<Integer> countLearningSessions(@Param("trainingId") Long trainingId);
-  List<Integer> countExamParticipants(@Param("assessmentId") Long assessmentId);
+  List<Integer> countExamParticipants(@Param("trainingId") Long trainingId);
   List<Map<String, Object>> findActiveEmployees(@Param("ownerId") Long ownerId);
   List<Long> findActiveDepartmentIds(@Param("ownerId") Long ownerId);
   List<Map<String, Object>> findAssignments(@Param("trainingId") Long trainingId);
@@ -30,6 +30,7 @@ public interface TrainingAudienceRepository {
       @Param("departmentName") String departmentName,
       @Param("assignedAt") java.sql.Timestamp assignedAt);
   List<Integer> countCandidateAssignments(@Param("trainingId") Long trainingId, @Param("name") String name, @Param("phone") String phone);
+  List<Integer> countEndedTrainings(@Param("trainingId") Long trainingId);
   List<Integer> countNotStartedTrainings(@Param("entryId") Long entryId, @Param("examTask") boolean examTask);
   List<Integer> countExamLinkedTrainings(@Param("trainingId") Long trainingId);
   List<Long> findTrainingIdsForEntry(@Param("entryId") Long entryId, @Param("examTask") boolean examTask);

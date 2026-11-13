@@ -20,12 +20,14 @@ export default function TrainingSurveyPage() {
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    if (params.get("from") === "surveys") setReturnPath("/learner/surveys");
+    if (params.get("from") === "detail") setReturnPath(`/learner/trainings/${id}`);
     const exam = params.get("examId"), attempt = params.get("attemptId");
-    if (exam && attempt && /^\d+$/.test(exam) && /^\d+$/.test(attempt)) setReturnPath(`/kaoshi/${exam}/result?attemptId=${attempt}`);
-  }, []);
+    if (exam && attempt && /^\d+$/.test(exam) && /^\d+$/.test(attempt)) setReturnPath(`/kaoshi/${exam}/result?attemptId=${attempt}&trainingId=${id}`);
+  }, [id]);
   const token = useLearnerStore(state => state.accessToken);
   useEffect(() => { setLoading(true); setError(""); if (!useLearnerStore.getState().accessToken) { setLoginRequired(true); setLoading(false); return; } setLoginRequired(false); getSurvey(id).then(setTraining).catch(e => { if (e.status === 401) setLoginRequired(true); else setError(e.message); }).finally(() => setLoading(false)); }, [id, token]);
-  const backHref = returnPath || (training?.assessmentId ? `/kaoshi/${training.assessmentId}` : `/training/${id}`);
+  const backHref = returnPath || `/learner/trainings/${id}`;
   return <H5Shell title={submitted || training?.submitted ? "提交成功" : "满意度评估"} backHref={backHref}><div className="h5-content">
     {!submitted && !training?.submitted && <Layout.Header className="h5-survey-heading"><span className="h5-eyebrow">YOUR FEEDBACK MATTERS</span><Typography.Title heading={1} className="!my-3 !text-2xl !leading-9">你的感受，很重要</Typography.Title><p>{training?.name || "你的反馈将帮助我们改进培训内容与体验"}</p></Layout.Header>}
     {loading ? <div className="h5-empty flex flex-col items-center justify-center gap-3"><Spin size="large" /><p>正在加载评估…</p></div>

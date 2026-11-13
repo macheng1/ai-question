@@ -19,7 +19,7 @@ class TrainingAudienceEligibilityTest {
     when(repository.lockTraining(1L)).thenReturn(List.of(Map.of("assessment_id", 9L)));
     when(repository.findAudienceType(1L)).thenReturn(List.of("USERS"));
     when(repository.countLearningSessions(1L)).thenReturn(List.of(0));
-    when(repository.countExamParticipants(9L)).thenReturn(List.of(0));
+    when(repository.countExamParticipants(1L)).thenReturn(List.of(0));
     when(repository.findActiveEmployees(2L)).thenReturn(List.of(
         Map.of("id", 3L, "name", "甲", "phone", "13900000001", "department_id", 5L, "department_name", "研发部"),
         Map.of("id", 4L, "name", "乙", "phone", "13900000002", "department_id", 5L, "department_name", "研发部")));

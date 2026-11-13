@@ -12,7 +12,7 @@ class TrainingCopiedExamLifecycleTest {
   private final TrainingRepository repository = mock(TrainingRepository.class);
   private final AssessmentRosterService roster = mock(AssessmentRosterService.class);
   private final TrainingAudienceService audiences = mock(TrainingAudienceService.class);
-  private final TrainingService service = spy(new TrainingService(repository, new ObjectMapper(), roster, audiences));
+  private final TrainingService service = spy(new TrainingService(repository, new ObjectMapper(), roster, audiences, mock(TrainingExamService.class)));
 
   private void training(boolean generated) {
     Map<String, Object> row = new HashMap<>();
@@ -21,11 +21,9 @@ class TrainingCopiedExamLifecycleTest {
     when(repository.findById(eq(1L), anyBoolean())).thenReturn(List.of(row));
     when(repository.countSurveyResponses(1L)).thenReturn(List.of(0L));
     when(repository.countUpcomingTrainings(1L)).thenReturn(List.of(1));
-    when(repository.countOtherTrainingReferences(anyLong(), anyLong())).thenReturn(List.of(0));
-    when(repository.countAssessmentActivity(anyLong(), anyLong())).thenReturn(List.of(0L));
     when(repository.countLearningBeforeRebind(1L, 9L)).thenReturn(List.of(0));
-    when(repository.countParticipantsBeforeRebind(9L)).thenReturn(List.of(0));
-    when(repository.countParticipantsBeforeDelete(9L)).thenReturn(List.of(0));
+    when(repository.countParticipantsBeforeRebind(1L)).thenReturn(List.of(0));
+    when(repository.countParticipantsBeforeDelete(1L)).thenReturn(List.of(0));
     when(repository.countSessionsBeforeDelete(1L)).thenReturn(List.of(0));
     when(repository.countMaterials(1L)).thenReturn(List.of(0));
     when(repository.countAssessmentReferences(9L)).thenReturn(List.of(0));
@@ -36,6 +34,7 @@ class TrainingCopiedExamLifecycleTest {
 
   private void save(Long exam) {
     when(repository.countOwnedAssessments(exam, 2L)).thenReturn(List.of(1));
+    when(repository.countOtherTrainingReferences(exam, 1L)).thenReturn(List.of(0));
     service.save(1L, new TrainingService.SaveTraining("培训", "", false, List.of(), 1,
         exam, null, null, null, null, null), 2L);
   }
@@ -98,21 +97,21 @@ class TrainingCopiedExamLifecycleTest {
 
   @Test void participantPreventsUnlink() {
     training(true);
-    when(repository.countParticipantsBeforeRebind(9L)).thenReturn(List.of(1));
+    when(repository.countParticipantsBeforeRebind(1L)).thenReturn(List.of(1));
     assertThrows(BusinessException.class, () -> save(null));
     assertNoContentWrite();
   }
 
-  @Test void anotherTrainingReferencePreventsExamRemoval() {
+  @Test void anotherTrainingReferenceKeepsSharedExamOnUnlink() {
     training(true);
     when(repository.countAssessmentReferences(9L)).thenReturn(List.of(1));
-    assertThrows(BusinessException.class, () -> save(null));
+    assertDoesNotThrow(() -> save(null));
     verify(repository, never()).deleteOwnedAssessment(any(), any());
   }
 
   @Test void participantPreventsDeletion() {
     training(true);
-    when(repository.countParticipantsBeforeDelete(9L)).thenReturn(List.of(1));
+    when(repository.countParticipantsBeforeDelete(1L)).thenReturn(List.of(1));
     assertThrows(BusinessException.class, () -> service.delete(1L, 2L));
     verify(repository, never()).deleteTraining(any());
     verify(repository, never()).deleteOwnedAssessment(any(), any());

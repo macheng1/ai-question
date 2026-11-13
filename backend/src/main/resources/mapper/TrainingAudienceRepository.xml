@@ -14,10 +14,10 @@
     SELECT * FROM training WHERE id=#{trainingId} FOR UPDATE
   </select>
   <select id="countLearningSessions" resultType="java.lang.Integer">
-    SELECT COUNT(*) FROM candidate_learning_session s JOIN training t ON (t.assessment_id=s.task_id OR t.id=s.training_id) WHERE t.id=#{trainingId}
+    SELECT COUNT(*) FROM candidate_learning_session s JOIN training t ON (t.assessment_id=s.task_id OR t.id=s.training_id) WHERE t.id=#{trainingId} AND (s.training_id=t.id OR EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=t.id AND r.candidate_name=s.candidate_name AND r.phone=s.phone))
   </select>
   <select id="countExamParticipants" resultType="java.lang.Integer">
-    SELECT COUNT(*) FROM assessment_participant WHERE task_id=#{assessmentId}
+    SELECT COUNT(*) FROM assessment_participant p JOIN training t ON t.assessment_id=p.task_id WHERE t.id=#{trainingId} AND EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=t.id AND r.candidate_name=p.candidate_name AND r.phone=p.phone)
   </select>
   <select id="findActiveEmployees" resultType="java.util.LinkedHashMap">
     SELECT e.id,e.name,e.phone,e.department_id,d.name department_name FROM organization_employee e JOIN organization_department d ON d.id=e.department_id AND d.created_by=e.created_by WHERE e.created_by=#{ownerId} AND e.status='ACTIVE' AND d.status='ACTIVE'
@@ -45,6 +45,9 @@
   </insert>
   <select id="countCandidateAssignments" resultType="java.lang.Integer">
     SELECT COUNT(*) FROM training_audience WHERE training_id=#{trainingId} AND candidate_name=#{name} AND phone=#{phone}
+  </select>
+  <select id="countEndedTrainings" resultType="java.lang.Integer">
+    SELECT COUNT(*) FROM training WHERE id=#{trainingId} AND end_at&lt;=CURRENT_TIMESTAMP(3)
   </select>
   <select id="countNotStartedTrainings" resultType="java.lang.Integer">
     SELECT COUNT(*) FROM training WHERE <choose><when test="examTask">assessment_id=#{entryId}</when><otherwise>id=#{entryId}</otherwise></choose> AND start_at&gt;CURRENT_TIMESTAMP(3)

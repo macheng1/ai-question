@@ -36,7 +36,11 @@ export default function Mistakes() {
             <ul className="mb-4 space-y-2">
               {row.options.map((option) => (
                 <li key={option.optionKey} className="whitespace-pre-wrap break-words">
-                  {option.optionKey}. {option.optionText}
+                  {option.optionKey.trim().toUpperCase() === "TRUE"
+                    ? "A. 正确"
+                    : option.optionKey.trim().toUpperCase() === "FALSE"
+                      ? "B. 错误"
+                      : `${option.optionKey}. ${option.optionText}`}
                 </li>
               ))}
             </ul>

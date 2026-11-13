@@ -95,6 +95,7 @@ export function ExamRunner({
   compact = false,
   allowRestore = true,
   learningPage = false,
+  reviewAttemptId,
   details = false,
   initialGrades,
   resultAttemptId,
@@ -125,6 +126,7 @@ export function ExamRunner({
   /** 是否从本地草稿恢复答题进度；考试入口页需要关闭，独立答题页保持开启。 */
   allowRestore?: boolean;
   learningPage?: boolean;
+  reviewAttemptId?: string;
   details?: boolean;
   initialGrades?: QuestionGrade[];
   resultAttemptId?: string;
@@ -139,7 +141,18 @@ export function ExamRunner({
     initialAnswers || {},
   );
   const [activeQuestions, setActiveQuestions] = useState(initialPaper.questions);
-  const paper = { ...initialPaper, questions: activeQuestions };
+  const [runtimeTiming, setRuntimeTiming] = useState({ endAt: initialPaper.endAt, taskStatus: initialPaper.taskStatus, trainingStartAt: initialPaper.trainingStartAt, trainingEndAt: initialPaper.trainingEndAt });
+  const paper = { ...initialPaper, ...runtimeTiming, questions: activeQuestions };
+  const [entryClock, setEntryClock] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setEntryClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const entryEnded = !practice && (paper.taskStatus === "ENDED" || paper.taskStatus === "DISABLED" ||
+    Boolean(paper.trainingEndAt && entryClock >= Date.parse(paper.trainingEndAt)) || Boolean(paper.endAt && entryClock >= Date.parse(paper.endAt)));
+  const entryPending = !practice && !entryEnded && (Boolean(paper.trainingStartAt && entryClock < Date.parse(paper.trainingStartAt)) || Boolean(paper.startAt && entryClock < Date.parse(paper.startAt)));
+  const entryBlocked = entryEnded || entryPending;
+  const entryMessage = entryEnded ? "培训已结束，不能继续学习或考试" : "培训未开始，请在开放时间后参加";
   const [seconds, setSeconds] = useState(initialPaper.duration * 60);
   const [submitted, setSubmitted] = useState(false);
   const [attemptId, setAttemptId] = useState<number | null>(
@@ -173,7 +186,7 @@ export function ExamRunner({
   useEffect(() => {
     if (!learningPage) return;
     if (!initialName.trim() || !/^1\d{10}$/.test(initialPhone)) {
-      window.location.replace(`/kaoshi/${initialPaper.id}`); return;
+      window.location.replace(withTraining(`/kaoshi/${initialPaper.id}`)); return;
     }
     let active = true;
     loadExamLearning(initialPaper.id, initialName, initialPhone)
@@ -222,6 +235,7 @@ export function ExamRunner({
       if (!user?.name || !/^1\d{10}$/.test(user.phone || "")) return;
       setName((current) => current || user.name);
       setPhone((current) => current || user.phone);
+      if (new URLSearchParams(window.location.search).get("direct") === "1") return;
       getPublicExamProgress(paper.id, {
         name: user.name,
         phone: user.phone,
@@ -324,7 +338,7 @@ export function ExamRunner({
         }
       })
       .catch(() => {
-        window.location.replace(`/kaoshi/${paper.id}`);
+        window.location.replace(withTraining(`/kaoshi/${paper.id}`));
       });
   }, [attemptId, initialStage, name, paper.id, phone, practice]);
   useEffect(() => {
@@ -359,6 +373,7 @@ export function ExamRunner({
   useEffect(() => {
     if (stage !== "answer" || submitted) return;
     const update = () => {
+      if (!practice && (paper.taskStatus === "ENDED" || paper.taskStatus === "DISABLED")) { setSeconds(0); return; }
       if (startedAt) setSeconds(remainingSeconds(startedAt, paper.duration, paper.endAt));
       else if (practice) setSeconds(value => Math.max(0, value - 1));
     };
@@ -370,7 +385,24 @@ export function ExamRunner({
       window.removeEventListener("focus", update);
       document.removeEventListener("visibilitychange", update);
     };
-  }, [stage, submitted, startedAt, paper.duration, paper.endAt, practice]);
+  }, [stage, submitted, startedAt, paper.duration, paper.endAt, paper.taskStatus, practice]);
+  useEffect(() => {
+    if (practice || stage === "result" || submitted) return;
+    let active = true, pending = false;
+    const refresh = async () => {
+      if (pending) return;
+      pending = true;
+      try {
+        const current = await loadExamPaper(paper.id);
+        if (active) setRuntimeTiming({ endAt: current.endAt, taskStatus: current.taskStatus, trainingStartAt: current.trainingStartAt, trainingEndAt: current.trainingEndAt });
+      } catch { /* Keep local countdown and retry on the next refresh. */ }
+      finally { pending = false; }
+    };
+    void refresh();
+    const timer = window.setInterval(refresh, 15000);
+    window.addEventListener("focus", refresh);
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener("focus", refresh); };
+  }, [practice, stage, submitted, attemptId, paper.id]);
   const persistAnswer = (questionId: number, selected: string[]) => {
     if (!attemptId || practice) return Promise.resolve(true);
     const pending = answerQueue.current.then(async () => {
@@ -422,14 +454,28 @@ export function ExamRunner({
     autoSubmittedAttempt.current = attemptId;
     void submitExpired();
   }, [stage, restored, timedOut, submitted, attemptId, submitting, submitExpired]);
-  const beginExam = async () => {
+  const beginExam = useCallback(async () => {
     if (starting) return;
+    if (entryBlocked) { Toast.warning(entryMessage); return; }
     if (!practice && (!name.trim() || !/^1\d{10}$/.test(phone))) {
       Toast.error("请填写正确的姓名和11位手机号");
       return;
     }
     setStarting(true);
     try {
+      // 培训与考试使用统一开放时间，服务端会再次校验。
+      if (!practice && new URLSearchParams(window.location.search).has("trainingId")) {
+        const requiredLearning = await loadExamLearning(paper.id, name, phone);
+        if (requiredLearning.videos.some(video => !video.completed) || requiredLearning.materials?.some(material => !material.completed)) {
+          if (learningPage) setLearning(requiredLearning);
+          else {
+            const query = new URLSearchParams({ name: name.trim(), phone: phone.trim() });
+            if (new URLSearchParams(window.location.search).get("direct") === "1") query.set("fromLearner", "1");
+            window.location.assign(withTraining(`/kaoshi/${paper.id}/learning?${query}`));
+          }
+          return;
+        }
+      }
       const now = Date.now();
       if (paper.taskStatus === "DISABLED" || paper.taskStatus === "ENDED" || (paper.endAt && now >= Date.parse(paper.endAt))) throw new Error("考试已结束，不能继续答题");
       if (paper.startAt && now < Date.parse(paper.startAt)) throw new Error("考试尚未开始");
@@ -446,7 +492,8 @@ export function ExamRunner({
           if (learningPage) setLearning(requiredLearning);
           else {
             const query = new URLSearchParams({ name: name.trim(), phone: phone.trim() });
-            window.location.assign(`/kaoshi/${paper.id}/learning?${query}`);
+            if (new URLSearchParams(window.location.search).get("direct") === "1") query.set("fromLearner", "1");
+            window.location.assign(withTraining(`/kaoshi/${paper.id}/learning?${query}`));
           }
           return;
         }
@@ -511,7 +558,7 @@ export function ExamRunner({
     } finally {
       setStarting(false);
     }
-  };
+  }, [starting, entryBlocked, entryMessage, practice, name, phone, paper.id, paper.taskStatus, paper.endAt, paper.startAt, paper.totalScore, paper.passScore, paper.duration, paper.questions, learningPage, draftKey]);
   const submitAnswers = async () => {
     if (!practice && (!name.trim() || !/^1\d{10}$/.test(phone))) {
       Toast.error("请填写正确的姓名和11位手机号");
@@ -585,15 +632,23 @@ export function ExamRunner({
     }
     setCardOpen(false); setConfirmOpen(true);
   };
+  const directStarted = useRef(false);
+  useEffect(() => {
+    if (practice || learningPage || initialStage !== "info" || !name || !phone || directStarted.current || new URLSearchParams(window.location.search).get("direct") !== "1") return;
+    directStarted.current = true;
+    void beginExam();
+  }, [name, phone, practice, learningPage, initialStage, beginExam]);
   if (stage === "info" && learningPage) {
+    if (entryBlocked) return <div className="h5-empty">{entryMessage}</div>;
     if (!learning) return <div className="flex flex-col gap-4 py-8 text-center"><p>{learningError || "正在恢复学习进度…"}</p>{learningError && <Button onClick={() => window.location.reload()}>重新加载</Button>}</div>;
-    return <ExamTrainingMaterials key={learning.token} examId={paper.id} data={learning} starting={starting} onBack={() => window.location.assign(`/kaoshi/${paper.id}`)} onContinue={beginExam} />;
+    const returnFromLearning = () => window.location.assign(new URLSearchParams(window.location.search).get("fromLearner") === "1" ? `/learner/trainings/${new URLSearchParams(window.location.search).get("trainingId")}` : withTraining(reviewAttemptId ? `/kaoshi/${paper.id}/result?attemptId=${reviewAttemptId}` : `/kaoshi/${paper.id}`));
+    return <ExamTrainingMaterials key={learning.token} examId={paper.id} data={learning} starting={starting} onBack={returnFromLearning} onContinue={reviewAttemptId ? returnFromLearning : beginExam} continueLabel={reviewAttemptId ? "返回考试结果" : undefined} />;
   }
   if (stage === "info") return <Layout.Content className={compact ? "h5-form" : "h5-form h5-content"}>
     <Typography.Title heading={3} className="h5-section-title !text-base !mt-5 !mb-3">填写考生信息</Typography.Title><p className="h5-muted">{practice ? "无需登录，答完即可查看解析。" : "用于记录学习与成绩，请准确填写。"}</p>
     {!practice && <><label>姓名 <span>*</span><Input aria-label="姓名" size="large" maxLength={100} value={name} onChange={setName} placeholder="请输入姓名" /></label><label>手机号 <span>*</span><Input aria-label="手机号" size="large" type="tel" maxLength={11} value={phone} onChange={value => setPhone(value.trim())} placeholder="请输入11位手机号" /></label></>}
-    <div className="h5-hint"><IconClock /><span>如关联培训材料，请完成学习后再参加考试。已完成的学习可直接进入考试。</span></div>
-    <div className="h5-bottom h5-form-actions"><Button block theme="solid" size="large" className="h5-primary" loading={starting} disabled={starting} onClick={beginExam}>{starting ? "正在检查考试记录…" : practice ? "开始自测" : "确认信息，继续"}<IconArrowRight /></Button></div>
+    <div className="h5-hint"><IconClock /><span>{entryBlocked ? entryMessage : "如关联培训材料，请完成学习后再参加考试。已完成的学习可直接进入考试。"}</span></div>
+    <div className="h5-bottom h5-form-actions"><Button block theme="solid" size="large" className="h5-primary" loading={starting} disabled={starting || entryBlocked} onClick={beginExam}>{entryEnded ? "培训已结束" : entryPending ? "培训未开始" : starting ? "正在检查考试记录…" : practice ? "开始自测" : "确认信息，继续"}<IconArrowRight /></Button></div>
   </Layout.Content>;
   if (stage === "answer" && !q) return <div className="h5-empty">正在加载本次考试题目…</div>;
   if (stage === "result") return <ExamResultView paper={paper} score={score} passed={result?.passed ?? score >= paper.passScore} answers={answers} showAnswers={initialShowAnswers} grades={initialGrades} candidateName={initialCandidateName || name} candidatePhone={initialCandidatePhone || phone} attemptNo={initialAttemptNo ?? attemptNo ?? undefined} startedAt={initialStartedAt} submittedAt={initialSubmittedAt} remainingAttempts={remainingAttempts} attemptId={resultAttemptId} details={details} practice={practice} />;

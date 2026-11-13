@@ -24,6 +24,12 @@ public class TrainingController {
         return service.reorderMaterials(id, ids, auth);
     }
 
+    @PostMapping(value = "/management/trainings/materials/inspect", consumes = "multipart/form-data")
+    public ApiResponse<?> inspectMaterial(@RequestParam org.springframework.web.multipart.MultipartFile file,
+        @RequestHeader(value = "Authorization", required = false) String auth) throws java.io.IOException {
+        return service.inspectMaterial(file, auth);
+    }
+
     @PostMapping("/management/trainings/{id}/materials")
     public ApiResponse<?> uploadMaterial(@PathVariable long id, @RequestParam org.springframework.web.multipart.MultipartFile file, @RequestHeader(value = "Authorization", required = false) String auth) throws java.io.IOException {
         return service.uploadMaterial(id, file, auth);
@@ -67,9 +73,28 @@ public class TrainingController {
         return service.create(command, auth);
     }
 
+    @PostMapping(value = "/management/trainings/with-materials", consumes = "multipart/form-data")
+    public ApiResponse<?> createWithMaterials(@RequestPart("training") TrainingService.SaveTraining command,
+        @RequestPart(value = "videos", required = false) List<org.springframework.web.multipart.MultipartFile> videos,
+        @RequestPart(value = "materials", required = false) List<org.springframework.web.multipart.MultipartFile> materials,
+        @RequestPart(value = "materialTimings", required = false) List<List<com.aiquestion.service.TrainingMaterialService.PageTime>> materialTimings,
+        @RequestHeader(value = "Authorization", required = false) String auth) throws java.io.IOException {
+        return service.createWithMaterials(command, videos, materials, materialTimings, auth);
+    }
+
     @PutMapping("/management/trainings/{id}")
     public ApiResponse<?> update(@PathVariable long id, @RequestBody TrainingService.SaveTraining command, @RequestHeader(value = "Authorization", required = false) String auth) {
         return service.update(id, command, auth);
+    }
+
+    @PostMapping("/management/trainings/{id}/end")
+    public ApiResponse<?> endTraining(@PathVariable long id, @RequestHeader(value = "Authorization", required = false) String auth) {
+        return service.endTraining(id, auth);
+    }
+
+    @PostMapping("/management/trainings/{id}/exam/end")
+    public ApiResponse<?> endExam(@PathVariable long id, @RequestHeader(value = "Authorization", required = false) String auth) {
+        return service.endExam(id, auth);
     }
 
     @DeleteMapping("/management/trainings/{id}")

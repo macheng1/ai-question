@@ -19,6 +19,8 @@ export type ExamPaper = {
   startAt?: string;
   endAt?: string;
   taskStatus?: string;
+  trainingStartAt?: string;
+  trainingEndAt?: string;
   questionCount?: number;
   reviewEnabled?: boolean;
   questions: ExamQuestion[];

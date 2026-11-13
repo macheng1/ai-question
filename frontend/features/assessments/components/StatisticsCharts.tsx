@@ -13,6 +13,7 @@ const VChart = dynamic(
 
 type ChartProps = {
   data: AssessmentStatisticsDetail;
+  includeRetake?: boolean;
 };
 
 function ChartCard({
@@ -37,7 +38,7 @@ function EmptyChart() {
   return <Empty description="暂无统计数据" className="h-full justify-center" />;
 }
 
-export function StatisticsCharts({ data }: ChartProps) {
+export function StatisticsCharts({ data, includeRetake = false }: ChartProps) {
   const scoreValues = data.scoreDistribution.map((item) => ({
     label: item.label,
     count: Number(item.count || 0),
@@ -57,7 +58,7 @@ export function StatisticsCharts({ data }: ChartProps) {
 
   return (
     <div className="grid grid-cols-2 gap-4 ">
-      <div className="min-w-0 col-span-2 lg:col-span-1"><ChartCard title="成绩分布" description="各分数段人数统计（按最后一次成绩计）">
+      <div className="min-w-0 col-span-2 lg:col-span-1"><ChartCard title="成绩分布" description={includeRetake ? "按得分占满分的百分比分段，统计所有已交卷次数" : "按得分占满分的百分比分段，每人取最后一次已交卷成绩"}>
         {scoreValues.length ? (
           <VChart
             spec={{
@@ -69,7 +70,7 @@ export function StatisticsCharts({ data }: ChartProps) {
               bar: { style: { cornerRadius: 6 } },
               axes: [
                 { orient: "bottom", title: { visible: false } },
-                { orient: "left", title: { text: "人数" } },
+                { orient: "left", title: { text: includeRetake ? "次数" : "人数" } },
               ],
               label: { visible: true },
               legends: { visible: false },
@@ -114,7 +115,7 @@ export function StatisticsCharts({ data }: ChartProps) {
               point: { visible: true, style: { fill: "#38bdf8" } },
               axes: [
                 { orient: "bottom", title: { visible: false } },
-                { orient: "left", title: { text: "交卷人数" } },
+                { orient: "left", title: { text: includeRetake ? "交卷次数" : "交卷人数" } },
               ],
               legends: { visible: false },
             }}
@@ -125,7 +126,7 @@ export function StatisticsCharts({ data }: ChartProps) {
         )}
       </ChartCard></div>
 
-      <div className="min-w-0 col-span-2 lg:col-span-1"><ChartCard title="题型得分率" description="各题型平均正确率">
+      <div className="min-w-0 col-span-2 lg:col-span-1"><ChartCard title="题型正确率" description="答对题数 ÷ 该题型总题数，未答按错误计">
         {typeValues.length ? (
           <VChart
             spec={{

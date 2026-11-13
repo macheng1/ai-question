@@ -207,6 +207,19 @@ public class PublicExamService {
         if (!expired(openAttempt) && (answeredQuestions == null || totalQuestions == null || answeredQuestions < totalQuestions)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "请完成所有题目后再提交");
         }
+        return gradeAttempt(attemptId, attempt);
+    }
+
+    /** Called by training management while holding the task lock in the same transaction. */
+    public void finishOpenTaskAttempts(long taskId) {
+        for (long attemptId : persistence.findOpenTaskAttempts(taskId)) {
+            var attempt = com.aiquestion.repository.RepositoryRows.one(persistence.lockAttempt(attemptId));
+            if ("IN_PROGRESS".equals(attempt.get("status")))
+                gradeAttempt(attemptId, com.aiquestion.repository.RepositoryRows.one(persistence.findAttemptForSubmission(attemptId)));
+        }
+    }
+
+    private ApiResponse<Map<String, Object>> gradeAttempt(long attemptId, Map<String, Object> attempt) {
         BigDecimal score = com.aiquestion.repository.RepositoryRows.one(persistence.sumAnswerScores(attemptId));
         BigDecimal total = new BigDecimal(String.valueOf(attempt.get("total_score")));
         BigDecimal pass = new BigDecimal(String.valueOf(attempt.get("pass_score")));
@@ -251,7 +264,13 @@ public class PublicExamService {
         List<Map<String, Object>> rows = persistence.findTaskDetails(id);
         if (rows.isEmpty())
             throw new BusinessException(ErrorCode.NOT_FOUND, "考试不存在");
-        return new HashMap<>(rows.get(0));
+        var result = new HashMap<>(rows.get(0));
+        // Aggregate TIMESTAMP expressions lose JDBC time-zone metadata; use epoch milliseconds.
+        for (String key : List.of("trainingStartAt", "trainingEndAt")) {
+            if (result.get(key) instanceof Number millis)
+                result.put(key, new java.sql.Timestamp(millis.longValue()));
+        }
+        return result;
     }
 
     private List<Map<String, Object>> questionRows(Long taskId, Long attemptId) {
@@ -313,6 +332,12 @@ public class PublicExamService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "考试已结束，不能继续答题");
         }
         LocalDateTime now = LocalDateTime.now(java.time.ZoneOffset.UTC);
+        LocalDateTime trainingStart = toLocalDateTime(task.get("trainingStartAt"));
+        LocalDateTime trainingEnd = toLocalDateTime(task.get("trainingEndAt"));
+        if (trainingEnd != null && !now.isBefore(trainingEnd))
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "培训已结束，不能继续学习或考试");
+        if (trainingStart != null && now.isBefore(trainingStart))
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "培训尚未开始");
         LocalDateTime startAt = toLocalDateTime(task.get("startAt"));
         LocalDateTime endAt = toLocalDateTime(task.get("endAt"));
         if (startAt != null && now.isBefore(startAt)) {
@@ -356,6 +381,9 @@ public class PublicExamService {
     }
 
     private static LocalDateTime toLocalDateTime(Object value) {
+        if (value instanceof Number millis) {
+            return LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(millis.longValue()), java.time.ZoneOffset.UTC);
+        }
         if (value instanceof LocalDateTime dateTime) {
             return dateTime;
         }

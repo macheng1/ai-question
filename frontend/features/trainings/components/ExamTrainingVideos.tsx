@@ -18,8 +18,8 @@ export async function loadExamLearning(examId: string, name: string, phone: stri
 }
 
 /** 观看完成以服务端确认的进度为准，尚未观看的片段不能通过拖动跳过。 */
-export function ExamTrainingVideos({ examId, data, onBack, onContinue, starting, continueLabel = "开始考试", onProgress }: {
-  examId: string; data: ExamLearning; onBack: () => void; onContinue: () => void; starting: boolean; continueLabel?: string; onProgress?: (video: ExamVideo) => void;
+export function ExamTrainingVideos({ examId, data, onBack, onContinue, starting, continueLabel = "开始考试", onProgress, reviewTrainingId }: {
+  reviewTrainingId?: string; examId: string; data: ExamLearning; onBack: () => void; onContinue: () => void; starting: boolean; continueLabel?: string; onProgress?: (video: ExamVideo) => void;
 }) {
   const [videos, setVideos] = useState(data.videos);
   const [selectedId, setSelectedId] = useState(data.videos.find(v => !v.completed)?.id ?? data.videos[0]?.id);
@@ -36,15 +36,15 @@ export function ExamTrainingVideos({ examId, data, onBack, onContinue, starting,
   useEffect(() => {
     const controller = new AbortController(); let objectUrl = "";
     setSrc(""); setError("");
-    apiClient.get<Blob>(`${learningBase(examId)}/videos/${selectedId}/content`, { token: data.token }, { responseType: "blob", signal: controller.signal, timeout: 300000 })
+    apiClient.get<Blob>(reviewTrainingId ? `/learner/trainings/${reviewTrainingId}/review/videos/${selectedId}` : `${learningBase(examId)}/videos/${selectedId}/content`, reviewTrainingId ? undefined : { token: data.token }, { responseType: "blob", signal: controller.signal, timeout: 300000 })
       .then(blob => { if (!controller.signal.aborted) { objectUrl = URL.createObjectURL(blob); setSrc(objectUrl); } })
       .catch(e => { if (!controller.signal.aborted) setError(e.message || "视频加载失败，请重试"); });
     return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [examId, selectedId, data.token, retry]);
+  }, [examId, selectedId, data.token, retry, reviewTrainingId]);
 
   useEffect(() => {
     const element = player.current;
-    if (!element || !src || !video) return;
+    if (reviewTrainingId || !element || !src || !video) return;
     let alive = true, lastSaved = video.positionSeconds, furthest = video.positionSeconds;
     let lastTime = performance.now(), pending = false, finishPending = false;
     const persist = async (finished = false) => {
@@ -115,19 +115,19 @@ export function ExamTrainingVideos({ examId, data, onBack, onContinue, starting,
     };
     // 进度回写不重新初始化播放器；只在切换视频或重载资源时恢复。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [src, selectedId, examId, data.token]);
+  }, [src, selectedId, examId, data.token, reviewTrainingId]);
 
   return <Layout.Content>
     <div className="h5-content">
       {src ? <VideoPlayer key={src} ref={player} src={src} width="100%" height="auto" style={{ aspectRatio: "16 / 9", borderRadius: 15, overflow: "hidden" }} autoPlay={false} clickToPlay defaultPlaybackRate={1} muted={false} playbackRateList={[{ label: "1.0x", value: 1 }]} theme="dark" volume={80} controlsList={["play", "time", "volume", "fullscreen"]} /> : !error && <div className="flex flex-col items-center justify-center gap-3 rounded-xl bg-slate-100" style={{ aspectRatio: "16 / 9" }}><Spin size="large" /><p className="text-sm text-slate-500">正在加载视频…</p></div>}
-      {video && <div className="h5-video-resume"><IconClock /> {video.completed ? "本节视频已完成，可再次观看" : video.positionSeconds > 0 ? `已保存到 ${Math.floor(video.positionSeconds / 60)} 分 ${Math.floor(video.positionSeconds % 60)} 秒，下次可继续观看` : (Number(examId)<0?"观看进度自动保存，退出后可继续学习":"观看进度自动保存，完成学习后进入考试")}</div>}
-      <Typography.Title heading={1} className="h5-video-title !text-xl !leading-7 !mb-2">{video?.title || "培训视频学习"}</Typography.Title><p className="h5-muted">{Number(examId)<0?"请完整观看全部培训视频，进度自动保存。":"请完整观看全部培训视频。学习期间不占用考试答题时间。"}</p>
-      <div className="h5-lesson-progress"><Typography.Title heading={2} className="!text-sm">课程完成进度</Typography.Title><span>{completedCount} / {videos.length} 节</span></div>
-      <Progress percent={Math.round(completedCount / Math.max(1, videos.length) * 100)} stroke="#53ab8b" showInfo={false} />
-      <div className="h5-lesson-list">{videos.map((v, i) => <Button key={v.id} block className={`h5-lesson ${v.id === selectedId ? "selected" : ""}`} theme="borderless" icon={v.completed ? <IconTick /> : <IconPlay />} disabled={saving || starting} onClick={async () => { player.current?.pause(); await retrySave.current?.(); setSelectedId(v.id); }}>{i + 1}. {v.title} · {v.completed ? "已完成" : "待完成"}</Button>)}</div>
+      {!reviewTrainingId && video && <div className="h5-video-resume"><IconClock /> {video.completed ? "本节视频已完成，可再次观看" : video.positionSeconds > 0 ? `已保存到 ${Math.floor(video.positionSeconds / 60)} 分 ${Math.floor(video.positionSeconds % 60)} 秒，下次可继续观看` : (Number(examId)<0?"观看进度自动保存，退出后可继续学习":"观看进度自动保存，完成学习后进入考试")}</div>}
+      <Typography.Title heading={1} className="h5-video-title !text-xl !leading-7 !mb-2">{video?.title || "培训视频学习"}</Typography.Title><p className="h5-muted">{reviewTrainingId ? "回看不计入学习时长，也不改变学习记录。" : Number(examId)<0?"请完整观看全部培训视频，进度自动保存。":"请完整观看全部培训视频。学习期间不占用考试答题时间。"}</p>
+      {!reviewTrainingId && <><div className="h5-lesson-progress"><Typography.Title heading={2} className="!text-sm">课程完成进度</Typography.Title><span>{completedCount} / {videos.length} 节</span></div>
+      <Progress percent={Math.round(completedCount / Math.max(1, videos.length) * 100)} stroke="#53ab8b" showInfo={false} /></>}
+      <div className="h5-lesson-list">{videos.map((v, i) => <Button key={v.id} block className={`h5-lesson ${v.id === selectedId ? "selected" : ""}`} theme="borderless" icon={v.completed ? <IconTick /> : <IconPlay />} disabled={saving || starting} onClick={async () => { player.current?.pause(); await retrySave.current?.(); setSelectedId(v.id); }}>{i + 1}. {v.title}{!reviewTrainingId && <> · {v.completed ? "已完成" : "待完成"}</>}</Button>)}</div>
       {error && <Banner type="danger" description={error} closeIcon={null}>{src && <Button theme="borderless" disabled={saving} onClick={() => void retrySave.current?.()}>重试保存进度</Button>}<Button theme="borderless" disabled={saving} onClick={() => setRetry(n => n + 1)}>重新加载视频</Button></Banner>}
 
     </div>
-    <div className="h5-bottom"><p>{allCompleted ? "全部视频已完成，可以继续" : "请先完成全部视频学习"}</p><Button block theme="solid" className="h5-primary" size="large" disabled={!allCompleted || saving || starting} loading={starting} onClick={onContinue}>{allCompleted ? continueLabel : "请先完成视频学习"}<IconArrowRight /></Button><Button block theme="borderless" className="h5-link" disabled={saving || starting} onClick={async () => { player.current?.pause(); await retrySave.current?.(); onBack(); }}>返回填写信息</Button></div>
+    <div className="h5-bottom">{!reviewTrainingId && <><p>{allCompleted ? "全部视频已完成，可以继续" : "请先完成全部视频学习"}</p><Button block theme="solid" className="h5-primary" size="large" disabled={!allCompleted || saving || starting} loading={starting} onClick={onContinue}>{allCompleted ? continueLabel : "请先完成视频学习"}<IconArrowRight /></Button></>}<Button block theme="borderless" className="h5-link" disabled={saving || starting} onClick={async () => { player.current?.pause(); await retrySave.current?.(); onBack(); }}>{reviewTrainingId ? "返回" : "返回填写信息"}</Button></div>
   </Layout.Content>;
 }

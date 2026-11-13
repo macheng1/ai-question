@@ -9,9 +9,9 @@ import org.apache.ibatis.annotations.Param;
 @Mapper
 public interface MaterialLearningRepository {
   List<Map<String, Object>> findSession(@Param("taskId") Long taskId, @Param("token") String token, @Param("examTask") boolean examTask);
-  List<Map<String, Object>> findMaterials(@Param("taskId") Long taskId, @Param("examTask") boolean examTask);
+  List<Map<String, Object>> findMaterials(@Param("taskId") Long taskId, @Param("examTask") boolean examTask, @Param("sessionId") Long sessionId);
   List<Map<String, Object>> findPageProgress(@Param("sessionId") Long sessionId, @Param("materialId") Long materialId);
-  List<Integer> countAuthorizedPage(@Param("materialId") Long materialId, @Param("taskId") Long taskId, @Param("pageNumber") int pageNumber, @Param("examTask") boolean examTask);
+  List<Integer> countAuthorizedPage(@Param("materialId") Long materialId, @Param("taskId") Long taskId, @Param("pageNumber") int pageNumber, @Param("examTask") boolean examTask, @Param("sessionId") Long sessionId);
   List<Integer> countIncompleteEarlierPages(@Param("materialId") Long materialId, @Param("pageNumber") int pageNumber, @Param("sessionId") Long sessionId);
   List<Map<String, Object>> lockMaterial(@Param("materialId") Long materialId);
   List<Map<String, Object>> lockSession(@Param("sessionId") Long sessionId);

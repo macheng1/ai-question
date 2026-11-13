@@ -16,7 +16,7 @@ class AssessmentRosterServiceTest {
       new TrainingAudienceService(audience, mock(TrainingEligibilityService.class)));
 
   @BeforeEach void defaultStartedTraining() {
-    when(audience.countNotStartedTrainings(1L, true)).thenReturn(List.of(0));
+    when(audience.countNotStartedTrainings(2L, false)).thenReturn(List.of(0));
   }
   @Test void unlinkedExamRemainsOpen() {
     when(repository.countTask(1L)).thenReturn(List.of(1));

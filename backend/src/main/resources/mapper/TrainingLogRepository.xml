@@ -13,11 +13,11 @@
 (SELECT COUNT(*) FROM candidate_material_progress p JOIN training_material m ON m.id=p.material_id
   WHERE p.session_id=s.id AND m.training_id=t.id AND p.completed=TRUE) completed_parts
 FROM candidate_learning_session s JOIN training t ON (t.assessment_id=s.task_id OR t.id=s.training_id)
-WHERE t.id=#{trainingId}
+WHERE t.id=#{trainingId} AND (s.training_id=t.id OR EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=t.id AND r.candidate_name=s.candidate_name AND r.phone=s.phone))
 
   </select>
   <select id="findLearningSessions" resultType="java.util.LinkedHashMap">
-    SELECT s.id,s.completed_at completedAt,s.candidate_name name,s.phone,s.task_id taskId,COALESCE(a.department_name,'') department FROM candidate_learning_session s JOIN training t ON (t.assessment_id=s.task_id OR t.id=s.training_id) LEFT JOIN training_audience a ON a.training_id=t.id AND a.phone=s.phone WHERE t.id=#{trainingId} ORDER BY s.id DESC
+    SELECT s.id,s.completed_at completedAt,s.candidate_name name,s.phone,s.task_id taskId,COALESCE(a.department_name,'') department FROM candidate_learning_session s JOIN training t ON (t.assessment_id=s.task_id OR t.id=s.training_id) LEFT JOIN training_audience a ON a.training_id=t.id AND a.phone=s.phone WHERE t.id=#{trainingId} AND (s.training_id=t.id OR EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=t.id AND r.candidate_name=s.candidate_name AND r.phone=s.phone)) ORDER BY s.id DESC
   </select>
   <select id="findVideoLogs" resultType="java.util.LinkedHashMap">
     SELECT v.id,v.title,p.position_seconds positionSeconds,p.studied_seconds studiedSeconds,p.completed,p.first_studied_at firstStudiedAt,p.updated_at lastStudiedAt,p.completed_at completedAt FROM training_video v LEFT JOIN candidate_video_progress p ON p.video_id=v.id AND p.session_id=#{trainingId} WHERE v.training_id=#{sessionTrainingId} ORDER BY v.sort_order,v.id

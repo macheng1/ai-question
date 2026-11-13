@@ -19,7 +19,7 @@ class TrainingCopyServiceTest {
   private final TrainingService trainings = mock(TrainingService.class);
   private final TrainingFileCopyService files = mock(TrainingFileCopyService.class);
   private final FileStorageService storage = mock(FileStorageService.class);
-  private final TrainingCopyService service = new TrainingCopyService(repository, trainings, files, storage);
+  private final TrainingCopyService service = new TrainingCopyService(repository, trainings, files, storage, mock(TrainingEligibilityService.class), mock(TrainingEndpointService.class), mock(TrainingMaterialService.class));
 
   @BeforeEach void setup() {
     TransactionSynchronizationManager.initSynchronization();

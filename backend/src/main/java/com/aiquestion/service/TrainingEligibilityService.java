@@ -36,6 +36,7 @@ public class TrainingEligibilityService {
         var tasks = persistence.findOwnedTaskPaper(assessmentId, owner);
         if (tasks.isEmpty())
             throw new BusinessException(ErrorCode.NOT_FOUND, "关联考试不存在");
+        if (Boolean.TRUE.equals(tasks.get(0).get("training_managed")) || "1".equals(String.valueOf(tasks.get(0).get("training_managed")))) return Set.of();
         long paper = ((Number) tasks.get(0).get("paper_id")).longValue();
         var excluded = new HashSet<>(persistence.findSubmittedEmployees(owner, paper));
         // 原培训已绑定人员可以继续编辑；不影响原考试的答题和补考权限。
@@ -49,6 +50,7 @@ public class TrainingEligibilityService {
         if (assessmentId == null) return true;
         var tasks = persistence.findOwnedTaskPaper(assessmentId, owner);
         if (tasks.isEmpty()) throw new BusinessException(ErrorCode.NOT_FOUND, "关联考试不存在");
+        if (Boolean.TRUE.equals(tasks.get(0).get("training_managed")) || "1".equals(String.valueOf(tasks.get(0).get("training_managed")))) return true;
         long paper = ((Number) tasks.get(0).get("paper_id")).longValue();
         persistence.insertBinding(owner, employeeId, paper, trainingId);
         return persistence.ownsBinding(owner, employeeId, paper, trainingId).equals(java.util.List.of(1));

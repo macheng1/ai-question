@@ -12,12 +12,47 @@ class TrainingFlowTest {
   private final TrainingRepository repository = mock(TrainingRepository.class);
   private final TrainingAudienceRepository audienceRepository = mock(TrainingAudienceRepository.class);
   private final TrainingAudienceService audience = new TrainingAudienceService(audienceRepository, mock(TrainingEligibilityService.class));
-  private final TrainingService service = new TrainingService(repository, new ObjectMapper(), mock(AssessmentRosterService.class), audience);
+  private final TrainingService service = new TrainingService(repository, new ObjectMapper(), mock(AssessmentRosterService.class), audience, mock(TrainingExamService.class));
+
+  @Test void surveyReturnsOnlyCurrentEmployeesSavedAnswers() {
+    when(repository.findById(1L, false)).thenReturn(List.of(Map.of("created_by", 2L, "survey_enabled", true, "questions_json", "[]")));
+    when(audienceRepository.countCandidateAssignments(1L, "张三", "13900000000")).thenReturn(List.of(1));
+    when(repository.countSubmittedSurvey(1L, 9L, true)).thenReturn(List.of(1));
+    when(repository.findOwnSurveyAnswers(1L, 9L, true)).thenReturn(List.of("{\"q1\":\"5\",\"q2\":\"很好\"}"));
+    var employee = new AccountService.Profile(9L, "张三", "13900000000", "", "", "", com.aiquestion.security.AccountType.EMPLOYEE, 2L);
+    var result = service.employeeSurvey(1L, employee);
+    assertEquals(true, result.get("submitted"));
+    assertEquals(Map.of("q1", "5", "q2", "很好"), result.get("submittedAnswers"));
+    verify(repository).findOwnSurveyAnswers(1L, 9L, true);
+    verify(repository, never()).findSurveyResponses(anyLong());
+  }
 
   @Test void futureTrainingCannotStartLearning() {
+    when(audienceRepository.countExamLinkedTrainings(1L)).thenReturn(List.of(0));
+    when(audienceRepository.findTrainingIdsForEntry(1L, false)).thenReturn(List.of(1L));
+    when(audienceRepository.countCandidateAssignments(1L, "张三", "13900000000")).thenReturn(List.of(1));
     when(audienceRepository.countNotStartedTrainings(1L, false)).thenReturn(List.of(1));
     var error = assertThrows(BusinessException.class, () -> audience.requireTask(-1L, "张三", "13900000000"));
     assertEquals("培训尚未开始", error.getMessage());
+  }
+  @Test void endedTrainingBlocksLearningButKeepsHistoryAccess() {
+    when(audienceRepository.findTrainingIdsForEntry(9L, true)).thenReturn(List.of(1L));
+    when(audienceRepository.countCandidateAssignments(1L, "张三", "13900000000")).thenReturn(List.of(1));
+    when(audienceRepository.countNotStartedTrainings(1L, false)).thenReturn(List.of(0));
+    when(audienceRepository.countEndedTrainings(1L)).thenReturn(List.of(1));
+    assertDoesNotThrow(() -> audience.requireTask(9L, "张三", "13900000000"));
+    var error = assertThrows(BusinessException.class, () -> audience.requireOpenTask(9L, "张三", "13900000000"));
+    assertEquals("培训已结束，不能继续学习或考试", error.getMessage());
+    when(audienceRepository.countEndedTrainings(1L)).thenReturn(List.of(0));
+    assertDoesNotThrow(() -> audience.requireOpenTask(9L, "张三", "13900000000"));
+  }
+  @Test void standaloneEndedTrainingCannotOpenLearning() {
+    when(audienceRepository.countExamLinkedTrainings(1L)).thenReturn(List.of(0));
+    when(audienceRepository.findTrainingIdsForEntry(1L, false)).thenReturn(List.of(1L));
+    when(audienceRepository.countCandidateAssignments(1L, "张三", "13900000000")).thenReturn(List.of(1));
+    when(audienceRepository.countNotStartedTrainings(1L, false)).thenReturn(List.of(0));
+    when(audienceRepository.countEndedTrainings(1L)).thenReturn(List.of(1));
+    assertThrows(BusinessException.class, () -> audience.requireOpenTask(-1L, "张三", "13900000000"));
   }
   @Test void rejectsInvalidTrainingTimeRangeBeforeDatabaseAccess() {
     var start = java.time.LocalDateTime.of(2026, 11, 6, 12, 0);

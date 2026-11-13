@@ -6,8 +6,10 @@ import { useEffect, useState } from "react";
 import "@douyinfe/semi-ui/react19-adapter";
 import { Banner, Button, Select, Spin, Table, Tag } from "@douyinfe/semi-ui";
 import { getAssessmentRoster, type AssessmentRosterRow } from "../api";
+import { useCompactViewport } from "@/lib/hooks/useCompactViewport";
 
-export function AssessmentRoster({ taskId, scope }: { taskId: number; scope?: string }) {
+export function AssessmentRoster({ taskId, scope, refreshVersion = 0 }: { taskId: number; scope?: string; refreshVersion?: number }) {
+  const compact = useCompactViewport();
   const [rows, setRows] = useState<AssessmentRosterRow[]>([]);
   const [department, setDepartment] = useState<number>();
   const [status, setStatus] = useState("ALL");
@@ -23,7 +25,7 @@ export function AssessmentRoster({ taskId, scope }: { taskId: number; scope?: st
       .catch(e => { if (active) setError(e instanceof Error ? e.message : "名单加载失败"); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [taskId, scope, reload]);
+  }, [taskId, scope, reload, refreshVersion]);
   if (!scope || scope === "ALL") return null;
   const departments = Array.from(new Map(rows.map(r => [r.departmentId, r.departmentName])).entries());
   const scoped = rows.filter(r => !department || r.departmentId === department);
@@ -38,9 +40,9 @@ export function AssessmentRoster({ taskId, scope }: { taskId: number; scope?: st
       </Space>
       <div className="grid grid-cols-3 gap-3">{[["应考", scoped.length], ["已考", submitted], ["未考", scoped.length - submitted]].map(([label, count]) => <div key={label} className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">{label}</p><p className="mt-1 text-xl font-bold text-teal-700">{count}<span className="ml-1 text-xs font-normal">人</span></p></div>)}</div>
       <p className="text-xs text-slate-500">按保存时的名单统计；至少交卷一次记为已考，重考不重复计人数。学习中、答题中均计入未交卷。</p>
-      {!rows.length ? <Banner type="warning" description="关联培训尚未配置学习名单，请在培训管理中设置学习范围。" /> : <Table<AssessmentRosterRow> rowKey="employeeId" dataSource={visible} pagination={{ pageSize: 10 }} scroll={{ x: 560 }} columns={[
-        { title: "姓名", dataIndex: "candidateName" }, { title: "手机号", dataIndex: "phone" }, { title: "部门（安排时）", dataIndex: "departmentName" },
-        { title: "状态", render: (_, row) => <Tag color={row.submitted ? "green" : "grey"}>{row.submitted ? "已交卷" : "未交卷"}</Tag> },
+      {!rows.length ? <Banner type="warning" description="关联培训尚未配置学习名单，请在培训管理中设置学习范围。" /> : <Table<AssessmentRosterRow> rowKey="employeeId" dataSource={visible} pagination={{ pageSize: 10 }} style={{ width: "100%" }} scroll={compact ? { x: 560 } : undefined} columns={[
+        { title: "姓名", dataIndex: "candidateName", width: "25%" }, { title: "手机号", dataIndex: "phone", width: "25%" }, { title: "部门（安排时）", dataIndex: "departmentName", width: "30%" },
+        { title: "状态", width: "20%", render: (_, row) => <Tag color={row.submitted ? "green" : "grey"}>{row.submitted ? "已交卷" : "未交卷"}</Tag> },
       ]} />}
     </>}
   </Layout.Content>;

@@ -25,12 +25,12 @@ public class MaterialLearningService {
         var s = rows.get(0);
         if (task > 0)
             assessmentRosterService.requireEligible(task, s.get("candidate_name").toString(), s.get("phone").toString());
-        trainingAudienceService.requireTask(task, s.get("candidate_name").toString(), s.get("phone").toString());
+        trainingAudienceService.requireOpenTask(task, s.get("candidate_name").toString(), s.get("phone").toString());
         return s;
     }
 
     public List<Map<String, Object>> list(long task, long session) {
-        return persistence.findMaterials(Math.abs(task), task > 0).stream().map(m -> {
+        return persistence.findMaterials(Math.abs(task), task > 0, session).stream().map(m -> {
             var pages = persistence.findPageProgress(session, com.aiquestion.repository.RepositoryRows.nullableLong(m.get("id")));
             m.put("pages", pages);
             m.put("completed", pages.stream().allMatch(p -> Boolean.TRUE.equals(p.get("completed")) || "1".equals(String.valueOf(p.get("completed")))));
@@ -40,7 +40,7 @@ public class MaterialLearningService {
 
     public long authorize(long task, long material, String token, int page) {
         var s = session(task, token);
-        if (com.aiquestion.repository.RepositoryRows.one(persistence.countAuthorizedPage(material, Math.abs(task), page, task > 0)) == 0)
+        if (com.aiquestion.repository.RepositoryRows.one(persistence.countAuthorizedPage(material, Math.abs(task), page, task > 0, ((Number) s.get("id")).longValue())) == 0)
             throw new BusinessException(ErrorCode.NOT_FOUND);
         if (com.aiquestion.repository.RepositoryRows.one(persistence.countIncompleteEarlierPages(material, page, com.aiquestion.repository.RepositoryRows.nullableLong(s.get("id")))) > 0)
             throw new BusinessException(ErrorCode.BAD_REQUEST, "请先完成前面的页面");

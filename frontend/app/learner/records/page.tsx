@@ -26,6 +26,7 @@ export default function Records() {
       </Typography.Text>
       {error && <Banner type="danger" description={error} />}
       <Table<LearningRecord>
+        className="[&_table]:!w-full [&_table]:!table-fixed"
         rowKey="id"
         loading={loading}
         dataSource={rows}
@@ -42,20 +43,6 @@ export default function Records() {
             render: (_, row) => formatTime(row.completedAt),
             width: 180,
           },
-          {
-            title: "详情",
-            render: (_, row) => (
-              <Button
-                theme="borderless"
-                onClick={() =>
-                  router.push(`/learner/trainings/${row.trainingId}`)
-                }
-              >
-                查看
-              </Button>
-            ),
-            width: 90,
-          },
           { title: "培训名称", dataIndex: "name", width: 280 },
           {
             title: "有效学习时长",
@@ -71,6 +58,20 @@ export default function Records() {
                 {row.completed ? "已完成" : "学习中"}
               </Tag>
             ),
+          },
+          {
+            title: "操作",
+            render: (_, row) => (
+              <Button
+                theme="borderless"
+                onClick={() =>
+                  router.push(`/learner/trainings/${row.trainingId}`)
+                }
+              >
+                查看详情
+              </Button>
+            ),
+            width: 130,
           },
         ]}
       />

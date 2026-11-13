@@ -50,7 +50,9 @@ export async function loadExamPaper(
               key: option.key.toUpperCase() === "TRUE" ? "A" : option.key.toUpperCase() === "FALSE" ? "B" : option.key,
             }))
           : item.options,
-        answer: item.answer || [],
+        answer: (item.answer || []).map(value => item.kind === "judge"
+          ? value.toUpperCase() === "TRUE" ? "A" : value.toUpperCase() === "FALSE" ? "B" : value
+          : value),
         analysis: item.analysis || "",
       })),
     };
