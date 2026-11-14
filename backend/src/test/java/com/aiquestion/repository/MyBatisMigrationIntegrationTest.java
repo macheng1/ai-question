@@ -1489,6 +1489,10 @@ class MyBatisMigrationIntegrationTest {
     byte[] first=trainingMaterials.page(training,id,1);
     assertNotNull(javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(first)));
     assertArrayEquals(first,trainingMaterials.page(training,id,1));
+    assertArrayEquals(first, (byte[])trainingMaterials.learnerPage(training,id,1,true).getBody());
+    when(storage.directPreviewUrl(anyString())).thenReturn(java.util.Optional.of("https://storage.example/page"));
+    assertEquals(Map.of("url","https://storage.example/page"), trainingMaterials.learnerPage(training,id,1,true).getBody());
+    assertThrows(BusinessException.class, () -> trainingMaterials.learnerPage(training,id,3,true));
     previews.process(id);
     verify(storage,times(1)).open("eds:training-materials/original.pdf");
     verify(storage,times(2)).putPreview(anyString(),any(byte[].class));

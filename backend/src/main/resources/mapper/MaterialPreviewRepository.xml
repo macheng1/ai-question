@@ -19,6 +19,9 @@
   <select id="pages" resultType="java.util.LinkedHashMap">
     SELECT * FROM training_material_page WHERE material_id=#{id} ORDER BY page_number
   </select>
+  <select id="pageKey" resultType="java.lang.String">
+    SELECT preview_key FROM training_material_page WHERE material_id=#{id} AND page_number=#{page} AND preview_ready=TRUE
+  </select>
   <update id="reserve">
     UPDATE training_material_page SET preview_key=#{key} WHERE material_id=#{id} AND page_number=#{page} AND preview_key IS NULL
   </update>

@@ -4,6 +4,12 @@ import com.aiquestion.common.*;
 import com.aiquestion.storage.FileStorageService;
 import java.util.*;
 import java.io.*;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import javax.imageio.ImageIO;
 import org.apache.pdfbox.Loader;
 
@@ -14,6 +20,9 @@ import com.aiquestion.repository.TrainingMaterialRepository;
 
 @Service
 public class TrainingMaterialService {
+
+    private final ConcurrentMap<String, CompletableFuture<byte[]>> loadingPages =
+        new ConcurrentHashMap<>();
 
     private final TrainingMaterialRepository persistence;
 
@@ -122,15 +131,56 @@ public class TrainingMaterialService {
     }
 
     public byte[] page(long training, long id, int page) throws IOException {
+        return readPage(pageKey(training, id, page));
+    }
+
+    public ResponseEntity<?> learnerPage(long training, long id, int page, boolean direct) throws IOException {
+        String key = pageKey(training, id, page);
+        var response = ResponseEntity.ok().header("Cache-Control", "private, no-store");
+        if (direct) {
+            var url = oss.directPreviewUrl(key);
+            if (url.isPresent()) return response.contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("url", url.get()));
+        }
+        return response.contentType(MediaType.IMAGE_PNG).body(readPage(key));
+    }
+
+    private String pageKey(long training, long id, int page) {
         var row = material(training, id);
         if (page < 1 || page > ((Number) row.get("page_count")).intValue())
             throw new BusinessException(ErrorCode.BAD_REQUEST, "页码无效");
         if (!"READY".equals(row.get("preview_status")))
             throw new BusinessException("FAILED".equals(row.get("preview_status")) ? ErrorCode.BAD_REQUEST : ErrorCode.MATERIAL_PREVIEW_PENDING, "FAILED".equals(row.get("preview_status"))
                 ? "材料预览生成失败，请联系管理员重试" : "材料预览正在生成，请稍后重试");
-        var preview = previews.pages(id).stream().filter(p -> ((Number)p.get("page_number")).intValue()==page).findFirst().orElseThrow();
-        try (var input = oss.open(String.valueOf(preview.get("preview_key"))).stream()) {
-            return input.readAllBytes();
+        String key = previews.pageKey(id, page);
+        if (key == null) throw new BusinessException(ErrorCode.NOT_FOUND, "材料预览页不存在");
+        return key;
+    }
+
+    private byte[] readPage(String key) throws IOException {
+        var loading = new CompletableFuture<byte[]>();
+        var existing = loadingPages.putIfAbsent(key, loading);
+        if (existing != null) {
+            try {
+                return existing.join();
+            } catch (CompletionException e) {
+                if (e.getCause() instanceof IOException io) throw io;
+                if (e.getCause() instanceof RuntimeException runtime) throw runtime;
+                throw e;
+            }
+        }
+        try {
+            byte[] bytes;
+            try (var input = oss.open(key).stream()) {
+                bytes = input.readAllBytes();
+            }
+            loading.complete(bytes);
+            return bytes;
+        } catch (IOException | RuntimeException | Error e) {
+            loading.completeExceptionally(e);
+            throw e;
+        } finally {
+            loadingPages.remove(key, loading);
         }
     }
 

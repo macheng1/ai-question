@@ -12,6 +12,7 @@ public interface MaterialPreviewRepository {
   int claim(@Param("id") long id);
   Map<String,Object> material(@Param("id") long id);
   List<Map<String,Object>> pages(@Param("id") long id);
+  String pageKey(@Param("id") long id, @Param("page") int page);
   int reserve(@Param("id") long id,@Param("page") int page,@Param("key") String key);
   void pageReady(@Param("id") long id,@Param("page") int page);
   int ready(@Param("id") long id);

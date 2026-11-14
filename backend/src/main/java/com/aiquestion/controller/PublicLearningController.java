@@ -31,9 +31,9 @@ public class PublicLearningController {
         return service.courseVideoProgress(id, video, c);
     }
 
-    @GetMapping(value = "/courses/{id}/learning/materials/{material}/pages/{page}", produces = "image/png")
-    public ResponseEntity<byte[]> coursePage(@PathVariable long id, @PathVariable long material, @PathVariable int page, @RequestParam String token) throws java.io.IOException {
-        return service.coursePage(id, material, page, token);
+    @GetMapping(value = "/courses/{id}/learning/materials/{material}/pages/{page}")
+    public ResponseEntity<?> coursePage(@PathVariable long id, @PathVariable long material, @PathVariable int page, @RequestParam String token, @RequestParam(defaultValue = "false") boolean direct) throws java.io.IOException {
+        return service.coursePage(id, material, page, token, direct);
     }
 
     @PutMapping("/courses/{id}/learning/materials/{material}/pages/{page}/progress")
@@ -66,9 +66,9 @@ public class PublicLearningController {
         return service.progress(id, video, command);
     }
 
-    @GetMapping(value = "/exams/{id}/learning/materials/{material}/pages/{page}", produces = "image/png")
-    public ResponseEntity<byte[]> page(@PathVariable long id, @PathVariable long material, @PathVariable int page, @RequestParam String token) throws java.io.IOException {
-        return service.page(id, material, page, token);
+    @GetMapping(value = "/exams/{id}/learning/materials/{material}/pages/{page}")
+    public ResponseEntity<?> page(@PathVariable long id, @PathVariable long material, @PathVariable int page, @RequestParam String token, @RequestParam(defaultValue = "false") boolean direct) throws java.io.IOException {
+        return service.page(id, material, page, token, direct);
     }
 
     @PutMapping("/exams/{id}/learning/materials/{material}/pages/{page}/progress")

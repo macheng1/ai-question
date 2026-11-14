@@ -64,8 +64,29 @@ export function ExamTrainingMaterials(props:Props){
   const flushReady=async(leaving=false)=>{if(ready)await flush(leaving);};
   flushProgress.current=flushReady;
   const unregister=registerProgressSaver(()=>flushReady(true));
-  apiClient.get<Blob>(base,props.reviewTrainingId ? undefined : {token:props.data.token},{responseType:"blob",signal:controller.signal,timeout:120000}).then(async blob=>{
-   if(!alive)return;objectUrl=URL.createObjectURL(blob);setUrl(objectUrl);if(props.reviewTrainingId)return;ready=true;
+  async function loadPage() {
+   const options = {responseType:"blob" as const, signal:controller.signal, timeout:120000};
+   const params = props.reviewTrainingId ? undefined : {token:props.data.token};
+   let blob = await apiClient.get<Blob>(base, params && {...params, direct:true}, options);
+   if (blob.type.includes("application/json")) {
+    const {url: signedUrl} = await blob.text().then(JSON.parse);
+    const image = new window.Image();
+    image.referrerPolicy = "no-referrer";
+    image.src = signedUrl;
+    try {
+     await image.decode();
+     return signedUrl as string;
+    } catch {
+     if (controller.signal.aborted) return "";
+     blob = await apiClient.get<Blob>(base, params, options);
+    }
+   }
+   if (!alive) return "";
+   objectUrl = URL.createObjectURL(blob);
+   return objectUrl;
+  }
+  loadPage().then(async pageUrl=>{
+   if(!alive)return;setUrl(pageUrl);if(props.reviewTrainingId)return;ready=true;
    if(alive)timer=setInterval(()=>{
     collect();
     const interval=Math.min(5,Math.max(0.5,required-saved));

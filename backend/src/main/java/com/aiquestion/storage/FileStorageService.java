@@ -80,6 +80,12 @@ public class FileStorageService {
     return providerFor(reference).open(objectKey(reference));
   }
 
+  public java.util.Optional<String> directPreviewUrl(String reference) {
+    String key = objectKey(reference);
+    if (!key.startsWith("training-previews/")) return java.util.Optional.empty();
+    return providerFor(reference).directPreviewUrl(key);
+  }
+
   public void delete(String reference) {
     providerFor(reference).delete(objectKey(reference));
   }

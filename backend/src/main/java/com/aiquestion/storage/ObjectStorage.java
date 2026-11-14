@@ -10,6 +10,7 @@ public interface ObjectStorage {
   void put(MultipartFile file, String contentType, String key);
   StoredObject open(String key);
   void delete(String key);
+  default java.util.Optional<String> directPreviewUrl(String key) { return java.util.Optional.empty(); }
 
   record StoredObject(InputStream stream, long length, String contentType) {}
 }

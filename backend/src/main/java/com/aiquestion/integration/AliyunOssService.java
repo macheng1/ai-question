@@ -74,6 +74,16 @@ public class AliyunOssService implements ObjectStorage, AutoCloseable {
     }
   }
 
+  @Override public java.util.Optional<String> directPreviewUrl(String key) {
+    String endpoint = properties.endpoint();
+    if (blank(endpoint) || endpoint.contains("-internal.") || endpoint.contains(".internal.")) {
+      return java.util.Optional.empty();
+    }
+    var expires = java.util.Date.from(java.time.Instant.now().plusSeconds(120));
+    var signed = client().generatePresignedUrl(properties.bucket(), key, expires);
+    return java.util.Optional.of(signed.toExternalForm().replaceFirst("^http://", "https://"));
+  }
+
   @Override public void delete(String key) {
     OSS client = client();
     try { client.deleteObject(properties.bucket(), key); }

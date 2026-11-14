@@ -57,11 +57,11 @@ public class PublicLearningService {
         return ApiResponse.ok(service.progress(-id, video, c.token(), c.position(), c.duration(), c.completed(), c.requestId()));
     }
 
-    public ResponseEntity<byte[]> coursePage(long id, long material, int page, String token) throws java.io.IOException {
+    public ResponseEntity<?> coursePage(long id, long material, int page, String token, boolean direct) throws java.io.IOException {
         if (id <= 0)
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         reading.authorize(-id, material, token, page);
-        return ResponseEntity.ok().header("Cache-Control", "private, no-store").body(materials.page(id, material, page));
+        return materials.learnerPage(id, material, page, direct);
     }
 
     public ApiResponse<?> coursePageProgress(long id, long material, int page, Reading c) {
@@ -94,10 +94,10 @@ public class PublicLearningService {
         return ApiResponse.ok(service.progress(id, video, command.token(), command.position(), command.duration(), command.completed(), command.requestId()));
     }
 
-    public ResponseEntity<byte[]> page(long id, long material, int page, String token) throws java.io.IOException {
+    public ResponseEntity<?> page(long id, long material, int page, String token, boolean direct) throws java.io.IOException {
         reading.authorize(id, material, token, page);
         long training = com.aiquestion.repository.RepositoryRows.one(persistence.findMaterialTraining(material));
-        return ResponseEntity.ok().header("Cache-Control", "private, no-store").body(materials.page(training, material, page));
+        return materials.learnerPage(training, material, page, direct);
     }
 
     public ApiResponse<?> pageProgress(long id, long material, int page, Reading command) {
