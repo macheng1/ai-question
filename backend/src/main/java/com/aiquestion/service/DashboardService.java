@@ -66,12 +66,18 @@ public class DashboardService {
     return loadDetails(owner, start, end, trainingId, departmentId, category, "logs", status, 1, 10, false).rows();
   }
 
+  @Transactional(readOnly = true)
+  public List<Map<String, Object>> exportRoster(long owner, LocalDate start, LocalDate end,
+      Long trainingId, Long departmentId, String category, String status) {
+    return loadDetails(owner, start, end, trainingId, departmentId, category, "incomplete", status, 1, 10, false).rows();
+  }
+
   private Result loadDetails(long owner, LocalDate start, LocalDate end, Long trainingId,
       Long departmentId, String category, String tab, String status, int page, int pageSize,
       boolean paginate) {
     if (start != null && end != null && start.isAfter(end)) fail("开始日期不能晚于结束日期");
     if (page < 1 || page > 1000000 || !Set.of(10, 20, 50).contains(pageSize)) fail("分页参数无效");
-    if (!Set.of("trainings", "learners", "incomplete", "exams", "logs").contains(tab))
+    if (!Set.of("trainings", "learnerHours", "learners", "incomplete", "exams", "logs").contains(tab))
       fail("明细类型无效");
     if (!Set.of("ALL", "COMPLETED", "NOT_STARTED", "IN_PROGRESS", "OVERDUE").contains(status))
       fail("状态无效");
@@ -144,13 +150,28 @@ public class DashboardService {
         item.put("overdue", count(group, "overdue"));
         detail.add(item);
       }
+    } else if ("learnerHours".equals(tab)) {
+      var byEmployee = new LinkedHashMap<Long, List<Map<String, Object>>>();
+      for (var row : rows)
+        byEmployee.computeIfAbsent(((Number) row.get("employeeId")).longValue(), key -> new ArrayList<>()).add(row);
+      detail = new ArrayList<>();
+      for (var entry : byEmployee.entrySet()) {
+        var assignments = entry.getValue();
+        var employee = new LinkedHashMap<String, Object>();
+        employee.put("id", entry.getKey());
+        employee.put("name", assignments.get(0).get("name"));
+        employee.put("phone", assignments.get(0).get("phone"));
+        employee.put("assigned", assignments.size());
+        employee.put("studiedHours", hours(assignments.stream().mapToDouble(row -> number(row, "studiedSeconds")).sum()));
+        detail.add(employee);
+      }
     } else {
       detail =
           rows.stream()
               .filter(
                   row ->
                       switch (tab) {
-                        case "incomplete" -> !Boolean.TRUE.equals(row.get("completed"));
+                        case "incomplete" -> ("COMPLETED".equals(status) ? "COMPLETED" : "IN_PROGRESS").equals(row.get("status"));
                         case "exams" -> row.get("assessmentId") != null;
                         case "logs" -> row.get("sessionId") != null;
                         default -> true;

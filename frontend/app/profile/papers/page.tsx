@@ -2,12 +2,12 @@
 import { Typography, Space, Table, Tag } from "@douyinfe/semi-ui";
 import { Card } from "@douyinfe/semi-ui";
 
-import { IconPlus } from "@douyinfe/semi-icons";
+import { IconHelpCircleStroked, IconPlus } from "@douyinfe/semi-icons";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import "@douyinfe/semi-ui/react19-adapter";
-import { Button, Input, Modal, Select, Toast, InputNumber } from "@douyinfe/semi-ui";
+import { Button, Input, Modal, Select, Toast, InputNumber, Tooltip } from "@douyinfe/semi-ui";
 import { ProfileShell } from "@/components/layout/ProfileShell";
 import {
   copyPaper,
@@ -18,6 +18,17 @@ import {
   type Paper,
   type SavePaper,
 } from "@/features/papers/api";
+
+function statusHeader(label: string, tip: string) {
+  return (
+    <span className="inline-flex items-center gap-1 whitespace-nowrap">
+      {label}
+      <Tooltip trigger="click" content={tip}>
+        <Button aria-label={label + "说明"} theme="borderless" type="tertiary" size="small" icon={<IconHelpCircleStroked />} />
+      </Tooltip>
+    </span>
+  );
+}
 
 const modeOptions = [
   { label: "固定组卷", value: "FIXED" },
@@ -185,8 +196,8 @@ export default function PapersPage() {
                 { title: "试卷名称", dataIndex: "name", width: 240, render: (_: unknown, paper: Paper) => <div className="break-words font-medium">{paper.name}</div> },
                 { title: "试卷描述", dataIndex: "description", render: (value: string) => <div className="break-words text-sm text-slate-500">{value || "—"}</div> },
                 { title: "组卷方式", width: 120, render: (_: unknown, paper: Paper) => modeLabel(paper.mode) },
-                { title: "组卷状态", width: 140, render: (_: unknown, paper: Paper) => <Tag color={paper.status === "PUBLISHED" ? "green" : "orange"}>{paper.status === "PUBLISHED" ? "已完成组卷" : "未完成组卷"}</Tag> },
-                { title: "锁定状态", width: 110, render: (_: unknown, paper: Paper) => <Tag color={paper.hasAssessment ? "grey" : "green"}>{paper.hasAssessment ? "已锁定" : "未锁定"}</Tag> },
+                { title: statusHeader("组卷状态", "选好题目或设置好抽题规则后，点击「完成组卷」。显示「已完成组卷」后，就可以用这张试卷安排考试。"), width: 140, render: (_: unknown, paper: Paper) => <Tag color={paper.status === "PUBLISHED" ? "green" : "orange"}>{paper.status === "PUBLISHED" ? "已完成组卷" : "未完成组卷"}</Tag> },
+                { title: statusHeader("锁定状态", "试卷关联考试后会锁定。锁定后可以查看组卷。如需调整题目或抽题规则，可复制一份再修改。"), width: 130, render: (_: unknown, paper: Paper) => <Tag color={paper.hasAssessment ? "grey" : "green"}>{paper.hasAssessment ? "已锁定" : "未锁定"}</Tag> },
                 { title: "题数", width: 80, render: (_: unknown, paper: Paper) => `${paper.questionCount || 0} 题` },
                 { title: "时长", width: 100, render: (_: unknown, paper: Paper) => `${paper.durationMinutes} 分钟` },
                 { title: "总分 / 及格分", width: 130, render: (_: unknown, paper: Paper) => `${paper.totalScore} / ${paper.passScore} 分` },
@@ -211,7 +222,20 @@ export default function PapersPage() {
         <div className="flex flex-col gap-5 py-2">
           <div><label htmlFor="paper-name" className="mb-2 block text-sm font-medium">试卷名称 <span className="text-red-500">*</span></label><Input id="paper-name" value={name} onChange={setName} placeholder="请输入试卷名称" /></div>
           <div><label htmlFor="paper-description" className="mb-2 block text-sm font-medium">试卷描述</label><Input id="paper-description" value={description} onChange={setDescription} placeholder="请输入试卷描述（选填）" /></div>
-          <div><div id="paper-mode-label" className="mb-2 text-sm font-medium">组卷方式</div><Select aria-labelledby="paper-mode-label" value={mode} onChange={(value) => setMode(String(value))} optionList={modeOptions} style={{ width: "100%" }} /></div>
+          <div>
+            <div className="mb-2 flex items-center gap-1 text-sm font-medium">
+              <span id="paper-mode-label">组卷方式</span>
+              <Tooltip trigger="click" content={
+                <div className="space-y-1">
+                  <p>固定组卷：手动选题，所有学员使用同一组题目。</p>
+                  <p>随机组卷：选好题库，设置各题型的题数和每题分值。学员开始考试时，系统按规则抽题。</p>
+                </div>
+              }>
+                <Button aria-label="组卷方式说明" theme="borderless" type="tertiary" size="small" icon={<IconHelpCircleStroked />} />
+              </Tooltip>
+            </div>
+            <Select aria-labelledby="paper-mode-label" value={mode} onChange={(value) => setMode(String(value))} optionList={modeOptions} style={{ width: "100%" }} />
+          </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="min-w-0"><label htmlFor="paper-total" className="mb-2 block text-sm font-medium">试卷总分</label><InputNumber id="paper-total" style={{ width: "100%" }} value={totalScore} onChange={value => setTotalScore(String(value ?? ""))} suffix="分" /></div>
             <div className="min-w-0"><label htmlFor="paper-duration" className="mb-2 block text-sm font-medium">考试时长</label><InputNumber id="paper-duration" style={{ width: "100%" }} value={duration} onChange={value => setDuration(String(value ?? ""))} suffix="分钟" /></div>

@@ -5,10 +5,11 @@ export const getDashboardOptions = () =>
 export const getDashboard = (query: DashboardQuery) =>
   apiClient.get<DashboardData>("/management/dashboard", query);
 
-export const exportDashboardLogs = (query: DashboardQuery) => {
+export const exportDashboardRows = (query: DashboardQuery) => {
   const { start, end, trainingId, departmentId, category, status } = query;
-  return apiClient.download("/management/dashboard/logs/export", {
+  const roster = query.tab === "incomplete";
+  return apiClient.download(roster ? "/management/dashboard/incomplete/export" : "/management/dashboard/logs/export", {
     params: { start, end, trainingId, departmentId, category, status },
-    filename: "学习日志.xlsx",
+    filename: roster ? "培训人员名单.xlsx" : "学习日志.xlsx",
   });
 };

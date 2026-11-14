@@ -1223,13 +1223,13 @@ class MyBatisMigrationIntegrationTest {
     long firstTask = first.path("assessmentId").asLong();
     long participant = insert("INSERT INTO assessment_participant(task_id,candidate_name,phone,employee_id) VALUES(?,'测试学员',?,?)", firstTask, phone, employee);
     long activeAttempt = insert("INSERT INTO assessment_attempt(task_id,participant_id,attempt_no,status,started_at) VALUES(?,?,1,'IN_PROGRESS',CURRENT_TIMESTAMP(3))", firstTask, participant);
-    request(post("/management/trainings/" + first.path("id").asLong() + "/end").header("Authorization", authorization), Map.of());
+    var ended = request(post("/management/trainings/" + first.path("id").asLong() + "/end").header("Authorization", authorization), Map.of());
     assertTrue(jdbc.queryForObject("SELECT end_at <= CURRENT_TIMESTAMP(3) FROM training WHERE id=?", Boolean.class, first.path("id").asLong()));
     assertEquals(jdbc.queryForObject("SELECT end_at FROM training WHERE id=?", java.sql.Timestamp.class, first.path("id").asLong()),
         jdbc.queryForObject("SELECT end_at FROM assessment_task WHERE id=?", java.sql.Timestamp.class, firstTask));
-    body.put("version", jdbc.queryForObject("SELECT version FROM training WHERE id=?", Integer.class, first.path("id").asLong()));
-    body.put("startAt", jdbc.queryForObject("SELECT start_at FROM training WHERE id=?", java.sql.Timestamp.class, first.path("id").asLong()).toLocalDateTime().toString());
-    body.put("endAt", jdbc.queryForObject("SELECT end_at FROM training WHERE id=?", java.sql.Timestamp.class, first.path("id").asLong()).toLocalDateTime().toString());
+    body.put("version", ended.path("version").asInt());
+    body.put("startAt", ended.path("startAt").asText());
+    body.put("endAt", ended.path("endAt").asText());
     request(put("/management/trainings/" + first.path("id").asLong()).header("Authorization", authorization), body);
     // Historical force-ended trainings may still have the original future exam deadline.
     jdbc.update("UPDATE assessment_task SET end_at=DATE_ADD(end_at,INTERVAL 1 DAY) WHERE id=?", firstTask);

@@ -23,15 +23,24 @@ public final class DashboardLogExporter {
       "PASSED", "已通过", "FAILED", "未通过", "NONE", "无考试", "PENDING_REVIEW", "待批阅");
 
   public static byte[] write(List<Map<String, Object>> rows) throws IOException {
+    return write(rows, false);
+  }
+
+  public static byte[] writeRoster(List<Map<String, Object>> rows) throws IOException {
+    return write(rows, true);
+  }
+
+  private static byte[] write(List<Map<String, Object>> rows, boolean roster) throws IOException {
+    String[] headers = roster ? new String[]{"姓名", "手机号", "部门", "培训名称", "整体状态", "学习进度（%）", "有效学时（小时）", "考试状态", "逾期情况"} : HEADERS;
     try (var workbook = new XSSFWorkbook(); var output = new ByteArrayOutputStream()) {
-      var sheet = workbook.createSheet("学习日志");
+      var sheet = workbook.createSheet(roster ? "培训人员名单" : "学习日志");
       var headerStyle = workbook.createCellStyle();
       var font = workbook.createFont();
       font.setBold(true);
       headerStyle.setFont(font);
       var header = sheet.createRow(0);
-      for (int i = 0; i < HEADERS.length; i++) {
-        header.createCell(i).setCellValue(HEADERS[i]);
+      for (int i = 0; i < headers.length; i++) {
+        header.createCell(i).setCellValue(headers[i]);
         header.getCell(i).setCellStyle(headerStyle);
         sheet.setColumnWidth(i, (i == 3 || i == 8 ? 36 : 22) * 256);
       }
@@ -40,13 +49,16 @@ public final class DashboardLogExporter {
         boolean hasExam = source.get("assessmentId") != null;
         boolean missing = source.get("missingDuration") instanceof Number n && n.longValue() > 0;
         Object reasons = source.get("overdueReasons");
-        var values = new Object[] {source.get("name"), source.get("phone"), source.get("departmentName"),
+        String overdue = reasons instanceof List<?> list ? String.join("；", list.stream().map(String::valueOf).toList()) : "";
+        var values = roster ? new Object[]{source.get("name"), source.get("phone"), source.get("departmentName"),
+            source.get("trainingName"), label(source.get("status")), source.get("progress"),
+            source.get("studiedHours"), label(source.get("examStatus")), overdue} : new Object[] {source.get("name"), source.get("phone"), source.get("departmentName"),
             source.get("trainingName"), label(source.get("status")), source.get("progress"),
             source.get("studiedSeconds"), missing ? "部分历史时长缺失" : "完整",
             source.get("examName"), label(source.get("examStatus")), source.get("score"),
             hasExam ? source.get("totalScore") : null, hasExam ? source.get("attemptCount") : null,
             source.get("durationSeconds"), time(source.get("startedAt")), time(source.get("completedAt")),
-            time(source.get("submittedAt")), reasons instanceof List<?> list ? String.join("；", list.stream().map(String::valueOf).toList()) : ""};
+            time(source.get("submittedAt")), overdue};
         var row = sheet.createRow(index++);
         for (int i = 0; i < values.length; i++) {
           var cell = row.createCell(i);
@@ -55,7 +67,7 @@ public final class DashboardLogExporter {
         }
       }
       sheet.createFreezePane(0, 1);
-      sheet.setAutoFilter(new CellRangeAddress(0, rows.size(), 0, HEADERS.length - 1));
+      sheet.setAutoFilter(new CellRangeAddress(0, rows.size(), 0, headers.length - 1));
       workbook.write(output);
       return output.toByteArray();
     }

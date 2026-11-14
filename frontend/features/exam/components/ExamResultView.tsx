@@ -74,8 +74,12 @@ export function ExamResultView(props: ExamResultViewProps) {
               const correct = question.answer.includes(option.key), mine = picked.includes(option.key);
               return <div key={option.key} className={`h5-review-option ${correct ? "correct" : mine ? "wrong" : ""}`}><span>{option.key}</span><p>{option.text}</p>{(correct || mine) && <small>{correct ? "正确答案" : "我的选择"}</small>}</div>;
             })}</div>
-            <div className="h5-answer-comparison whitespace-pre-wrap [overflow-wrap:anywhere]"><span>我的答案 <b>{answerLabel(question, picked) || "未作答"}</b></span><span>{question.kind === "short" ? "参考答案" : "正确答案"} <b>{answerLabel(question, question.answer) || "未公布"}</b></span><span>{question.kind === "short" ? (grade.isCorrect ? "满分" : grade.score > 0 ? "部分得分" : "未得分") : grade.isCorrect ? "回答正确" : "回答错误"}</span></div>
-            <div className="h5-explanation"><b>答案解析</b>{question.analysis || "暂无解析"}</div>
+            <div className="h5-answer-comparison whitespace-pre-wrap [overflow-wrap:anywhere]"><span>我的答案 <b>{answerLabel(question, picked) || "未作答"}</b></span>{question.kind !== "short" && <span>正确答案 <b>{answerLabel(question, question.answer) || "未公布"}</b></span>}<span>{question.kind === "short" ? (grade.isCorrect ? "满分" : grade.score > 0 ? "部分得分" : "未得分") : grade.isCorrect ? "回答正确" : "回答错误"}</span></div>
+            {question.kind === "short" ? (
+              <div className="h5-explanation whitespace-pre-wrap [overflow-wrap:anywhere]"><b>参考答案</b>{answerLabel(question, question.answer) || "未公布"}</div>
+            ) : (
+              <div className="h5-explanation"><b>答案解析</b>{question.analysis || "暂无解析"}</div>
+            )}
           </article>;
         })}
         <p className="h5-muted text-center mt-5">已展示 {visibleQuestions.length} 道{wrongOnly ? "错题" : "题目"}</p>

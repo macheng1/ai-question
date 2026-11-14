@@ -1,4 +1,5 @@
 "use client";
+import { StatHint } from "./StatHint";
 import dynamic from "next/dynamic";
 import { Button, Card, Empty, Progress, Spin } from "@douyinfe/semi-ui";
 import type { DashboardData, DashboardStatus } from "../types";
@@ -45,7 +46,7 @@ export function DashboardCharts({
   ];
   return (
     <div className="grid gap-4 xl:grid-cols-3">
-      <Card title="培训完成分布" className="min-w-0">
+      <Card title={<span className="inline-flex items-center gap-1">培训完成分布<StatHint label="培训完成分布" text="没有学习或答题记录算未开始，已达到培训要求算已完成，其余算进行中。" /></span>} className="min-w-0">
         {data.overview.assigned === 0 ? (
           <Empty className="py-12" description="暂无培训名单" />
         ) : (
@@ -91,7 +92,7 @@ export function DashboardCharts({
           关联考试未通过的已学习人员计入进行中
         </p>
       </Card>
-      <Card title="部门完成情况" className="min-w-0">
+      <Card title={<span className="inline-flex items-center gap-1">部门完成情况<StatHint label="部门完成情况" text="按培训分配时的部门统计，完成率为本部门已完成人次 ÷ 应完成人次。" /></span>} className="min-w-0">
         {data.departments.length === 0 ? (
           <Empty className="py-12" description="暂无部门数据" />
         ) : (
@@ -124,7 +125,7 @@ export function DashboardCharts({
           点击部门筛选 · 按分配时部门统计
         </p>
       </Card>
-      <Card title="培训完成趋势" className="min-w-0">
+      <Card title={<span className="inline-flex items-center gap-1">培训完成趋势<StatHint label="培训完成趋势" text="按完成日期统计近 30 天每天的完成人次。有考试时，取学完和通过考试中较晚的一天。" /></span>} className="min-w-0">
         {data.trend.every((item) => item.count === 0) ? (
           <Empty className="py-12" description="最近 30 天暂无完成记录" />
         ) : (

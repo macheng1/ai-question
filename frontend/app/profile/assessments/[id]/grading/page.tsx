@@ -1,7 +1,7 @@
 "use client";
 
-import { Button, Card, InputNumber, Toast } from "@douyinfe/semi-ui";
-import Link from "next/link";
+import { Button, Card, InputNumber, Table, Toast, Typography } from "@douyinfe/semi-ui";
+import { IconArrowLeft, IconRefresh } from "@douyinfe/semi-icons";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ProfileShell } from "@/components/layout/ProfileShell";
@@ -58,10 +58,18 @@ export default function GradingPage() {
   };
 
   return <ProfileShell>
-    <Link href="/profile/trainings">返回培训管理</Link>
-    <h1 className="my-4 text-2xl font-semibold">人工阅卷</h1>
+    <Typography.Text link={{ href: "/profile/trainings" }} icon={<IconArrowLeft size="small" />}
+      className="!inline-flex !min-h-8 !items-center !text-sm">返回培训列表</Typography.Text>
+    <header className="my-5 flex flex-wrap items-center justify-between gap-4">
+      <div>
+        <Typography.Title heading={1} className="!m-0 !text-[28px] !font-semibold !text-[#183f35]">人工阅卷</Typography.Title>
+        <p className="mt-2 text-sm text-slate-500">{selected
+          ? `${selected.name} · 第 ${selected.attemptNo} 次答卷`
+          : loading || error ? "待阅答卷" : `待阅答卷（${queue.length} 份）`}</p>
+      </div>
+      {!selected && <Button icon={<IconRefresh />} loading={loading} onClick={() => setRevision(n => n + 1)}>刷新</Button>}
+    </header>
     {selected ? <Card>
-      <h2>{selected.name} · 第 {selected.attemptNo} 次答卷</h2>
       {!questions.length && <p>正在加载答卷…</p>}
       {questions.map((q, i) => <section key={q.questionId} className="space-y-3 border-b border-slate-200 py-4">
         <h3 className="whitespace-pre-wrap break-words">{i + 1}. {q.stem}</h3>
@@ -77,13 +85,19 @@ export default function GradingPage() {
       </section>)}
       <div className="mt-4 flex gap-3"><Button disabled={saving} onClick={() => setSelected(undefined)}>返回名单</Button>
         <Button theme="solid" disabled={!questions.length} loading={saving} onClick={finish}>完成阅卷</Button></div>
-    </Card> : <Card>
-      <div className="flex items-center justify-between"><h2>待阅答卷</h2><Button onClick={() => setRevision(n => n + 1)}>刷新</Button></div>
-      {error ? <p role="alert">{error}</p> : loading ? <p>加载中…</p> : !queue.length ? <p>暂无待阅答卷</p> :
-        queue.map(a => <div key={a.attemptId} className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 py-3">
-          <span>{a.name} · 第 {a.attemptNo} 次 · {new Date(a.submittedAt).toLocaleString("zh-CN")}</span>
-          <Button onClick={() => { setQuestions([]); setScores({}); setSelected(a); }}>阅卷</Button>
-        </div>)}
+    </Card> : <Card bodyStyle={{ padding: 0 }} className="overflow-x-auto">
+      {error ? <p role="alert" className="p-5">{error}</p> : <Table<Attempt>
+        rowKey="attemptId" dataSource={queue} loading={loading} empty="暂无待阅答卷" scroll={{ x: "max(100%, 600px)" }}
+        pagination={queue.length > 10 ? { pageSize: 10, showTotal: true, style: { padding: "16px 20px", margin: 0 } } : false}
+        columns={[
+          { title: "学员姓名", dataIndex: "name" },
+          { title: "考试次数", render: (_, attempt) => `第 ${attempt.attemptNo} 次` },
+          { title: "交卷时间", width: 200, render: (_, attempt) => new Date(attempt.submittedAt).toLocaleString("zh-CN") },
+          { title: "操作", width: 100, render: (_, attempt) => <Button theme="borderless" size="large" onClick={() => {
+            setQuestions([]); setScores({}); setSelected(attempt);
+          }}>阅卷</Button> },
+        ]}
+      />}
     </Card>}
   </ProfileShell>;
 }

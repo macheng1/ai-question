@@ -1,4 +1,5 @@
 "use client";
+import { StatHint } from "./StatHint";
 import { formatStudyHours } from "../format";
 import { useEffect, useState } from "react";
 import {
@@ -12,7 +13,6 @@ import {
   Space,
   Tabs,
   TabPane,
-  Tooltip,
   Typography,
 } from "@douyinfe/semi-ui";
 import {
@@ -23,7 +23,6 @@ import {
   IconCheckList,
   IconAlertTriangle,
   IconRefresh,
-  IconHelpCircle,
 } from "@douyinfe/semi-icons";
 import { getDashboard, getDashboardOptions } from "../api";
 import type {
@@ -34,6 +33,7 @@ import type {
   DashboardStatus,
 } from "../types";
 import { trainingCategories } from "@/features/trainings/api";
+import { StudyHoursChart } from "./StudyHoursChart";
 import { DashboardCharts } from "./DashboardCharts";
 import { dashboardTabs, type DashboardView } from "../navigation";
 import { DashboardDetails } from "./DashboardDetails";
@@ -58,6 +58,8 @@ export function Dashboard() {
   const [view, setView] = useState<DashboardView>("overview");
   const [query, setQuery] = useState<DashboardQuery>(initialQuery);
   const [data, setData] = useState<DashboardData>();
+  const [learnerHours, setLearnerHours] = useState<DashboardData>();
+  const [hoursPage, setHoursPage] = useState(1);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [refresh, setRefresh] = useState(0);
@@ -83,9 +85,15 @@ export function Dashboard() {
     let active = true;
     setLoading(true);
     setError("");
-    getDashboard(query)
-      .then((value) => {
-        if (active) setData(value);
+    const hoursQuery = { ...initialQuery, page: query.page, pageSize: query.pageSize };
+    Promise.all([
+      getDashboard(view === "trainings" ? hoursQuery : query),
+      view === "trainings" ? getDashboard({ ...hoursQuery, tab: "learnerHours", page: hoursPage }) : undefined,
+    ]).then(([value, hours]) => {
+        if (active) {
+          setData(value);
+          setLearnerHours(hours);
+        }
       })
       .catch((e) => {
         if (active) {
@@ -99,7 +107,7 @@ export function Dashboard() {
     return () => {
       active = false;
     };
-  }, [query, refresh]);
+  }, [query, refresh, view, hoursPage]);
   const change = (value: Partial<DashboardQuery>) => {
     if (value.tab === "learners") {
       setDetailQuery({ ...query, ...value, tab: "learners", page: 1 });
@@ -111,6 +119,7 @@ export function Dashboard() {
   const selectView = (key: string) => {
     const next = dashboardTabs.find((tab) => tab.key === key)?.key;
     if (!next) return;
+    setHoursPage(1);
     setView(next);
     setQuery((previous) => ({
       ...previous,
@@ -120,11 +129,11 @@ export function Dashboard() {
     }));
   };
   const training = (id: number) => {
-    setDetailQuery({ ...query, trainingId: id, tab: "learners", status: "ALL", page: 1 });
+    setDetailQuery({ ...(view === "trainings" ? initialQuery : query), trainingId: id, tab: "learners", status: "ALL", page: 1 });
   };
   const status = (value: DashboardStatus) =>
     change({
-      tab: value === "OVERDUE" ? "incomplete" : "learners",
+      tab: "learners",
       status: value,
       page: 1,
     });
@@ -133,6 +142,7 @@ export function Dashboard() {
     ? [
         {
           label: "培训数量",
+          tip: "每场培训计 1 场。按开始日期筛选，未设开始日期时按创建日期。",
           value: String(overview.trainingCount),
           unit: "场",
           detail: "当前筛选范围",
@@ -141,6 +151,7 @@ export function Dashboard() {
         },
         {
           label: "应完成人次",
+          tip: "按培训名单统计，每位学员每场计 1 人次。",
           value: String(overview.assigned),
           unit: "人次",
           detail: "员工 × 培训名单",
@@ -149,6 +160,7 @@ export function Dashboard() {
         },
         {
           label: "培训完成率",
+          tip: "已完成人次 ÷ 应完成人次。完成学习且通过关联考试，才算完成。无考试时只看学习。",
           value:
             overview.completionRate == null
               ? "—"
@@ -160,6 +172,7 @@ export function Dashboard() {
         },
         {
           label: "有效学习时长",
+          tip: "所有学员看视频和阅读材料的有效时长之和，按小时显示。",
           value: formatStudyHours(overview.studiedHours),
           unit: "小时",
           detail: "累计有效学时",
@@ -168,14 +181,15 @@ export function Dashboard() {
         },
         {
           label: "考试通过率",
+          tip: "通过人次 ÷ 应考人次。按最近一次考试记录判断，未考和待批阅也计入应考人次。",
           value: overview.passRate == null ? "—" : `${overview.passRate}%`,
           unit: "",
           detail: `通过 ${overview.passed} / 应考 ${overview.examAssigned}`,
           icon: <IconCheckList />,
-          action: () => change({ tab: "exams", status: "ALL", page: 1 }),
         },
         {
           label: "逾期未完成",
+          tip: "学习逾期未完成或考试逾期未通过，每人每场只计一次。待批阅不算考试逾期。",
           value: String(overview.overdue),
           unit: "人次",
           detail: "培训 / 考试逾期去重",
@@ -216,15 +230,10 @@ export function Dashboard() {
           ))}
         </Tabs>
       </div>
-      <Card>
+      {view !== "trainings" && <Card>
         <div className="grid items-end gap-4 sm:grid-cols-2 xl:grid-cols-[1.5fr_1fr_1fr_1fr_auto]">
           <div className="min-w-0">
-            <div className="mb-2 flex items-center gap-1 text-sm">
-              培训时间
-              <Tooltip content="按培训开始日期筛选，未设置开始时间的培训按创建日期筛选；指标为所选课程的累计数据。">
-                <IconHelpCircle tabIndex={0} aria-label="培训时间统计说明" />
-              </Tooltip>
-            </div>
+            <div className="mb-2 text-sm">培训时间</div>
             <DatePicker
               type="dateRange"
               format="yyyy-MM-dd"
@@ -321,15 +330,16 @@ export function Dashboard() {
               theme="solid"
               type="primary"
               loading={loading}
-              onClick={() =>
+              onClick={() => {
+                setHoursPage(1);
                 setQuery({
                   ...draft,
                   tab: query.tab,
                   status: query.status,
                   page: 1,
                   pageSize: query.pageSize,
-                })
-              }
+                });
+              }}
             >
               查询
             </Button>
@@ -337,6 +347,7 @@ export function Dashboard() {
               disabled={loading}
               onClick={() => {
                 setDraft({});
+                setHoursPage(1);
                 setQuery({
                   ...initialQuery,
                   tab: query.tab,
@@ -348,8 +359,8 @@ export function Dashboard() {
             </Button>
           </Space>
         </div>
-      </Card>
-      {optionsError && (
+      </Card>}
+      {view !== "trainings" && optionsError && (
         <Banner
           type="warning"
           description={`筛选选项加载失败：${optionsError}，请点击刷新重试。`}
@@ -397,22 +408,27 @@ export function Dashboard() {
                         {metric.icon}
                       </span>
                       {metric.label}
+                      <StatHint label={metric.label} text={metric.tip} />
                     </div>
-                    <Button
-                      theme="borderless"
-                      aria-label={`查看${metric.label}明细`}
-                      onClick={metric.action}
-                      style={{
-                        color: metric.warning ? "#d97706" : "#183f35",
-                        height: "auto",
-                        padding: "4px 0",
-                      }}
-                    >
-                      <span className="text-2xl font-semibold">
-                        {metric.value}
-                      </span>
-                      <span className="ml-1 text-xs">{metric.unit}</span>
-                    </Button>
+                    {metric.action ? (
+                      <Button
+                        theme="borderless"
+                        aria-label={`查看${metric.label}明细`}
+                        onClick={metric.action}
+                        style={{
+                          color: metric.warning ? "#d97706" : "#183f35",
+                          height: "auto",
+                          padding: "4px 0",
+                        }}
+                      >
+                        <span className="text-2xl font-semibold">
+                          {metric.value}
+                        </span>
+                        <span className="ml-1 text-xs">{metric.unit}</span>
+                      </Button>
+                    ) : (
+                      <div className="py-1 text-2xl font-semibold text-[#183f35]">{metric.value}</div>
+                    )}
                     <p className="mt-2 text-xs text-slate-500">
                       {metric.detail}
                     </p>
@@ -432,14 +448,13 @@ export function Dashboard() {
                 }}
               />
             </>
+          ) : view === "trainings" ? (
+            <div className="grid items-start gap-4 xl:grid-cols-2">
+              <StudyHoursChart data={data} title="培训有效学时" tip="按培训统计，合计本场所有学员看视频和阅读材料的有效时长。" onPageChange={page => change({ page })} onTraining={training} />
+              {learnerHours && <StudyHoursChart data={learnerHours} title="学员有效学时" tip="按学员统计，合计该学员在各场培训中看视频和阅读材料的有效时长。" onPageChange={setHoursPage} />}
+            </div>
           ) : (
-            <DashboardDetails
-              data={data}
-              query={query}
-              loading={loading}
-              onChange={change}
-              onTraining={training}
-            />
+            <DashboardDetails data={data} query={query} loading={loading} onChange={change} onTraining={training} />
           )}
         </>
       ) : !error ? (

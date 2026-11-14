@@ -1,4 +1,5 @@
 "use client";
+import { IconArticle, IconClockStroked } from "@douyinfe/semi-icons";
 import { Layout } from "@douyinfe/semi-ui";
 
 import { useEffect, useState } from "react";
@@ -93,6 +94,12 @@ export function ResultLoader({ paper, attemptId, details = false }: ResultLoader
 
   if (pendingReview) return (
     <section className="h5-content text-center">
+      <div aria-hidden="true" className="relative mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#e7f3ed] text-[#327458]">
+        <IconArticle style={{ fontSize: 32 }} />
+        <span className="absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-[#327458] text-white">
+          <IconClockStroked size="small" />
+        </span>
+      </div>
       <h1 className="h5-section-title">待批阅</h1>
       <p className="h5-muted my-4">《{paper.title}》已交卷，教师完成批阅后可查看成绩。</p>
       <a className="h5-link" href="/learner/exams">返回我的考试</a>

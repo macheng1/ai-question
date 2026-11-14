@@ -1,5 +1,5 @@
 export type DashboardTab =
-  "trainings" | "learners" | "incomplete" | "exams" | "logs";
+  "trainings" | "learnerHours" | "learners" | "incomplete" | "exams" | "logs";
 export type DashboardStatus =
   "ALL" | "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "OVERDUE";
 export type DashboardFilters = {

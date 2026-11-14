@@ -158,7 +158,7 @@ export default function QuestionsPage() {
         questionType: type,
         stem: stem.trim(),
         answerText: correct,
-        analysis,
+        analysis: type === "SHORT_ANSWER" ? "" : analysis,
         difficulty,
         score: Number(score) || 0,
         options: selectedOptions,
@@ -401,12 +401,14 @@ export default function QuestionsPage() {
               </Space>
             )}
           </div>
-          <TextArea
-            value={analysis}
-            onChange={setAnalysis}
-            autosize={{ minRows: 2, maxRows: 4 }}
-            placeholder="题目解析（可选）"
-          />
+          {type !== "SHORT_ANSWER" && (
+            <TextArea
+              value={analysis}
+              onChange={setAnalysis}
+              autosize={{ minRows: 2, maxRows: 4 }}
+              placeholder="题目解析（可选）"
+            />
+          )}
           <div className="grid grid-cols-2 gap-4 ">
             <div className="min-w-0 col-span-2 sm:col-span-1"><InputNumber
               value={score}

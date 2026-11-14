@@ -39,12 +39,35 @@ public class QuestionImportService {
         try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             Sheet sheet = workbook.createSheet("试题导入");
             String[] headers = {"题型", "题干", "选项A", "选项B", "选项C", "选项D", "正确答案", "解析", "标签", "难度", "出处"};
-            String[] sample = {"单选题", "示例：安全生产的方针是什么（请替换）", "安全第一", "预防为主", "综合治理", "以上都是", "D", "填写解析（可选）", "安全生产", "中", "安全生产法"};
-            Row header = sheet.createRow(0); Row example = sheet.createRow(1);
-            CellStyle headerStyle = workbook.createCellStyle(); headerStyle.setFillForegroundColor(IndexedColors.ORANGE.getIndex()); headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-            for (int i = 0; i < headers.length; i++) { Cell h = header.createCell(i); h.setCellValue(headers[i]); h.setCellStyle(headerStyle); example.createCell(i).setCellValue(sample[i]); sheet.setColumnWidth(i, i == 1 || i == 7 ? 36 * 256 : 18 * 256); }
+            String[][] examples = {
+                {"单选题", "示例：临时离开办公电脑时，应先做什么？", "锁定屏幕", "关闭显示器", "调低亮度", "最小化窗口", "A", "锁屏后需要重新验证身份才能继续操作。", "信息安全", "易", "入职培训"},
+                {"多选题", "示例：哪些做法有助于保护工作账号？", "启用多因素认证", "多个系统共用密码", "使用独立密码", "把验证码发给同事", "AC", "独立密码和多因素认证都能降低账号被盗用的风险。", "账号安全", "中", "入职培训"},
+                {"判断题", "示例：可以把工作账号的验证码发给自称是管理员的人。", "", "", "", "", "错误", "验证码仅供本人验证身份时使用。", "账号安全", "易", "入职培训"},
+                {"问答题", "示例：收到要求输入工作账号密码的可疑邮件，应如何处理？", "", "", "", "", "先通过已知的官方渠道核实发件人身份，避免点击邮件链接或输入密码，并向信息安全人员报告。", "", "邮件安全", "中", "入职培训"}
+            };
+            Row header = sheet.createRow(0);
+            CellStyle headerStyle = workbook.createCellStyle();
+            headerStyle.setFillForegroundColor(IndexedColors.ORANGE.getIndex());
+            headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            for (int i = 0; i < headers.length; i++) {
+                Cell cell = header.createCell(i);
+                cell.setCellValue(headers[i]);
+                cell.setCellStyle(headerStyle);
+                sheet.setColumnWidth(i, i == 1 || i == 6 || i == 7 ? 48 * 256 : 18 * 256);
+            }
+            CellStyle exampleStyle = workbook.createCellStyle();
+            exampleStyle.setWrapText(true);
+            for (String[] example : examples) {
+                Row row = sheet.createRow(sheet.getLastRowNum() + 1);
+                row.setHeightInPoints(54);
+                for (int i = 0; i < example.length; i++) {
+                    Cell cell = row.createCell(i);
+                    cell.setCellValue(example[i]);
+                    cell.setCellStyle(exampleStyle);
+                }
+            }
             Sheet help = workbook.createSheet("填写说明");
-            String[] notes = {"1. 一行一道题，第一行表头不要修改。", "2. 题型填写：单选题 / 多选题 / 判断题 / 问答题。", "3. 单选题、多选题填写选项 A-D；判断题选项可留空，问答题选项留空。", "4. 正确答案：单选填一个字母，多选填多个字母（如 ABC），判断题填写 正确 或 错误，问答题填写参考答案，可换行。", "5. 难度可填写：易 / 中 / 难，留空默认为中。", "6. 已存在相同题干的题目会自动跳过。"};
+            String[] notes = {"1. 一行一道题，保留第一行表头，导入前请替换或删除四行示例题。", "2. 题型填写：单选题 / 多选题 / 判断题 / 问答题。", "3. 单选题、多选题填写选项 A-D；判断题选项可留空，问答题选项留空。", "4. 正确答案：单选填一个字母，多选填多个字母（如 ABC），判断题填写 正确 或 错误，问答题填写参考答案，可换行。", "5. 难度可填写：易 / 中 / 难，留空默认为中。", "6. 已存在相同题干的题目会自动跳过。"};
             for (int i = 0; i < notes.length; i++) help.createRow(i).createCell(0).setCellValue(notes[i]); help.setColumnWidth(0, 110 * 256);
             workbook.write(output); return output.toByteArray();
         } catch (IOException e) { throw new BusinessException(ErrorCode.SYSTEM_ERROR, "模板生成失败"); }

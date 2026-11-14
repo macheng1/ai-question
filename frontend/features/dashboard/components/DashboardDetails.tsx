@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { IconDownload } from "@douyinfe/semi-icons";
-import { exportDashboardLogs } from "../api";
+import { exportDashboardRows } from "../api";
 import { useCompactViewport } from "@/lib/hooks/useCompactViewport";
 import { formatStudyHours } from "../format";
 import {
@@ -21,6 +21,7 @@ import type {
   DashboardRow,
   DashboardStatus,
 } from "../types";
+import { StatHint } from "./StatHint";
 import { dashboardTabs } from "../navigation";
 const labels: Record<string, string> = {
   NOT_STARTED: "未开始",
@@ -40,6 +41,11 @@ const colors = {
   PENDING_REVIEW: "orange",
   NONE: "grey",
 } as const;
+function summaryHeader(label: string, tip: string) {
+  return <span className="inline-flex items-center gap-1 whitespace-nowrap">
+    {label}<StatHint label={label} text={tip} />
+  </span>;
+}
 function statusTag(status?: string) {
   const key = status as keyof typeof colors;
   return <Tag color={colors[key] || "grey"}>{labels[key] || "—"}</Tag>;
@@ -72,7 +78,7 @@ export function DashboardDetails({
   async function handleExport() {
     setExporting(true);
     try {
-      await exportDashboardLogs(query);
+      await exportDashboardRows(query);
     } catch (error) {
       Toast.error(error instanceof Error ? error.message : "导出失败，请重试");
     } finally {
@@ -98,7 +104,7 @@ export function DashboardDetails({
       ? [
           { title: "培训名称", dataIndex: "name", width: 240 },
           {
-            title: "类型",
+            title: summaryHeader("类型", "本场关联了考试就显示“培训+考试”，否则显示“独立培训”。"),
             width: 120,
             render: (_, row) => (
               <Tag color={row.assessmentId ? "cyan" : "grey"}>
@@ -106,21 +112,21 @@ export function DashboardDetails({
               </Tag>
             ),
           },
-          { title: "应完成人次", dataIndex: "assigned", width: 110 },
-          { title: "已完成人次", dataIndex: "completed", width: 110 },
+          { title: summaryHeader("应完成人次", "本场培训名单中的学员，每人计一次。"), dataIndex: "assigned", width: 130 },
+          { title: summaryHeader("已完成人次", "统计已完成学习的学员。有关联考试时，最近一次考试还须通过。"), dataIndex: "completed", width: 130 },
           {
-            title: "完成率",
+            title: summaryHeader("完成率", "本场已完成人次 ÷ 应完成人次。名单为空时显示“—”。"),
             width: 100,
             render: (_, row) =>
               row.completionRate == null ? "—" : `${row.completionRate}%`,
           },
           {
-            title: "有效学时",
-            width: 110,
+            title: summaryHeader("有效学时", "合计本场学员看视频和阅读材料的有效时间，按小时显示。"),
+            width: 130,
             render: (_, row) => `${formatStudyHours(row.studiedHours)} 小时`,
           },
           {
-            title: "逾期未完成",
+            title: summaryHeader("逾期未完成", "学习逾期未完成或考试逾期未通过，每人只计一次。待批阅不算考试逾期。"),
             width: 120,
             render: (_, row) => (
               <Tag color={row.overdue ? "orange" : "grey"}>
@@ -143,7 +149,13 @@ export function DashboardDetails({
             ),
           },
         ]
-      : [
+      : query.tab === "learnerHours" ? [
+          { title: "学员姓名", dataIndex: "name", width: 200 },
+          { title: "手机号", dataIndex: "phone", width: 180 },
+          { title: summaryHeader("培训场次", "该学员在当前筛选范围内被安排的培训场数。"), dataIndex: "assigned", width: 150 },
+          { title: summaryHeader("有效学时", "合计该学员在这些培训中看视频和阅读材料的有效时间。"), width: 160,
+            render: (_, row) => `${formatStudyHours(row.studiedHours)} 小时` },
+        ] : [
           { title: "姓名", dataIndex: "name", width: 110 },
           { title: "手机号", dataIndex: "phone", width: 140 },
           { title: "部门", dataIndex: "departmentName", width: 140 },
@@ -271,24 +283,39 @@ export function DashboardDetails({
     <Card bodyStyle={{ padding: 0 }} className="min-w-0">
       <div className="flex flex-wrap items-center justify-between gap-3 p-4">
         <div>
-          <strong>
-            {dashboardTabs.find((tab) => tab.key === query.tab)?.label}
-          </strong>
+          <span className="inline-flex items-center gap-1">
+            <strong>
+              {query.tab === "learnerHours" ? "学时汇总 · 按学员" : dashboardTabs.find((tab) => tab.key === query.tab)?.label}
+            </strong>
+            {query.tab === "logs" && (
+              <StatHint
+                label="学习日志"
+                text="学员进入培训并产生学习记录后，就会出现在这里。每位学员每场培训显示一行，汇总学习进度和有效学时。"
+              />
+            )}
+            {query.tab === "incomplete" && (
+              <StatHint
+                label="未完成人员清单"
+                text="列出已开始学习或答题、尚未完成培训的学员。学完全部材料（无材料时确认完成）即完成学习。有关联考试时，最近一次考试还须及格。满意度评估单独统计。"
+              />
+            )}
+          </span>
           <span className="ml-3 text-xs text-slate-500">
             {hideTraining
               ? "当前培训的学员学习及考试完成情况"
+              : query.tab === "learnerHours" ? "每位学员一行，合计多场培训的有效学时"
               : query.tab === "exams"
               ? "每名员工每场培训展示最后一次答卷"
               : "同一员工参加多场培训，分别统计"}
           </span>
         </div>
         <Space wrap>
-        {query.tab === "logs" && (
+        {(query.tab === "logs" || query.tab === "incomplete") && (
           <Button icon={<IconDownload />} loading={exporting} disabled={loading || data.total === 0} onClick={handleExport}>
             导出 Excel
           </Button>
         )}
-        {query.tab !== "trainings" && (
+        {(query.tab === "learners" || query.tab === "exams") && (
           <Select
             aria-label="明细状态"
             value={query.status}
@@ -300,9 +327,7 @@ export function DashboardDetails({
               { value: "ALL", label: "全部状态" },
               { value: "NOT_STARTED", label: "未开始" },
               { value: "IN_PROGRESS", label: "进行中" },
-              ...(query.tab === "incomplete"
-                ? []
-                : [{ value: "COMPLETED", label: "已完成" }]),
+              { value: "COMPLETED", label: "已完成" },
               { value: "OVERDUE", label: "逾期未完成" },
             ]}
           />
@@ -319,10 +344,10 @@ export function DashboardDetails({
         }
         empty="暂无符合条件的数据"
         scroll={{
-          x: columns.reduce(
+          x: `max(100%, ${columns.reduce(
             (sum, column) => sum + Number(column.width || 100),
             0,
-          ),
+          )}px)`,
         }}
         pagination={{
           total: data.total,
@@ -334,13 +359,15 @@ export function DashboardDetails({
           onPageSizeChange: (pageSize) => onChange({ page: 1, pageSize }),
         }}
       />
-      <div className="border-t border-solid border-slate-100 px-4 py-3 text-xs leading-6 text-slate-500">
-        <p className="m-0">
-          <span className="font-medium text-slate-600">完成口径：</span>
-          独立培训完成全部材料；关联考试的培训需同时通过考试（按最后一次答卷）。满意度评估单独统计。
-        </p>
-        <p className="m-0">未完成名单包含未开始及进行中，逾期人员可按状态筛选。</p>
-      </div>
+      {query.tab !== "incomplete" && query.tab !== "logs" && (
+        <div className="border-t border-solid border-slate-100 px-4 py-3 text-xs leading-6 text-slate-500">
+          <p className="m-0">
+            <span className="font-medium text-slate-600">完成口径：</span>
+            独立培训完成全部材料；关联考试的培训需同时通过考试（按最后一次答卷）。满意度评估单独统计。
+          </p>
+          <p className="m-0">未完成人员清单仅统计已开始学习或答题、尚未完成培训的学员。</p>
+        </div>
+      )}
     </Card>
   );
 }
