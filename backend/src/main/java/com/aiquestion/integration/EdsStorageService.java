@@ -10,14 +10,13 @@ import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.client.builder.AwsClientBuilder;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
-import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import java.net.URI;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-/** EDS 的 S3 适配，保留 TLS 证书和主机名校验。 */
+/** EDS 的 S3 适配：按内网部署要求，仅此客户端跳过 TLS 证书和主机名校验。 */
 @Service
 public class EdsStorageService implements ObjectStorage {
   private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(EdsStorageService.class);
@@ -27,7 +26,7 @@ public class EdsStorageService implements ObjectStorage {
 
   @Override public void validateConfiguration() {
     if (blank(properties.endpoint()) || blank(properties.bucket()) || blank(properties.accessKeyId())
-        || blank(properties.secretKey()) || blank(properties.region())) {
+        || blank(properties.secretKey())) {
       throw new BusinessException(ErrorCode.SYSTEM_ERROR, "EDS 存储配置未完成");
     }
     URI endpoint;
@@ -46,13 +45,25 @@ public class EdsStorageService implements ObjectStorage {
     config.setConnectionTimeout(10000);
     config.setSocketTimeout(60000);
     config.setMaxErrorRetry(2);
+    if ("https".equalsIgnoreCase(URI.create(properties.endpoint()).getScheme())) {
+      try {
+        var sslContext = org.apache.http.ssl.SSLContexts.custom()
+            .loadTrustMaterial(null, (chain, authType) -> true).build();
+        config.getApacheHttpClientConfig().setSslSocketFactory(
+            new org.apache.http.conn.ssl.SSLConnectionSocketFactory(
+                sslContext, org.apache.http.conn.ssl.NoopHostnameVerifier.INSTANCE));
+      } catch (java.security.GeneralSecurityException ex) {
+        throw new IllegalStateException("EDS HTTPS 客户端初始化失败", ex);
+      }
+    }
     return AmazonS3ClientBuilder.standard()
         .withPathStyleAccessEnabled(true)
         .withChunkedEncodingDisabled(true)
         .withCredentials(new AWSStaticCredentialsProvider(
             new BasicAWSCredentials(properties.accessKeyId(), properties.secretKey())))
         .withClientConfiguration(config)
-        .withEndpointConfiguration(new AwsClientBuilder.EndpointConfiguration(properties.endpoint(), properties.region()))
+        .withEndpointConfiguration(new AwsClientBuilder.EndpointConfiguration(properties.endpoint(),
+            properties.region() == null ? "" : properties.region()))
         .build();
   }
 
@@ -62,8 +73,7 @@ public class EdsStorageService implements ObjectStorage {
       ObjectMetadata metadata = new ObjectMetadata();
       metadata.setContentLength(file.getSize());
       metadata.setContentType(mime);
-      client.putObject(new PutObjectRequest(properties.bucket(), key, input, metadata)
-          .withCannedAcl(CannedAccessControlList.Private));
+      client.putObject(new PutObjectRequest(properties.bucket(), key, input, metadata));
     } catch (Exception ex) {
       logUploadFailure(ex, key, mime, file.getSize());
       throw new BusinessException(ErrorCode.SYSTEM_ERROR, "EDS 文件上传失败，请检查存储连接和权限");

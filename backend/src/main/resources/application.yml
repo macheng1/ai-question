@@ -99,4 +99,4 @@ storage:
     bucket: ${EDS_BUCKET:}
     access-key-id: ${EDS_ACCESS_KEY_ID:}
     secret-key: ${EDS_SECRET_KEY:}
-    region: ${EDS_REGION:us-east-1}
+    region: ${EDS_REGION:}
