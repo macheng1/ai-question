@@ -64,7 +64,7 @@ export function StatisticsCharts({ data, includeRetake = false }: ChartProps) {
 
   return (
     <div className="grid grid-cols-2 gap-4 ">
-      <div className="min-w-0 col-span-2 lg:col-span-1"><ChartCard title="成绩分布" description={includeRetake ? "按得分占满分的百分比分段，统计所有已交卷次数；柱高表示次数" : "按得分占满分的百分比分段，每人取最后一次已交卷成绩；柱高表示人数"}>
+      <div className="min-w-0 col-span-2 lg:col-span-1"><ChartCard title="成绩分布" description={includeRetake ? "按得分占满分的百分比分段，柱高为已出分次数" : "按最后一次交卷成绩分段，柱高为已出分人数"}>
         {data.scoreDistribution.length ? (
           <VChart
             spec={{

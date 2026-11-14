@@ -6,14 +6,15 @@ import { IconClock, IconList, IconTick, IconArrowRight } from "@douyinfe/semi-ic
 import { ExamResultView, type QuestionGrade } from "./ExamResultView";
 import { useCallback, useEffect, useRef, useState } from "react";
 import "@douyinfe/semi-ui/react19-adapter";
-import { Button, Input, Toast, Modal, Radio, RadioGroup, Checkbox, CheckboxGroup, Progress } from "@douyinfe/semi-ui";
+import { Button, Input, TextArea, Toast, Modal, Radio, RadioGroup, Checkbox, CheckboxGroup, Progress } from "@douyinfe/semi-ui";
 import { ExamTrainingMaterials } from "@/features/trainings/components/ExamTrainingMaterials";
 import { loadExamLearning, type ExamLearning } from "@/features/trainings/components/ExamTrainingVideos";
-import type { ExamPaper } from "../types";
+import { isAnswered, questionLabels, readSavedAnswer, type ExamPaper } from "../types";
 import { loadExamPaper } from "../load-paper";
 import {
   checkPublicExamEligibility,
   getPublicExamProgress,
+  getPublicAttemptResult,
   savePublicAnswer,
   startPublicExam,
   submitPublicAttempt,
@@ -58,22 +59,9 @@ const getResumeIndex = (
   answers: Record<number, string[]>,
 ) => {
   const nextIndex = questions.findIndex(
-    (question) => !(answers[question.id] || []).length,
+    (question) => !isAnswered(answers[question.id]),
   );
   return nextIndex >= 0 ? nextIndex : Math.max(0, questions.length - 1);
-};
-
-/** 将后端保存的答案值转换为答题页面使用的选项 key。 */
-const savedAnswerKeys = (
-  question: ExamPaper["questions"][number],
-  value?: string,
-) => {
-  const values = value ? value.split(",").filter(Boolean) : [];
-  if (question.kind !== "judge") return values;
-  return values.map((item) => {
-    const normalized = item.trim().toUpperCase();
-    return normalized === "TRUE" ? "A" : normalized === "FALSE" ? "B" : item;
-  });
 };
 
 export function ExamRunner({
@@ -160,12 +148,7 @@ export function ExamRunner({
   );
   const [attemptNo, setAttemptNo] = useState<number | null>(null);
   const [startedAt, setStartedAt] = useState<string | undefined>();
-  const [result, setResult] = useState<{
-    score: number;
-    totalScore: number;
-    passScore: number;
-    passed: boolean;
-  } | null>(initialResult || null);
+  const result = initialResult;
   const [remainingAttempts, setRemainingAttempts] = useState(
     initialRemainingAttempts,
   );
@@ -180,6 +163,26 @@ export function ExamRunner({
   const autoSubmittedAttempt = useRef<number | null>(null);
   // 串行保存，避免快速改选时旧答案覆盖新答案；交卷等待已发出的保存结束。
   const answerQueue = useRef<Promise<boolean>>(Promise.resolve(true));
+  const pendingEdits = useRef<Record<number, string[]>>({});
+  const editedThisVisit = useRef(new Set<number>());
+  const persistAnswer = useCallback((questionId: number, selected: string[]) => {
+    if (!attemptId || practice) return Promise.resolve(true);
+    pendingEdits.current[questionId] = selected;
+    const save = answerQueue.current.then(async () => {
+      // A later edit to the same question already has its own save in the queue.
+      if (pendingEdits.current[questionId] !== selected) return true;
+      try {
+        await savePublicAnswer(attemptId, questionId, selected);
+        if (pendingEdits.current[questionId] === selected) delete pendingEdits.current[questionId];
+        return true;
+      } catch (error) {
+        Toast.error(error instanceof Error ? error.message : "答案保存失败");
+        return false;
+      }
+    });
+    answerQueue.current = save;
+    return save;
+  }, [attemptId, practice]);
   const timedOut = !practice && !!startedAt && seconds === 0;
   const [learning, setLearning] = useState<ExamLearning>();
   const [learningError, setLearningError] = useState("");
@@ -209,13 +212,14 @@ export function ExamRunner({
         setName(draft.name || "");
         setPhone(draft.phone || "");
         const draftAnswers = draft.answers || {};
-        setIndex(getResumeIndex(paper.questions, draftAnswers));
+        pendingEdits.current = draft.pendingEdits || {};
+        setIndex(getResumeIndex(initialPaper.questions, draftAnswers));
         setAnswers(draftAnswers);
         setAttemptId(draft.attemptId || null);
         setStartedAt(draft.startedAt);
         setSeconds(
           draft.startedAt
-            ? remainingSeconds(draft.startedAt, paper.duration, paper.endAt)
+            ? remainingSeconds(draft.startedAt, initialPaper.duration, initialPaper.endAt)
             : Math.max(0, Number(draft.seconds) || 0),
         );
         setStage("answer");
@@ -224,7 +228,7 @@ export function ExamRunner({
       /* ignore a damaged local draft */
     }
     setRestored(true);
-  }, [allowRestore, draftKey, initialAttemptId, paper.duration, paper.endAt, paper.questions]);
+  }, [allowRestore, draftKey, initialAttemptId, initialPaper]);
   useEffect(() => {
     if (practice || initialStage !== "info" || learningPage) return;
     try {
@@ -269,38 +273,38 @@ export function ExamRunner({
       !/^1\d{10}$/.test(phone)
     )
       return;
+    let active = true;
     getPublicExamProgress(paper.id, { name, phone })
-      .then((progress) => {
-        // 只恢复 URL 指定的记录，避免固定组卷和随机组卷串用其他答题记录。
-        if (!progress.inProgress || progress.attemptId !== initialAttemptId)
+      .then(async progress => {
+        if (!active) return;
+        if (!progress.inProgress || progress.attemptId !== initialAttemptId) {
+          await getPublicAttemptResult(initialAttemptId);
+          if (active) window.location.replace(withTraining(`/kaoshi/${paper.id}/result?attemptId=${initialAttemptId}`));
           return;
+        }
         const restoredAnswers = Object.fromEntries(
-          (progress.answers || []).map((item) => [
+          (progress.answers || []).map(item => [
             item.question_id,
-            savedAnswerKeys(
-              paper.questions.find((question) => question.id === item.question_id) || paper.questions[0],
-              item.answer_text,
-            ),
+            readSavedAnswer(initialPaper.questions.find(question => question.id === item.question_id)?.kind, item.answer_text),
           ]),
         );
+        for (const [id, values] of Object.entries(pendingEdits.current)) {
+          restoredAnswers[Number(id)] = values;
+          if (!editedThisVisit.current.has(Number(id))) void persistAnswer(Number(id), values);
+        }
         setStartedAt(progress.startedAt);
-        setSeconds(remainingSeconds(progress.startedAt, paper.duration, paper.endAt));
-        setAnswers(restoredAnswers);
-        setIndex(getResumeIndex(paper.questions, restoredAnswers));
+        setSeconds(remainingSeconds(progress.startedAt, initialPaper.duration, initialPaper.endAt));
+        setAnswers(current => {
+          for (const id of editedThisVisit.current) restoredAnswers[id] = current[id];
+          return restoredAnswers;
+        });
+        if (!editedThisVisit.current.size) setIndex(getResumeIndex(initialPaper.questions, restoredAnswers));
       })
       .catch(() => {
-        /* URL 已带 attemptId，恢复失败时保留当前答题页 */
+        /* 保留本标签页的草稿，网络恢复后可继续保存。 */
       });
-  }, [initialAttemptId, initialStage, name, paper.duration, paper.id, paper.questions, phone, practice]);
-
-  useEffect(() => {
-    if (practice || initialStage !== "answer" || !initialAttemptId) return;
-    loadExamPaper(String(paper.id), { attemptId: initialAttemptId })
-      .then((runtimePaper) => setActiveQuestions(runtimePaper.questions))
-      .catch(() => {
-        /* 首屏已经使用随机快照；加载失败时保留当前页面，不替换题目数据 */
-      });
-  }, [initialAttemptId, initialStage, paper.id, practice]);
+    return () => { active = false; };
+  }, [initialAttemptId, initialStage, name, initialPaper, paper.id, phone, practice, persistAnswer]);
 
   useEffect(() => {
     if (practice || initialStage !== "answer" || attemptId) return;
@@ -313,8 +317,8 @@ export function ExamRunner({
         const restoredAnswers = Object.fromEntries(
           (started.answers || []).map((item) => [
             item.question_id,
-            savedAnswerKeys(
-              questions.find((question) => question.id === item.question_id) || questions[0],
+            readSavedAnswer(
+              questions.find(question => question.id === item.question_id)?.kind,
               item.answer_text,
             ),
           ]),
@@ -325,16 +329,8 @@ export function ExamRunner({
         setSeconds(remainingSeconds(started.startedAt, paper.duration, paper.endAt));
         setAnswers(restoredAnswers);
         setIndex(getResumeIndex(questions, restoredAnswers));
-        if (started.status === "SUBMITTED") {
-          setResult({
-            score: Number(started.score || 0),
-            totalScore: Number(started.totalScore || paper.totalScore),
-            passScore: Number(started.passScore || paper.passScore),
-            passed: Boolean(started.passed),
-          });
-          setSubmitted(true);
-          setRemainingAttempts(started.remainingAttempts || 0);
-          setStage("result");
+        if (started.pendingReview || started.status === "PENDING_REVIEW" || started.status === "SUBMITTED") {
+          window.location.replace(withTraining(`/kaoshi/${paper.id}/result?attemptId=${started.attemptId}`));
         }
       })
       .catch(() => {
@@ -353,6 +349,7 @@ export function ExamRunner({
         startedAt,
         index,
         answers,
+        pendingEdits: pendingEdits.current,
         seconds,
         submitted: false,
       }),
@@ -403,20 +400,6 @@ export function ExamRunner({
     window.addEventListener("focus", refresh);
     return () => { active = false; window.clearInterval(timer); window.removeEventListener("focus", refresh); };
   }, [practice, stage, submitted, attemptId, paper.id]);
-  const persistAnswer = (questionId: number, selected: string[]) => {
-    if (!attemptId || practice) return Promise.resolve(true);
-    const pending = answerQueue.current.then(async () => {
-      try {
-        await savePublicAnswer(attemptId, questionId, selected);
-        return true;
-      } catch (error) {
-        Toast.error(error instanceof Error ? error.message : "答案保存失败");
-        return false;
-      }
-    });
-    answerQueue.current = pending;
-    return pending;
-  };
   const updateAnswer = (selected: string[]) => {
     if (submitting || navigating || timedOut) return;
     // 切回后台页面到下一次计时刷新之间，也不能写入超时后的改选。
@@ -424,6 +407,7 @@ export function ExamRunner({
       setSeconds(0);
       return;
     }
+    editedThisVisit.current.add(q.id);
     setAnswers(current => ({ ...current, [q.id]: selected }));
     void persistAnswer(q.id, selected);
   };
@@ -484,6 +468,10 @@ export function ExamRunner({
         name,
         phone,
       });
+      if (eligibility.pendingReview && eligibility.pendingAttemptId) {
+        window.location.assign(withTraining(`/kaoshi/${paper.id}/result?attemptId=${eligibility.pendingAttemptId}`));
+        return;
+      }
       setRemainingAttempts(eligibility.remainingAttempts);
       // 续考和已用完次数的成绩跳转维持原逻辑；新答题实例必须先完成全部关联视频。
       if (eligibility.canStart && !eligibility.inProgress) {
@@ -505,8 +493,8 @@ export function ExamRunner({
       const restoredAnswers = Object.fromEntries(
         (started.answers || []).map((item) => [
           item.question_id,
-          savedAnswerKeys(
-            questions.find((question) => question.id === item.question_id) || questions[0],
+          readSavedAnswer(
+              questions.find(question => question.id === item.question_id)?.kind,
             item.answer_text,
           ),
         ]),
@@ -517,13 +505,7 @@ export function ExamRunner({
       setSeconds(remainingSeconds(started.startedAt, paper.duration, paper.endAt));
       setAnswers(restoredAnswers);
       setIndex(getResumeIndex(questions, restoredAnswers));
-      if (started.status === "SUBMITTED") {
-        setResult({
-          score: Number(started.score || 0),
-          totalScore: Number(started.totalScore || paper.totalScore),
-          passScore: Number(started.passScore || paper.passScore),
-          passed: Boolean(started.passed),
-        });
+      if (started.pendingReview || started.status === "PENDING_REVIEW" || started.status === "SUBMITTED") {
         setSubmitted(true);
         setRemainingAttempts(started.remainingAttempts || 0);
         sessionStorage.removeItem(draftKey);
@@ -565,7 +547,7 @@ export function ExamRunner({
       return;
     }
     const unansweredIndex = paper.questions.findIndex(
-      (question) => !(answers[question.id] || []).length,
+      (question) => !isAnswered(answers[question.id]),
     );
     if (unansweredIndex >= 0 && (practice || seconds > 0)) {
       setIndex(unansweredIndex);
@@ -573,22 +555,18 @@ export function ExamRunner({
       return;
     }
     if ((practice || seconds > 0) && !(await persistAnswer(q.id, answers[q.id] || []))) return;
-    if (!practice)
+    if (!practice) {
       try {
         if (!attemptId) throw new Error("考试记录不存在，请重新开始考试");
-        const submittedResult = await submitPublicAttempt(attemptId);
-        setResult(submittedResult);
-        setRemainingAttempts(submittedResult.remainingAttempts || 0);
-        if (!practice) {
-          window.location.assign(
-            withTraining(`/kaoshi/${paper.id}/result?attemptId=${attemptId}`),
-          );
-          return;
-        }
+        await submitPublicAttempt(attemptId);
+        setSubmitted(true);
+        sessionStorage.removeItem(draftKey);
+        window.location.assign(withTraining(`/kaoshi/${paper.id}/result?attemptId=${attemptId}`));
       } catch (error) {
-      Toast.error(error instanceof Error ? error.message : "提交失败");
-        return;
+        Toast.error(error instanceof Error ? error.message : "提交失败");
       }
+      return;
+    }
     setSubmitted(true);
     setStage("result");
     sessionStorage.removeItem(draftKey);
@@ -625,7 +603,7 @@ export function ExamRunner({
     const saved = (practice || seconds > 0) ? await persistAnswer(q.id, answers[q.id] || []) : true;
     setNavigating(false);
     if (!saved) return;
-    const missing = paper.questions.findIndex(question => !(answers[question.id] || []).length);
+    const missing = paper.questions.findIndex(question => !isAnswered(answers[question.id]));
     if (missing >= 0 && (practice || seconds > 0)) {
       setIndex(missing); setCardOpen(false);
       Toast.warning(`第 ${missing + 1} 题未作答，请先完成`); return;
@@ -670,10 +648,10 @@ export function ExamRunner({
     finally { setNavigating(false); }
   };
   const goNext = async () => {
-    if (!picked.length) { Toast.warning("请先完成本题后再进入下一题"); return; }
+    if (!isAnswered(picked)) { Toast.warning("请先完成本题后再进入下一题"); return; }
     await moveTo(Math.min(paper.questions.length - 1, index + 1));
   };
-  const answeredCount = paper.questions.filter(question => (answers[question.id] || []).length).length;
+  const answeredCount = paper.questions.filter(question => isAnswered(answers[question.id])).length;
   const optionBody = (option: (typeof options)[number]) => <span className="h5-option-body"><span className="h5-option-key">{option.key}</span><span>{option.text}</span></span>;
   const answerCard = <div className="h5-answer-card-content">
     <div className="h5-answer-card-summary">
@@ -687,7 +665,7 @@ export function ExamRunner({
     </div>
     <div className="h5-card-grid">
       {paper.questions.map((question, i) => {
-        const answered = (answers[question.id] || []).length > 0;
+        const answered = isAnswered(answers[question.id]);
         return <Button key={question.id} aria-current={i === index ? "step" : undefined}
           aria-label={`第 ${i + 1} 题，${answered ? "已答" : "未答"}${i === index ? "，当前题" : ""}`}
           theme={answered ? "light" : "borderless"}
@@ -709,10 +687,10 @@ export function ExamRunner({
     </div>}
     <div className="h5-exam-toolbar"><div className={`h5-timer ${seconds < 60 ? "urgent" : ""}`}><IconClock /><strong>{time}</strong><small>{timedOut ? "答题已结束" : "剩余时间"}</small></div><Button aria-label="打开答题卡" theme="borderless" className="h5-link" icon={<IconList />} onClick={() => setCardOpen(true)}>已答 {answeredCount}/{paper.questions.length}</Button></div>
     <Progress percent={(index + 1) / Math.max(1, paper.questions.length) * 100} showInfo={false} stroke="#60af91" style={{ height: 3 }} />
-    <div className="h5-content h5-answer-content"><div className="h5-question-meta"><span className="h5-tag">{q.kind === "multi" ? "多选题" : q.kind === "judge" ? "判断题" : "单选题"}</span><span>本题 {q.score || 0} 分</span><b>{String(index + 1).padStart(2, "0")} <small>/ {String(paper.questions.length).padStart(2, "0")}</small></b></div>
-      <h1 className="h5-question" id="exam-question-title">{q.title}</h1><p className="h5-muted">{q.kind === "multi" ? "请选择所有符合题意的选项" : "请选择一个正确答案"}</p>
-      {q.kind === "multi" ? <CheckboxGroup aria-labelledby="exam-question-title" className="h5-answer-options" value={picked} disabled={timedOut || navigating || submitting} onChange={values => updateAnswer(values.map(String))}>{options.map(option => <Checkbox key={option.key} value={option.key}>{optionBody(option)}</Checkbox>)}</CheckboxGroup> : <RadioGroup aria-labelledby="exam-question-title" className="h5-answer-options" value={picked[0]} disabled={timedOut || navigating || submitting} onChange={e => choose(String(e.target.value))}>{options.map(option => <Radio key={option.key} value={option.key}>{optionBody(option)}</Radio>)}</RadioGroup>}
-      <p className="h5-save"><IconTick />选择答案后自动保存，请保持网络连接</p>
+    <div className="h5-content h5-answer-content"><div className="h5-question-meta"><span className="h5-tag">{questionLabels[q.kind]}</span><span>本题 {q.score || 0} 分</span><b>{String(index + 1).padStart(2, "0")} <small>/ {String(paper.questions.length).padStart(2, "0")}</small></b></div>
+      <h1 className="h5-question" id="exam-question-title">{q.title}</h1><p className="h5-muted">{q.kind === "short" ? "请在下方输入答案" : q.kind === "multi" ? "请选择所有符合题意的选项" : "请选择一个正确答案"}</p>
+      {q.kind === "short" ? <TextArea aria-labelledby="exam-question-title" rows={7} maxLength={10000} value={picked[0] || ""} disabled={timedOut || navigating || submitting} onChange={value => updateAnswer(value ? [value] : [])} /> : q.kind === "multi" ? <CheckboxGroup aria-labelledby="exam-question-title" className="h5-answer-options" value={picked} disabled={timedOut || navigating || submitting} onChange={values => updateAnswer(values.map(String))}>{options.map(option => <Checkbox key={option.key} value={option.key}>{optionBody(option)}</Checkbox>)}</CheckboxGroup> : <RadioGroup aria-labelledby="exam-question-title" className="h5-answer-options" value={picked[0]} disabled={timedOut || navigating || submitting} onChange={e => choose(String(e.target.value))}>{options.map(option => <Radio key={option.key} value={option.key}>{optionBody(option)}</Radio>)}</RadioGroup>}
+      <p className="h5-save"><IconTick />作答后自动保存，请保持网络连接</p>
     </div>
     <div className="h5-bottom"><div className="h5-actions"><Button style={{ flex: 1 }} size="large" className="h5-secondary" disabled={timedOut || index === 0 || navigating || submitting} onClick={() => moveTo(Math.max(0, index - 1))}>上一题</Button>{index < paper.questions.length - 1 && (practice || seconds > 0) ? <Button style={{ flex: 1 }} size="large" theme="solid" className="h5-primary" loading={navigating} disabled={submitting} onClick={goNext}>下一题 <IconArrowRight /></Button> : <Button style={{ flex: 1 }} size="large" theme="solid" className="h5-primary" loading={submitting} disabled={navigating} onClick={requestSubmit}>{timedOut ? (submitting ? "正在自动交卷…" : "重新提交") : "提交答卷"}</Button>}</div><Button theme="borderless" className="h5-link" onClick={() => setCardOpen(true)}>查看答题卡 · 检查并交卷</Button></div>
     </div>

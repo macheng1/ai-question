@@ -13,3 +13,10 @@ test('active learning and exam entry keep their existing behavior', () => {
   assert.equal(learningHref({ id: 69, learningStatus: 'IN_PROGRESS' }), '/training/69?resume=1');
   assert.equal(learningHref({ id: 69, learningStatus: 'COMPLETED', examStatus: 'READY' }), '/training/69?exam=1');
 });
+test('pending review blocks exam entry by either status or pending flag', () => {
+  for (const details of [{examStatus:'PENDING_REVIEW'}, {examStatus:'READY', pendingReview:true}]) {
+    const row = { id: 69, learningStatus:'COMPLETED', ...details };
+    assert.equal(learningAction(row), '回看培训');
+    assert.equal(learningHref(row), '/training/69?review=1');
+  }
+});

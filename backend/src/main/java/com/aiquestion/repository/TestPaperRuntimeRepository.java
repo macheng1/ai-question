@@ -15,7 +15,7 @@ public interface TestPaperRuntimeRepository {
   int insertRandomBank(@Param("paperId") Long paperId, @Param("bankId") Long bankId);
   int deleteRandomBank(@Param("paperId") Long paperId, @Param("bankId") Long bankId);
   int deleteRandomConfig(@Param("paperId") Long paperId);
-  int insertRandomConfig(@Param("paperId") Long paperId, @Param("bankId") Long bankId, @Param("singleCount") int singleCount, @Param("singleScore") java.math.BigDecimal singleScore, @Param("multipleCount") int multipleCount, @Param("multipleScore") java.math.BigDecimal multipleScore, @Param("trueFalseCount") int trueFalseCount, @Param("trueFalseScore") java.math.BigDecimal trueFalseScore);
+  int insertRandomConfig(@Param("paperId") Long paperId, @Param("bankId") Long bankId, @Param("singleCount") int singleCount, @Param("singleScore") java.math.BigDecimal singleScore, @Param("multipleCount") int multipleCount, @Param("multipleScore") java.math.BigDecimal multipleScore, @Param("trueFalseCount") int trueFalseCount, @Param("trueFalseScore") java.math.BigDecimal trueFalseScore, @Param("shortAnswerCount") int shortAnswerCount, @Param("shortAnswerScore") BigDecimal shortAnswerScore);
   List<BigDecimal> sumRandomScores(@Param("paperId") Long paperId);
   List<Integer> sumRandomQuestionCount(@Param("paperId") Long paperId);
   List<Integer> countConfiguredBank(@Param("bankId") Long bankId);

@@ -19,6 +19,8 @@ import { getLearnerTrainings, type LearnerTraining } from "./api";
 import {
   learningLabels,
   examLabels,
+  learnerExamStatus,
+  isPendingReview,
   formatTime,
   formatDuration,
   learningAction,
@@ -65,7 +67,7 @@ export function TrainingList({
       (!exams || row.assessmentId) &&
       `${row.name} ${row.examName || ""}`.includes(keyword.trim()) &&
       (!requirement || row.requirementType === requirement) &&
-      (!status || (exams ? row.examStatus : row.learningStatus) === status),
+      (!status || (exams ? learnerExamStatus(row) : row.learningStatus) === status),
   );
   return (
     <div className="flex flex-col gap-5">
@@ -160,8 +162,8 @@ export function TrainingList({
               { title: "有效学习时长", width: 140, render: (_, row) => formatDuration(row.studiedSeconds) },
               { title: "关联考试", width: 230, render: (_, row) => row.assessmentId ? <div>
                 <p className="mb-2 [overflow-wrap:anywhere] text-sm">{row.examName}</p>
-                <Tag color={row.examStatus === "PASSED" ? "green" : row.examStatus === "FAILED" ? "red" : "blue"}>{examLabels[row.examStatus || ""] || "待考试"}</Tag>
-                <p className="mt-1 text-xs text-slate-500">已考 {row.attemptCount} 次{row.score != null ? ` · 成绩 ${row.score}/${row.totalScore}` : ""}</p>
+                <Tag color={row.examStatus === "PASSED" ? "green" : row.examStatus === "FAILED" ? "red" : "blue"}>{examLabels[learnerExamStatus(row)] || "待考试"}</Tag>
+                <p className="mt-1 text-xs text-slate-500">已考 {row.attemptCount} 次{!isPendingReview(row) && row.score != null ? ` · 成绩 ${row.score}/${row.totalScore}` : ""}</p>
               </div> : "—" },
               { title: "操作", width: 140, render: (_, row) =>
                 <Button theme="borderless" onClick={() => router.push(`/learner/trainings/${row.id}`)}>查看详情</Button>
@@ -188,13 +190,13 @@ export function TrainingList({
                 <p>{formatTime(row.examStartAt)}</p>
                 <p className="text-slate-500">至 {formatTime(row.examEndAt)}</p>
               </div> },
-              { title: "考试状态", width: 140, render: (_, row) => <Tag color={row.examStatus === "PASSED" ? "green" : row.examStatus === "FAILED" ? "red" : "blue"}>{examLabels[row.examStatus || ""] || "待考试"}</Tag> },
+              { title: "考试状态", width: 140, render: (_, row) => <Tag color={row.examStatus === "PASSED" ? "green" : row.examStatus === "FAILED" ? "red" : "blue"}>{examLabels[learnerExamStatus(row)] || "待考试"}</Tag> },
               { title: "已考次数", width: 100, render: (_, row) => `${row.attemptCount} 次` },
-              { title: "成绩", width: 100, render: (_, row) => row.score == null ? "—" : `${row.score}/${row.totalScore}` },
+              { title: "成绩", width: 100, render: (_, row) => isPendingReview(row) || row.score == null ? "—" : `${row.score}/${row.totalScore}` },
               { title: "操作", width: 230, render: (_, row) => <Space wrap>
                 <Button theme="borderless" onClick={() => router.push(learningHref(row))}>{learningAction(row)}</Button>
                 <Button theme="borderless" onClick={() => router.push(`/learner/trainings/${row.id}`)}>查看详情</Button>
-                {row.canRetake && <Button theme="borderless" onClick={() => router.push(`/training/${row.id}?exam=1`)}>再次考试</Button>}
+                {!isPendingReview(row) && row.canRetake && <Button theme="borderless" onClick={() => router.push(`/training/${row.id}?exam=1`)}>再次考试</Button>}
               </Space> },
             ]}
           />

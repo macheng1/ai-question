@@ -68,10 +68,10 @@ export default function AssessmentStatisticsPage() {
   const cards = useMemo(
     () => [
       [appliedRetake ? "实考次数" : "实考人数", `${Number(overview?.participantCount || 0)} ${appliedRetake ? "次" : "人"}`, "blue"],
-      ["平均分", `${Number(overview?.averageScore || 0).toFixed(0)} 分`, "purple"],
-      ["及格率", `${Number(overview?.passRate || 0).toFixed(0)}%`, "green"],
-      ["最高分", `${Number(overview?.highestScore || 0).toFixed(0)} 分`, "orange"],
-      ["最低分", `${Number(overview?.lowestScore || 0).toFixed(0)} 分`, "red"],
+      ["平均分", overview?.averageScore == null ? "—" : `${Number(overview.averageScore).toFixed(1)} 分`, "purple"],
+      ["及格率", overview?.passRate == null ? "—" : `${Number(overview.passRate).toFixed(1)}%`, "green"],
+      ["最高分", overview?.highestScore == null ? "—" : `${Number(overview.highestScore).toFixed(1)} 分`, "orange"],
+      ["最低分", overview?.lowestScore == null ? "—" : `${Number(overview.lowestScore).toFixed(1)} 分`, "red"],
       ["平均用时", durationText(overview?.averageDurationSeconds), "teal"],
     ],
     [appliedRetake, overview],
@@ -88,8 +88,8 @@ export default function AssessmentStatisticsPage() {
                   <ul className="mt-2 list-disc space-y-1 pl-4">
                     <li>只统计本培训关联的考试，不合并使用同一试卷的其他考试。</li>
                     <li>应考按已保存的名单计算；至少交卷一次算已考，重考不重复计人数。尚未交卷算未考。</li>
-                    <li>默认每人取最后一次已交卷成绩；勾选“包含重考记录”后，成绩和图表按全部已交卷次数统计。正在答题的记录不计入。</li>
-                    <li>平均分、最高分、最低分按上述成绩计算；及格率为及格记录数 ÷ 统计记录数，不是除以应考人数。</li>
+                    <li>默认每人取最后一次交卷。勾选“包含重考记录”后按全部交卷次数统计。待批阅计入交卷人数、次数和用时。</li>
+                    <li>分数和题目分析只统计已出分的答卷。及格率为及格记录数 ÷ 已出分记录数。</li>
                     <li>平均用时为开始答题至交卷的平均时长。成绩分布按得分占满分的百分比分段。</li>
                     <li>题型正确率和易错题按答对题数计算，未答按错误计；随机试卷只统计实际抽到的题目。</li>
                     <li>部门筛选只影响应考名单及其人数，状态筛选只影响名单列表；不影响下方成绩和图表。点击“刷新数据”更新统计和名单。</li>

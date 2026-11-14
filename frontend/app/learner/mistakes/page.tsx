@@ -3,7 +3,8 @@ import { formatQuestionOption } from "@/lib/question-display";
 import { useEffect, useState } from "react";
 import { Banner, Card, Empty, Spin, Typography } from "@douyinfe/semi-ui";
 import { getMistakes, type Mistake } from "@/features/learner/api";
-const answerLabel = (answer: string) =>
+const answerLabel = (answer: string, kind?: string) =>
+  kind === "SHORT_ANSWER" ? answer || "未作答" :
   answer === "TRUE" ? "正确" : answer === "FALSE" ? "错误" : answer || "未作答";
 
 export default function Mistakes() {
@@ -41,10 +42,10 @@ export default function Mistakes() {
                 </li>
               ))}
             </ul>
-            <p className="mb-2 text-red-600">
-              我的答案：{answerLabel(row.userAnswer)}
+            <p className="mb-2 whitespace-pre-wrap [overflow-wrap:anywhere] text-red-600">
+              我的答案：{answerLabel(row.userAnswer, row.questionType)}
             </p>
-            <p>正确答案：{answerLabel(row.correctAnswer)}</p>
+            <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{row.questionType === "SHORT_ANSWER" ? "参考答案" : "正确答案"}：{answerLabel(row.correctAnswer, row.questionType)}</p>
             {row.analysis && (
               <p className="mt-3 whitespace-pre-wrap [overflow-wrap:anywhere] text-slate-500">
                 解析：{row.analysis}

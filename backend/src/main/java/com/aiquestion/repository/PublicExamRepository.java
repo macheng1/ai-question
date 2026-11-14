@@ -8,6 +8,8 @@ import org.apache.ibatis.annotations.Param;
 /** Persistence operations for PublicExamService. SQL is defined in the matching mapper XML. */
 @Mapper
 public interface PublicExamRepository {
+  Long pendingReviewId(@Param("taskId") long taskId, @Param("participantId") long participantId);
+  int submitForReview(@Param("attemptId") long attemptId);
   List<Long> findOpenTaskAttempts(@Param("taskId") Long taskId);
   List<Map<String, Object>> findAttemptStatus(@Param("attemptId") Long attemptId, @Param("taskId") Long taskId);
   List<Map<String, Object>> findAttemptCandidate(@Param("attemptId") Long attemptId, @Param("taskId") Long taskId);
@@ -27,7 +29,7 @@ public interface PublicExamRepository {
   List<Map<String, Object>> findCandidateActiveAttempt(@Param("taskId") Long taskId, @Param("candidateName") String candidateName, @Param("phone") String phone);
   List<Map<String, Object>> findProgressAnswers(@Param("attemptId") Long attemptId);
   List<Map<String, Object>> findQuestionForAnswer(@Param("attemptId") Long attemptId, @Param("questionId") Long questionId);
-  int upsertAnswer(@Param("attemptId") Long attemptId, @Param("questionId") Long questionId, @Param("answer") String answer, @Param("correctAnswer") String correctAnswer, @Param("correct") boolean correct, @Param("score") java.math.BigDecimal score);
+  int upsertAnswer(@Param("attemptId") Long attemptId, @Param("questionId") Long questionId, @Param("answer") String answer, @Param("correctAnswer") String correctAnswer, @Param("correct") Boolean correct, @Param("score") java.math.BigDecimal score);
   List<Map<String, Object>> findAttemptForSubmission(@Param("attemptId") Long attemptId);
   List<Integer> countAttemptQuestions(@Param("attemptId") Long attemptId);
   List<Integer> countAnsweredQuestions(@Param("attemptId") Long attemptId);

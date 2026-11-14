@@ -7,7 +7,8 @@ export function startPublicExam(
   return apiClient.post<{
     attemptId: number;
     startedAt: string;
-    status?: "IN_PROGRESS" | "SUBMITTED";
+    status?: "IN_PROGRESS" | "PENDING_REVIEW" | "SUBMITTED";
+    pendingReview?: boolean;
     submittedAt?: string;
     attemptNo?: number;
     maxAttempts?: number;
@@ -32,6 +33,8 @@ export async function checkPublicExamEligibility(
     remainingAttempts: number;
     inProgress: boolean;
     canStart: boolean;
+    pendingReview?: boolean;
+    pendingAttemptId?: number;
   }>(`/public/exams/${id}/eligibility`, data);
 }
 export function getPublicExamProgress(
@@ -57,10 +60,12 @@ export function savePublicAnswer(
 }
 export function submitPublicAttempt(attemptId: number) {
   return apiClient.post<{
-    score: number;
+    pendingReview?: boolean;
+    status?: string;
+    score?: number | null;
     totalScore: number;
     passScore: number;
-    passed: boolean;
+    passed?: boolean | null;
     attemptNo?: number;
     maxAttempts?: number;
     remainingAttempts?: number;
@@ -75,7 +80,7 @@ export type ProfileExamRecord = {
   totalScore: number;
   passScore: number;
   passed?: boolean;
-  status: "SUBMITTED" | "IN_PROGRESS";
+  status: "SUBMITTED" | "IN_PROGRESS" | "PENDING_REVIEW";
   attemptNo: number;
   startedAt?: string;
   submittedAt?: string;
@@ -103,10 +108,12 @@ export function getPublicAttemptResult(attemptId: string | number) {
     attemptId: number;
     taskId: number;
     attemptNo: number;
-    score: number;
+    pendingReview?: boolean;
+    status?: string;
+    score?: number | null;
     totalScore: number;
     passScore: number;
-    passed: boolean;
+    passed?: boolean | null;
     startedAt?: string;
     submittedAt?: string;
     candidateName?: string;

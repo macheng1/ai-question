@@ -9,7 +9,7 @@
     SELECT paper_id,training_managed FROM assessment_task WHERE id=#{taskId} AND created_by=#{ownerId}
   </select>
   <select id="findSubmittedEmployees" resultType="java.lang.Long">
-    SELECT DISTINCT p.employee_id FROM assessment_attempt a JOIN assessment_participant p ON p.id=a.participant_id AND p.task_id=a.task_id JOIN assessment_task t ON t.id=a.task_id JOIN organization_employee e ON e.id=p.employee_id AND e.created_by=t.created_by WHERE t.created_by=#{ownerId} AND t.paper_id=#{paperId} AND a.status='SUBMITTED'
+    SELECT DISTINCT p.employee_id FROM assessment_attempt a JOIN assessment_participant p ON p.id=a.participant_id AND p.task_id=a.task_id JOIN assessment_task t ON t.id=a.task_id JOIN organization_employee e ON e.id=p.employee_id AND e.created_by=t.created_by WHERE t.created_by=#{ownerId} AND t.paper_id=#{paperId} AND a.status IN ('SUBMITTED','PENDING_REVIEW')
   </select>
   <select id="findOwnedTraining" resultType="java.lang.Long">
     SELECT id FROM training WHERE id=#{trainingId} AND created_by=#{ownerId}

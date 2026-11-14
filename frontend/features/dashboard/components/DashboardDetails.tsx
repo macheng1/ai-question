@@ -28,6 +28,7 @@ const labels: Record<string, string> = {
   COMPLETED: "已完成",
   PASSED: "已通过",
   FAILED: "未通过",
+  PENDING_REVIEW: "待批阅",
   NONE: "无考试",
 };
 const colors = {
@@ -36,6 +37,7 @@ const colors = {
   COMPLETED: "green",
   PASSED: "green",
   FAILED: "red",
+  PENDING_REVIEW: "orange",
   NONE: "grey",
 } as const;
 function statusTag(status?: string) {

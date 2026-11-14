@@ -10,6 +10,11 @@ public final class QuestionAnswerRules {
   private QuestionAnswerRules() {}
 
   public static String validate(String type, String answer, List<OptionRequest> options) {
+    if ("SHORT_ANSWER".equals(type)) {
+      if (answer == null || answer.isBlank()) fail("请填写问答题参考答案");
+      if (options != null && !options.isEmpty()) fail("问答题不能包含选项");
+      return answer;
+    }
     String normalized =
         Objects.toString(answer, "").replaceAll("[，、,\\s]+", "").toUpperCase(Locale.ROOT);
     if ("TRUE_FALSE".equals(type)) {

@@ -25,6 +25,8 @@ import {
   formatDuration,
   learningLabels,
   examLabels,
+  learnerExamStatus,
+  isPendingReview,
   learningAction,
   learningHref,
 } from "@/features/learner/status";
@@ -102,7 +104,7 @@ export default function TrainingDetail({
                     {row.requirementType === "ELECTIVE" ? "选修" : "必修"}
                   </Tag>
                   {row.assessmentId && (
-                    <Tag>{examLabels[row.examStatus || ""]}</Tag>
+                    <Tag>{examLabels[learnerExamStatus(row)]}</Tag>
                   )}
                 </Space>
                 {row.description && (
@@ -150,7 +152,7 @@ export default function TrainingDetail({
                   >
                     {learningAction(row)}
                   </Button>
-                  {row.canRetake && (
+                  {!isPendingReview(row) && row.canRetake && (
                     <Button onClick={() => router.push(`/training/${row.id}?exam=1`)}>
                       再次考试
                     </Button>
@@ -231,7 +233,7 @@ export default function TrainingDetail({
                   <div className="grid gap-4 rounded-lg bg-[var(--semi-color-fill-0)] p-4 sm:grid-cols-2 xl:grid-cols-4">
                     <DetailValue
                       label="考试状态"
-                      value={examLabels[row.examStatus || ""] || "—"}
+                      value={examLabels[learnerExamStatus(row)] || "—"}
                     />
                     <DetailValue
                       label="开始时间"
@@ -261,7 +263,7 @@ export default function TrainingDetail({
                         title: "结果",
                         width: 110,
                         render: (_, a) =>
-                          a.status !== "SUBMITTED"
+                          isPendingReview(a) ? "待批阅" : a.status !== "SUBMITTED"
                             ? "答题中"
                             : a.passed == null
                               ? "暂未公布"
@@ -273,7 +275,7 @@ export default function TrainingDetail({
                         title: "成绩",
                         width: 100,
                         render: (_, a) =>
-                          a.score == null ? "—" : `${a.score}/${a.totalScore}`,
+                          isPendingReview(a) || a.score == null ? "—" : `${a.score}/${a.totalScore}`,
                       },
                       {
                         title: "开始时间",

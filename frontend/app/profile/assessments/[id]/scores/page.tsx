@@ -21,7 +21,8 @@ import { AssessmentRoster } from "@/features/assessments/components/AssessmentRo
 
 type Statistics = {
   totalCount: number;
-  averageScore: number;
+  averageScore?: number | null;
+  gradedCount: number;
   passedCount: number;
   totalScore: number;
 };
@@ -32,9 +33,9 @@ type RecordItem = {
   phone?: string;
   departmentId?: number;
   departmentName?: string;
-  score: number;
+  score?: number | null;
   totalScore: number;
-  passed: boolean;
+  passed?: boolean | null;
   attemptNo: number;
   startedAt?: string;
   submittedAt?: string;
@@ -61,6 +62,7 @@ const statusMeta = (record: RecordItem) => {
       ? { label: "已通过", color: "green" as const }
       : { label: "未通过", color: "red" as const };
   }
+  if (record.status === "PENDING_REVIEW") return { label: "待批阅", color: "orange" as const };
   if (record.status === "IN_PROGRESS") {
     return { label: "答题中", color: "blue" as const };
   }
@@ -76,6 +78,7 @@ export default function AssessmentScoresPage() {
   const [task, setTask] = useState<Assessment | null>(null);
   const [stats, setStats] = useState<Statistics>({
     totalCount: 0,
+    gradedCount: 0,
     averageScore: 0,
     passedCount: 0,
     totalScore: 0,
@@ -112,8 +115,8 @@ export default function AssessmentScoresPage() {
         </div>
       </ProfileShell>
     );
-  const passRate = stats.totalCount
-    ? Math.round((stats.passedCount / stats.totalCount) * 100)
+  const passRate = stats.gradedCount
+    ? Math.round((stats.passedCount / stats.gradedCount) * 100)
     : 0;
 
   const departments = Array.from(new Map(records.filter(r => r.departmentId).map(r => [r.departmentId!, r.departmentName || "未关联部门"])).entries());
@@ -142,14 +145,15 @@ export default function AssessmentScoresPage() {
               <span className="text-sm text-slate-500">
                 平均分{" "}
                 <b className="text-2xl text-slate-800">
-                  {Number(stats.averageScore || 0).toFixed(0)}
+                  {stats.averageScore == null ? "—" : Number(stats.averageScore).toFixed(1)}
                 </b>
               </span>
               <span className="text-sm text-slate-500">
-                及格人数{" "}
+                {includeRetake ? "及格次数" : "及格人数"}{" "}
                 <b className="text-xl text-emerald-600">{stats.passedCount}</b>{" "}
-                / {stats.totalCount}（{passRate}%）
+                / 已出分 {stats.gradedCount}（{stats.gradedCount ? passRate + "%" : "—"}）
               </span>
+              <span className="text-sm text-slate-500">已交卷 {stats.totalCount} · 待批阅 {stats.totalCount - stats.gradedCount}</span>
             </div>
             <p className="mt-3 text-right text-xs text-slate-400">
               {includeRetake
@@ -180,9 +184,7 @@ export default function AssessmentScoresPage() {
 {title: "得分", render: (_value: unknown, record: (typeof records)[number]) => (<span
                     className={`font-semibold ${record.status === "VOID" ? "text-slate-400" : "text-slate-700"}`}
                   >
-                    {record.status === "IN_PROGRESS"
-                      ? "-"
-                      : (record.score ?? 0)}
+                    {record.score ?? "—"}
                   </span>)},
 {title: "状态", render: (_value: unknown, record: (typeof records)[number]) => (<span>
                     <Tag color={statusMeta(record).color} type="light" size="small">
@@ -198,7 +200,7 @@ export default function AssessmentScoresPage() {
                     {durationText(record.startedAt, record.submittedAt)}
                   </span>)},
 {title: "交卷时间", render: (_value: unknown, record: (typeof records)[number]) => (<span>{textDate(record.submittedAt)}</span>)},
-{title: "操作", render: (_value: unknown, record: (typeof records)[number]) => (record.status !== "IN_PROGRESS" && (
+{title: "操作", render: (_value: unknown, record: (typeof records)[number]) => (record.status === "PENDING_REVIEW" ? <Link href={`/profile/assessments/${taskId}/grading`}>去批阅</Link> : record.status !== "IN_PROGRESS" && (
                     <Link
                       href={`/kaoshi/${taskId}/result?attemptId=${record.id}`}
                       target="_blank"

@@ -56,11 +56,11 @@ public class TrainingReminderService {
         trainings.get(id, owner);
         var course = com.aiquestion.repository.RepositoryRows.one(persistence.findTrainingDeadline(id));
         var completed = logs.completedParticipants(id, owner);
-        var passed = new HashSet<Long>();
+        var withoutExamReminder = new HashSet<Long>();
         if (course.get("assessment_id") != null) {
-            for (var attempt : persistence.findPassedParticipants(com.aiquestion.repository.RepositoryRows.nullableLong(course.get("assessment_id")))) {
+            for (var attempt : persistence.findParticipantsWithoutExamReminder(com.aiquestion.repository.RepositoryRows.nullableLong(course.get("assessment_id")))) {
                 if (attempt.get("employee_id") instanceof Number employee)
-                    passed.add(employee.longValue());
+                    withoutExamReminder.add(employee.longValue());
             }
         }
         var recipients = new ArrayList<Recipient>();
@@ -68,7 +68,7 @@ public class TrainingReminderService {
         // 从已分配名单开始查询，不能仅查学习日志，否则完全未开始的员工会漏掉。
         for (var row : persistence.findReminderCandidates(id, owner)) {
             long employee = ((Number) row.get("id")).longValue();
-            var reasons = TrainingReminderRules.reasons(time(course.get("end_at")), completed.contains(row.get("phone") + "|" + row.get("candidate_name")), time(course.get("exam_end_at")), passed.contains(employee), now);
+            var reasons = TrainingReminderRules.reasons(time(course.get("end_at")), completed.contains(row.get("phone") + "|" + row.get("candidate_name")), time(course.get("exam_end_at")), withoutExamReminder.contains(employee), now);
             if (reasons.isEmpty())
                 continue;
             String email = Objects.toString(row.get("email"), "");

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Banner, Card, Table, Tag, Typography, Tabs, TabPane } from "@douyinfe/semi-ui";
 import { getExamRecords, getLearnerTrainings, type ExamRecord } from "@/features/learner/api";
 import { TrainingList } from "@/features/learner/TrainingList";
+import { isPendingReview } from "@/features/learner/status";
 const dateTime = (value?: string) => value && Number.isFinite(Date.parse(value))
   ? new Intl.DateTimeFormat("zh-CN", {timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23"}).format(new Date(value)).replaceAll("/", "-") : "—";
 export default function Exams() {
@@ -47,7 +48,7 @@ export default function Exams() {
                 title: "成绩",
                 width: 110, className:"whitespace-nowrap",
                 render: (_, row) =>
-                  row.status !== "SUBMITTED"
+                  isPendingReview(row) ? "—" : row.status !== "SUBMITTED"
                     ? "未交卷"
                     : row.score === null
                       ? "暂未公布"
@@ -57,7 +58,7 @@ export default function Exams() {
                 title: "结果",
                 width: 110, className:"whitespace-nowrap",
                 render: (_, row) =>
-                  row.status !== "SUBMITTED"
+                  isPendingReview(row) ? <Tag color="orange">待批阅</Tag> : row.status !== "SUBMITTED"
                     ? "答题中"
                     : row.passed === null
                       ? "暂未公布"
@@ -74,7 +75,7 @@ export default function Exams() {
                     ? "—"
                     : `${Math.floor(row.durationSeconds / 60)}分${row.durationSeconds % 60}秒`,
               },
-              { title: "操作", width: 110, render: (_, row) => row.status === "SUBMITTED" ? <Link href={`/kaoshi/${row.taskId}/result?attemptId=${row.id}${trainingIds[row.taskId] ? `&trainingId=${trainingIds[row.taskId]}` : ""}`}>查看结果</Link> : "—" },
+              { title: "操作", width: 110, render: (_, row) => (row.status === "SUBMITTED" || isPendingReview(row)) ? <Link href={`/kaoshi/${row.taskId}/result?attemptId=${row.id}${trainingIds[row.taskId] ? `&trainingId=${trainingIds[row.taskId]}` : ""}`}>查看结果</Link> : "—" },
             ]}
           />
           </Card>

@@ -44,7 +44,7 @@ public class QuestionImportService {
             CellStyle headerStyle = workbook.createCellStyle(); headerStyle.setFillForegroundColor(IndexedColors.ORANGE.getIndex()); headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
             for (int i = 0; i < headers.length; i++) { Cell h = header.createCell(i); h.setCellValue(headers[i]); h.setCellStyle(headerStyle); example.createCell(i).setCellValue(sample[i]); sheet.setColumnWidth(i, i == 1 || i == 7 ? 36 * 256 : 18 * 256); }
             Sheet help = workbook.createSheet("填写说明");
-            String[] notes = {"1. 一行一道题，第一行表头不要修改。", "2. 题型填写：单选题 / 多选题 / 判断题。", "3. 单选题、多选题填写选项 A-D；判断题选项可留空。", "4. 正确答案：单选填一个字母，多选填多个字母（如 ABC），判断题填写 正确 或 错误。", "5. 难度可填写：易 / 中 / 难，留空默认为中。", "6. 已存在相同题干的题目会自动跳过。"};
+            String[] notes = {"1. 一行一道题，第一行表头不要修改。", "2. 题型填写：单选题 / 多选题 / 判断题 / 问答题。", "3. 单选题、多选题填写选项 A-D；判断题选项可留空，问答题选项留空。", "4. 正确答案：单选填一个字母，多选填多个字母（如 ABC），判断题填写 正确 或 错误，问答题填写参考答案，可换行。", "5. 难度可填写：易 / 中 / 难，留空默认为中。", "6. 已存在相同题干的题目会自动跳过。"};
             for (int i = 0; i < notes.length; i++) help.createRow(i).createCell(0).setCellValue(notes[i]); help.setColumnWidth(0, 110 * 256);
             workbook.write(output); return output.toByteArray();
         } catch (IOException e) { throw new BusinessException(ErrorCode.SYSTEM_ERROR, "模板生成失败"); }
@@ -71,7 +71,12 @@ public class QuestionImportService {
                     if (itemRepository.countByBankIdAndStem(bankId, stem) > 0) { skipped++; continue; }
                     List<OptionRequest> options = new ArrayList<>();
                     if ("TRUE_FALSE".equals(type)) { answer = normalizeBoolean(answer); }
-                    else {
+                    else if ("SHORT_ANSWER".equals(type)) {
+                        for (int i = 2; i <= 5; i++) {
+                            if (!blank(formatter, row, i)) throw new IllegalArgumentException("问答题不能包含选项");
+                        }
+                        answer = formatter.formatCellValue(row.getCell(6));
+                    } else {
                         String normalizedAnswer = answer.replaceAll("[，、,\\s]+", "").toUpperCase(Locale.ROOT);
                         for (int i = 0; i < 4; i++) { String text = value(formatter, row, 2 + i); if (!text.isBlank()) options.add(new OptionRequest(String.valueOf((char)('A' + i)), text, normalizedAnswer.contains(String.valueOf((char)('A' + i))), i)); }
                         if (options.size() < 2 || options.stream().noneMatch(OptionRequest::correct)) { throw new IllegalArgumentException("选项至少填写两项且必须包含正确答案"); }
@@ -90,7 +95,7 @@ public class QuestionImportService {
     private static String value(DataFormatter formatter, Row row, int index) { Cell cell = row.getCell(index); return cell == null ? "" : formatter.formatCellValue(cell).trim(); }
     private static boolean blank(DataFormatter formatter, Row row, int index) { return value(formatter, row, index).isBlank(); }
     private static int findHeaderRow(Sheet sheet, DataFormatter formatter) { for (int i = 0; i <= Math.min(sheet.getLastRowNum(), 20); i++) { Row row = sheet.getRow(i); if (row != null && value(formatter, row, 0).replaceAll("\\s+", "").equals("题型")) return i; } return -1; }
-    private static String normalizeType(String value) { String normalized = value == null ? "" : value.replaceAll("\\s+", "").replace("（必填）", "").replace("(必填)", "").toUpperCase(Locale.ROOT); return switch (normalized) { case "单选题", "单选", "SINGLE", "SINGLECHOICE" -> "SINGLE"; case "多选题", "多选", "MULTIPLE", "MULTIPLECHOICE" -> "MULTIPLE"; case "判断题", "判断", "TRUEFALSE", "TRUE_FALSE", "判断题型" -> "TRUE_FALSE"; default -> throw new IllegalArgumentException("题型必须是单选题、多选题或判断题"); }; }
+    private static String normalizeType(String value) { String normalized = value == null ? "" : value.replaceAll("\\s+", "").replace("（必填）", "").replace("(必填)", "").toUpperCase(Locale.ROOT); return switch (normalized) { case "单选题", "单选", "SINGLE", "SINGLECHOICE" -> "SINGLE"; case "多选题", "多选", "MULTIPLE", "MULTIPLECHOICE" -> "MULTIPLE"; case "判断题", "判断", "TRUEFALSE", "TRUE_FALSE", "判断题型" -> "TRUE_FALSE"; case "问答题", "问答", "简答题", "简答", "SHORTANSWER", "SHORT_ANSWER" -> "SHORT_ANSWER"; default -> throw new IllegalArgumentException("题型必须是单选题、多选题、判断题或问答题"); }; }
     private static String normalizeBoolean(String answer) { return switch (answer.trim()) { case "正确", "对", "是", "TRUE", "true" -> "TRUE"; case "错误", "错", "否", "FALSE", "false" -> "FALSE"; default -> throw new IllegalArgumentException("判断题答案必须填写正确或错误"); }; }
     private static String normalizeDifficulty(String value) { return switch (value) { case "易", "简单", "EASY" -> "EASY"; case "难", "困难", "HARD" -> "HARD"; default -> "MEDIUM"; }; }
     public record ImportResult(int imported, int skipped, List<String> errors) {}

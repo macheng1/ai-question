@@ -11,7 +11,7 @@
     SELECT COUNT(*) FROM training_survey_response WHERE training_id=#{trainingId}
   </select>
   <select id="findByOwner" resultType="java.util.LinkedHashMap">
-    SELECT t.*, a.status exam_status, a.end_at exam_end_at, (SELECT COUNT(*) FROM training linked WHERE linked.assessment_id=t.assessment_id) exam_reference_count FROM training t LEFT JOIN assessment_task a ON a.id=t.assessment_id WHERE t.created_by=#{ownerId} ORDER BY t.id DESC
+    SELECT t.*, a.status exam_status, a.end_at exam_end_at, (SELECT COUNT(*) FROM training linked WHERE linked.assessment_id=t.assessment_id) exam_reference_count, (SELECT COUNT(*) FROM assessment_attempt aa WHERE aa.task_id=a.id AND aa.status='PENDING_REVIEW') pending_review_count FROM training t LEFT JOIN assessment_task a ON a.id=t.assessment_id WHERE t.created_by=#{ownerId} ORDER BY t.id DESC
   </select>
   <select id="countExamParticipants" resultType="java.lang.Integer">
     SELECT COUNT(*) FROM assessment_participant p JOIN training t ON t.assessment_id=p.task_id WHERE t.id=#{trainingId} AND EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=t.id AND r.candidate_name=p.candidate_name AND r.phone=p.phone)

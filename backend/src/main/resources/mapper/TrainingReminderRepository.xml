@@ -4,11 +4,11 @@
   <select id="findTrainingDeadline" resultType="java.util.LinkedHashMap">
     SELECT t.name,t.end_at,a.end_at exam_end_at,t.assessment_id FROM training t LEFT JOIN assessment_task a ON a.id=t.assessment_id WHERE t.id=#{trainingId}
   </select>
-  <select id="findPassedParticipants" resultType="java.util.LinkedHashMap">
-    SELECT p.employee_id,a.passed FROM assessment_participant p
+  <select id="findParticipantsWithoutExamReminder" resultType="java.util.LinkedHashMap">
+    SELECT p.employee_id FROM assessment_participant p
 JOIN assessment_attempt a ON a.participant_id=p.id
 WHERE p.task_id=#{taskId} AND a.id=(SELECT MAX(last.id) FROM assessment_attempt last WHERE last.participant_id=p.id)
-AND a.status='SUBMITTED' AND a.passed=TRUE
+AND (a.status='PENDING_REVIEW' OR (a.status='SUBMITTED' AND a.passed=TRUE))
 
   </select>
   <select id="findReminderCandidates" resultType="java.util.LinkedHashMap">

@@ -747,6 +747,48 @@ class MyBatisMigrationIntegrationTest {
     assertEquals(List.of("SENT", "FAILED"), jdbc.queryForList("SELECT status FROM training_reminder_delivery WHERE training_id=? ORDER BY id", String.class, training));
   }
 
+  @Test void importedShortAnswerCanBeDrawnInCopiedRandomPaper() throws Exception {
+    long bank = request(post("/management/banks").header("Authorization", authorization),
+        Map.of("name", "问答题回归", "category", "安全", "published", true)).path("id").asLong();
+    String reference = "  Stop, then report.\n记录时间、地点。 ";
+    byte[] bytes;
+    try (var book = new org.apache.poi.xssf.usermodel.XSSFWorkbook(); var output = new java.io.ByteArrayOutputStream()) {
+      var sheet = book.createSheet();
+      sheet.createRow(0).createCell(0).setCellValue("题型");
+      var row = sheet.createRow(1);
+      row.createCell(0).setCellValue("问答题");
+      row.createCell(1).setCellValue("如何处理事故？");
+      row.createCell(6).setCellValue(reference);
+      row.createCell(7).setCellValue("解析包含评分要点");
+      book.write(output);
+      bytes = output.toByteArray();
+    }
+    var file = new org.springframework.mock.web.MockMultipartFile("file", "short.xlsx", null, bytes);
+    mvc.perform(multipart("/management/questions/import").file(file).param("bankId", Long.toString(bank))
+        .header("Authorization", authorization)).andExpect(status().isOk());
+    assertEquals(reference, jdbc.queryForObject("SELECT answer_text FROM question_item WHERE bank_id=?", String.class, bank));
+    var publicQuestion = request(get("/public/banks/" + bank + "/questions"), Map.of()).path("records").get(0);
+    assertEquals("SHORT_ANSWER", publicQuestion.path("questionType").asText());
+    assertNull(publicQuestion.path("answerText").textValue());
+    assertNull(publicQuestion.path("analysis").textValue());
+    assertEquals(0, publicQuestion.path("options").size());
+    long paper = request(post("/management/papers").header("Authorization", authorization),
+        Map.of("name", "随机问答卷", "mode", "RANDOM", "totalScore", 10, "passScore", 6)).path("id").asLong();
+    String paperUrl = "/management/papers/" + paper;
+    request(post(paperUrl + "/random-config/banks").header("Authorization", authorization), Map.of("bankId", bank));
+    var config = request(get(paperUrl + "/random-config").header("Authorization", authorization), Map.of()).get(0);
+    assertEquals(1, config.path("availableShortAnswerCount").asInt());
+    var draw = Map.of("bankId", bank, "shortAnswerCount", 1, "shortAnswerScore", 10);
+    request(put(paperUrl + "/random-config").header("Authorization", authorization), List.of(draw));
+    var published = request(patch(paperUrl + "/status").param("value", "PUBLISHED").header("Authorization", authorization), Map.of());
+    assertEquals(1, published.path("questionCount").asInt());
+    var copy = request(post(paperUrl + "/copy").header("Authorization", authorization), Map.of("name", "副本"));
+    var copied = request(get("/management/papers/" + copy.path("id").asLong() + "/random-config")
+        .header("Authorization", authorization), Map.of()).get(0);
+    assertEquals(1, copied.path("shortAnswerCount").asInt());
+    assertEquals(10, copied.path("shortAnswerScore").asInt());
+  }
+
   @Test void questionTemplateImportsIntoOwnedBankAndRejectsForeignBank() throws Exception {
     long bank = request(post("/management/banks").header("Authorization", authorization), Map.of("name", "导入回归", "category", "安全")).path("id").asLong();
     byte[] template = mvc.perform(get("/management/questions/template").header("Authorization", authorization)).andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
@@ -1464,6 +1506,55 @@ class MyBatisMigrationIntegrationTest {
 
   private JsonNode statisticsDetail(long task, boolean includeRetake) throws Exception {
     return json.readTree(mvc.perform(get("/management/assessments/" + task + "/statistics/detail").param("includeRetake", Boolean.toString(includeRetake)).header("Authorization", authorization)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("data");
+  }
+
+  @Test void mixedExamRequiresOwnerReviewBeforeScoresOrRetakes() throws Exception {
+    long exam = createExam();
+    long paper = jdbc.queryForObject("SELECT paper_id FROM assessment_task WHERE id=?", Long.class, exam);
+    jdbc.update("UPDATE assessment_task SET allow_retake=TRUE,max_attempts=3,show_result_immediately=TRUE WHERE id=?", exam);
+    jdbc.update("UPDATE test_paper SET total_score=100,pass_score=60 WHERE id=?", paper);
+    long bank = insert("INSERT INTO question_bank(name,category,created_by,created_at,updated_at) VALUES('阅卷验收','培训',?,CURRENT_TIMESTAMP(3),CURRENT_TIMESTAMP(3))", owner);
+    long choice = insert("INSERT INTO question_item(bank_id,question_type,stem,answer_text,created_by) VALUES(?,'SINGLE','选择','A',?)", bank,owner);
+    long essay = insert("INSERT INTO question_item(bank_id,question_type,stem,answer_text,created_by) VALUES(?,'SHORT_ANSWER','原题','Alpha beta',?)", bank,owner);
+    jdbc.update("INSERT INTO test_paper_question(paper_id,question_id,score) VALUES(?,?,45),(?,?,55)",paper,choice,paper,essay);
+    var candidate = Map.of("name","测试学员","phone",phone);
+    String token = "Bearer " + request(post("/learner/session"),Map.of("type","EXAM","id",exam,"name","测试学员","phone",phone)).path("token").path("accessToken").asText();
+    String start = "/public/exams/" + exam + "/start";
+    long attempt = request(post(start).header("Authorization",token),candidate).path("attemptId").asLong();
+    String path = "/public/exams/attempts/" + attempt;
+    String queue = "/management/assessments/" + exam + "/grading";
+    jdbc.update("UPDATE question_item SET stem='修改后',answer_text='修改后参考答案' WHERE id=?",essay);
+    request(put(path+"/answers/"+essay).header("Authorization",token), Map.of("answer","My Answer, a B!"));
+    request(put(path+"/answers/"+choice).header("Authorization",token), Map.of("answer","A"));
+    JsonNode pending = request(post(path+"/submit").header("Authorization",token),Map.of());
+    assertTrue(pending.path("pendingReview").asBoolean());
+    assertFalse(pending.has("score"));
+    assertEquals(attempt,request(post(start).header("Authorization",token),candidate).path("attemptId").asLong());
+    var queued = json.readTree(mvc.perform(get(queue).header("Authorization",authorization)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("data");
+    assertEquals(attempt,queued.get(0).path("attemptId").asLong());
+    mvc.perform(get(queue+"/"+attempt).header("Authorization",token)).andExpect(status().isForbidden());
+    var qs=json.readTree(mvc.perform(get(queue+"/"+attempt).header("Authorization",authorization)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("data");
+    assertEquals("My Answer, a B!",qs.get(0).path("answer").asText());
+    assertEquals("Alpha beta",qs.get(0).path("referenceAnswer").asText());
+    assertEquals("原题",qs.get(0).path("stem").asText());
+    mvc.perform(put(queue+"/"+attempt).header("Authorization",authorization).contentType(MediaType.APPLICATION_JSON)
+        .content(json.writeValueAsString(Map.of(essay,56)))).andExpect(status().isBadRequest());
+    request(put(queue+"/"+attempt).header("Authorization",authorization),Map.of(essay,25));
+    var result=publicExams.result(attempt).data();
+    assertEquals(70,((Number)result.get("score")).intValue());
+    assertEquals(70,statisticsDetail(exam,false).path("overview").path("averageScore").asInt());
+    mvc.perform(put(queue+"/"+attempt).header("Authorization",authorization).contentType(MediaType.APPLICATION_JSON)
+        .content(json.writeValueAsString(Map.of(essay,0)))).andExpect(status().isBadRequest());
+    long next=request(post(start).header("Authorization",token),candidate).path("attemptId").asLong();
+    assertNotEquals(attempt,next);
+    jdbc.update("UPDATE assessment_attempt SET started_at=DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 2 DAY) WHERE id=?",next);
+    var expired=request(post("/public/exams/attempts/"+next+"/submit").header("Authorization",token),Map.of());
+    assertTrue(expired.path("pendingReview").asBoolean());
+    var summary=statisticsDetail(exam,false).path("overview");
+    assertEquals(1,summary.path("participantCount").asInt());
+    assertTrue(summary.path("averageScore").asDouble()==0);
+    request(put(queue+"/"+next).header("Authorization",authorization),Map.of(essay,0));
+    assertEquals(0,((Number)publicExams.result(next).data().get("score")).intValue());
   }
 
   private long createExam() {

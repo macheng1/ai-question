@@ -91,6 +91,8 @@ public class PublicExamService {
         List<Map<String, Object>> active = persistence.findActiveAttempt(id, participantId);
         long attemptId;
         Object startedAt;
+        Long pending = attemptCount == 0 ? null : persistence.pendingReviewId(id, participantId);
+        if (pending != null) return result(pending);
         if (active.isEmpty() && attemptCount >= maxAttempts(task)) {
             Map<String, Object> latest = com.aiquestion.repository.RepositoryRows.one(persistence.findLatestSubmittedAttempt(id, participantId));
             long latestAttemptId = ((Number) latest.get("id")).longValue();
@@ -150,17 +152,21 @@ public class PublicExamService {
         List<Map<String, Object>> participants = persistence.findEligibilityParticipant(id, name.trim(), phone.trim());
         int attemptCount = participants.isEmpty() ? 0 : ((Number) participants.get(0).get("attempt_count")).intValue();
         boolean inProgress = false;
+        Long pending = null;
         if (!participants.isEmpty()) {
             long participantId = ((Number) participants.get(0).get("id")).longValue();
+            pending = persistence.pendingReviewId(id, participantId);
             inProgress = !persistence.findAnyActiveAttempt(id, participantId).isEmpty();
         }
         Map<String, Object> result = new HashMap<>(16);
         result.put("allowRetake", allowRetake(task));
         result.put("maxAttempts", configuredMaxAttempts);
         result.put("attemptCount", attemptCount);
-        result.put("remainingAttempts", Math.max(0, configuredMaxAttempts - attemptCount));
+        result.put("pendingReview", pending != null);
+        result.put("pendingAttemptId", pending);
+        result.put("remainingAttempts", pending == null ? Math.max(0, configuredMaxAttempts - attemptCount) : 0);
         result.put("inProgress", inProgress);
-        result.put("canStart", inProgress || attemptCount < configuredMaxAttempts);
+        result.put("canStart", pending == null && (inProgress || attemptCount < configuredMaxAttempts));
         return ApiResponse.ok(result);
     }
 
@@ -186,6 +192,12 @@ public class PublicExamService {
         } catch (org.springframework.dao.EmptyResultDataAccessException exception) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "题目不属于本次考试");
         }
+        if ("SHORT_ANSWER".equals(question.get("question_type"))) {
+            String text = Objects.toString(command.answer(), "");
+            if (text.length() > 10000) throw new BusinessException(ErrorCode.BAD_REQUEST, "问答题作答限 10000 字");
+            persistence.upsertAnswer(attemptId, questionId, text, Objects.toString(question.get("answer_text"), ""), null, BigDecimal.ZERO);
+            return ApiResponse.ok(null);
+        }
         String answer = command.answer() == null ? "" : command.answer().trim().toUpperCase(Locale.ROOT);
         String correct = String.valueOf(question.getOrDefault("answer_text", "")).trim().toUpperCase(Locale.ROOT);
         if ("TRUE_FALSE".equals(question.get("question_type")))
@@ -199,7 +211,7 @@ public class PublicExamService {
     @org.springframework.transaction.annotation.Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public ApiResponse<Map<String, Object>> submit(Long attemptId) {
         Map<String, Object> openAttempt = ensureAttemptOpen(attemptId, true);
-        if ("SUBMITTED".equals(openAttempt.get("status"))) {
+        if (!"IN_PROGRESS".equals(openAttempt.get("status"))) {
             return result(attemptId);
         }
         Map<String, Object> attempt = com.aiquestion.repository.RepositoryRows.one(persistence.findAttemptForSubmission(attemptId));
@@ -221,6 +233,7 @@ public class PublicExamService {
     }
 
     private ApiResponse<Map<String, Object>> gradeAttempt(long attemptId, Map<String, Object> attempt) {
+        if (persistence.submitForReview(attemptId) == 1) return result(attemptId);
         BigDecimal score = com.aiquestion.repository.RepositoryRows.one(persistence.sumAnswerScores(attemptId));
         BigDecimal total = new BigDecimal(String.valueOf(attempt.get("total_score")));
         BigDecimal pass = new BigDecimal(String.valueOf(attempt.get("pass_score")));
@@ -245,6 +258,16 @@ public class PublicExamService {
 
     public ApiResponse<Map<String, Object>> result(Long attemptId) {
         Map<String, Object> attempt = com.aiquestion.repository.RepositoryRows.one(persistence.findAttemptResult(attemptId));
+        if ("PENDING_REVIEW".equals(attempt.get("status"))) {
+            attempt.remove("score");
+            attempt.remove("passed");
+            attempt.remove("reviewEnabled");
+            attempt.put("pendingReview", true);
+            attempt.put("remainingAttempts", 0);
+            attempt.put("showAnswers", false);
+            attempt.put("answers", List.of());
+            return ApiResponse.ok(attempt);
+        }
         if (!"SUBMITTED".equals(String.valueOf(attempt.get("status")))) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "该答题记录尚未交卷");
         }
@@ -293,6 +316,7 @@ public class PublicExamService {
             sortNo = snapshotType(attemptId, ((Number) config.get("bank_id")).longValue(), "SINGLE", number(config.get("single_count")), decimal(config.get("single_score")), sortNo, selected);
             sortNo = snapshotType(attemptId, ((Number) config.get("bank_id")).longValue(), "MULTIPLE", number(config.get("multiple_count")), decimal(config.get("multiple_score")), sortNo, selected);
             sortNo = snapshotType(attemptId, ((Number) config.get("bank_id")).longValue(), "TRUE_FALSE", number(config.get("true_false_count")), decimal(config.get("true_false_score")), sortNo, selected);
+            sortNo = snapshotType(attemptId, ((Number) config.get("bank_id")).longValue(), "SHORT_ANSWER", number(config.get("short_answer_count")), decimal(config.get("short_answer_score")), sortNo, selected);
         }
     }
 
@@ -362,7 +386,7 @@ public class PublicExamService {
         } catch (org.springframework.dao.EmptyResultDataAccessException exception) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "答题记录不存在");
         }
-        if (submitting && "SUBMITTED".equals(attempt.get("status"))) {
+        if (submitting && ("SUBMITTED".equals(attempt.get("status")) || "PENDING_REVIEW".equals(attempt.get("status")))) {
             return attempt;
         }
         if (!"IN_PROGRESS".equals(String.valueOf(attempt.get("status")))) {
@@ -419,6 +443,7 @@ public class PublicExamService {
         String raw = value == null ? "" : String.valueOf(value).trim();
         if (raw.isBlank())
             return List.of();
+        if ("SHORT_ANSWER".equals(type)) return List.of(raw);
         if ("TRUE_FALSE".equals(type))
             return List.of(raw.equalsIgnoreCase("TRUE") ? "A" : "B");
         if ("MULTIPLE".equals(type) && raw.matches("[A-Za-z]+"))
@@ -428,6 +453,7 @@ public class PublicExamService {
 
     private static String kind(String type) {
         return switch(type) {
+            case "SHORT_ANSWER" -> "short";
             case "MULTIPLE" ->
                 "multi";
             case "TRUE_FALSE" ->

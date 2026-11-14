@@ -96,6 +96,24 @@ class DashboardServiceTest {
   }
 
   @Test
+  void submittedExamAwaitingReviewIsNeitherFailedNorOverdue() {
+    var repo = mock(DashboardRepository.class);
+    var item = row();
+    item.put("assessmentId", 9L);
+    item.put("attemptId", 10L);
+    item.put("attemptStatus", "PENDING_REVIEW");
+    item.put("score", 0);
+    item.put("examEnd", LocalDateTime.of(2020, 1, 1, 0, 0));
+    when(repo.rows(eq(1L), any())).thenReturn(List.of(item));
+    when(repo.trainings(eq(1L), any())).thenReturn(List.of());
+    var result = new DashboardService(repo).load(1, null, null, null, null, null, "exams", "ALL", 1, 10);
+    assertEquals("PENDING_REVIEW", result.rows().get(0).get("examStatus"));
+    assertNull(result.rows().get(0).get("score"));
+    assertEquals(0, result.overview().completed());
+    assertEquals(0, result.overview().overdue());
+  }
+
+  @Test
   void materialFreeTrainingRequiresExplicitCompletionAndUnknownDurationIsFlagged() {
     var repo = mock(DashboardRepository.class);
     var row = row();

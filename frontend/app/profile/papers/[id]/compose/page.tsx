@@ -31,6 +31,7 @@ const typeLabel: Record<string, string> = {
   MULTIPLE: "多选",
   TRUE_FALSE: "判断",
   JUDGE: "判断",
+  SHORT_ANSWER: "问答",
 };
 
 export default function ComposePaperPage() {
@@ -333,6 +334,9 @@ export default function ComposePaperPage() {
               >
                 判断
               </Button>
+              <Button theme={filter === "SHORT_ANSWER" ? "solid" : "light"} type="primary" onClick={() => setFilter("SHORT_ANSWER")}>
+                问答
+              </Button>
             </div>
             <div className="flex flex-col max-h-[720px] gap-2 overflow-y-auto bg-slate-50/40 p-2">
               {visibleQuestions.map((item, index) => (
@@ -356,6 +360,7 @@ export default function ComposePaperPage() {
                     </span>
                   </div>
                   <div className="mt-2 grid grid-cols-1 gap-2 break-words text-sm leading-6">
+                    {item.questionType === "SHORT_ANSWER" && <div className="whitespace-pre-wrap text-slate-600">参考答案：{item.answerText}</div>}
                     {getQuestionDisplayOptions(item).map((option) => (
                       <div
                         key={option.optionKey}
@@ -397,6 +402,7 @@ export default function ComposePaperPage() {
                     </span>
                   </div>
                   <div className="mt-2 grid grid-cols-1 gap-2 break-words text-sm leading-6">
+                    {item.questionType === "SHORT_ANSWER" && <div className="whitespace-pre-wrap text-slate-600">参考答案：{item.answerText}</div>}
                     {getQuestionDisplayOptions(item).map((option) => (
                       <div
                         key={option.optionKey}

@@ -111,6 +111,7 @@ export default function TrainingsPage() {
         <Dropdown.Item onClick={() => { setOpenMenu(null); router.push(`/profile/trainings/${item.id}/copy`); }}>复制</Dropdown.Item>
         <Dropdown.Item onClick={() => { setOpenMenu(null); router.push(`/profile/trainings/${item.id}/learning-records`); }}>培训统计</Dropdown.Item>
         {item.assessmentId && <Dropdown.Item onClick={() => { setOpenMenu(null); router.push(`/profile/assessments/${item.assessmentId}/statistics`); }}>考试统计</Dropdown.Item>}
+        {item.assessmentId && <Dropdown.Item onClick={() => { setOpenMenu(null); router.push(`/profile/assessments/${item.assessmentId}/grading`); }}>人工阅卷（待阅 {item.pendingReviewCount ?? 0} 份）</Dropdown.Item>}
         <Dropdown.Item disabled={!!item.examShared || !!(item.startAt && now < Date.parse(item.startAt)) || !!(item.endAt && now >= Date.parse(item.endAt) && (!item.assessmentId || item.examStatus === "DISABLED" || item.examStatus === "ENDED" || (item.examEndAt && now >= Date.parse(item.examEndAt))))} onClick={() => { setOpenMenu(null); stopTraining(item); }}>{item.assessmentId ? "结束培训和考试" : "结束培训"}</Dropdown.Item>
         <Dropdown.Item onClick={() => { setOpenMenu(null); setReminder(item); }}>一键提醒</Dropdown.Item>
         <Dropdown.Item onClick={() => router.push(`/profile/trainings/${item.id}/responses`)}>查看反馈</Dropdown.Item>

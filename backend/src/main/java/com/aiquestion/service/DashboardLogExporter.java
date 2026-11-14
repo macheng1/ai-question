@@ -20,7 +20,7 @@ public final class DashboardLogExporter {
       "考试用时（秒）", "开始学习时间", "整体完成时间", "交卷时间", "逾期情况"};
   private static final Map<String, String> STATUSES = Map.of(
       "NOT_STARTED", "未开始", "IN_PROGRESS", "进行中", "COMPLETED", "已完成",
-      "PASSED", "已通过", "FAILED", "未通过", "NONE", "无考试");
+      "PASSED", "已通过", "FAILED", "未通过", "NONE", "无考试", "PENDING_REVIEW", "待批阅");
 
   public static byte[] write(List<Map<String, Object>> rows) throws IOException {
     try (var workbook = new XSSFWorkbook(); var output = new ByteArrayOutputStream()) {

@@ -43,6 +43,7 @@ export type Training = {
   questions: SurveyQuestion[];
   version: number;
   responseCount?: number;
+  pendingReviewCount?: number;
   submitted?: boolean;
   submittedAnswers?: Record<string, string>;
 };

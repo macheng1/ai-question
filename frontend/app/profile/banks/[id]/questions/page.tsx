@@ -127,26 +127,28 @@ export default function QuestionsPage() {
       Toast.error(e instanceof Error ? e.message : "题目加载失败");
     }
   };
+  const hasOptions = type === "SINGLE" || type === "MULTIPLE";
   const save = async () => {
     if (!stem.trim()) {
       Toast.error("请输入题干");
       return;
     }
     if (
-      type !== "TRUE_FALSE" &&
+      hasOptions &&
       options.some((item) => !item.optionText.trim())
     ) {
       Toast.error("请填写完整选项");
       return;
     }
+    if (type === "SHORT_ANSWER" && !answer.trim()) return Toast.error("请填写问答题参考答案");
     setLoading(true);
     try {
       const selectedOptions =
-        type === "TRUE_FALSE"
+        !hasOptions
           ? []
           : options.map((item, index) => ({ ...item, sortNo: index }));
       const correct =
-        type === "TRUE_FALSE"
+        !hasOptions
           ? answer
           : selectedOptions
               .filter((item) => item.correct)
@@ -244,10 +246,10 @@ export default function QuestionsPage() {
               columns={[
                 { title: "ID", dataIndex: "id", width: 90 },
                 { title: "题型", dataIndex: "questionType", width: 100,
-                  render: (value: string) => <Tag color={value === "MULTIPLE" ? "violet" : value === "TRUE_FALSE" ? "cyan" : "blue"}>{value === "MULTIPLE" ? "多选" : value === "TRUE_FALSE" ? "判断" : "单选"}</Tag> },
+                  render: (value: string) => <Tag color={value === "SHORT_ANSWER" ? "green" : value === "MULTIPLE" ? "violet" : value === "TRUE_FALSE" ? "cyan" : "blue"}>{value === "SHORT_ANSWER" ? "问答" : value === "MULTIPLE" ? "多选" : value === "TRUE_FALSE" ? "判断" : "单选"}</Tag> },
                 { title: "题干", dataIndex: "stem", render: (value: string) => <div className="whitespace-normal break-words leading-6">{value}</div> },
                 { title: "难度", dataIndex: "difficulty", width: 90, render: difficultyLabel },
-                { title: "答案", dataIndex: "answerText", width: 120, render: (value: string) => <span className="break-words">{answerLabel(value)}</span> },
+                { title: "答案", dataIndex: "answerText", width: 120, render: (value: string, item: QuestionItem) => <span className="whitespace-pre-wrap break-words">{item.questionType === "SHORT_ANSWER" ? value : answerLabel(value)}</span> },
                 { title: "操作", width: 160, fixed: "right",
                   render: (_value: unknown, item: QuestionItem) => <Space spacing={4}>
                     <Button theme="borderless" onClick={() => edit(item.id)}>编辑</Button>
@@ -287,11 +289,12 @@ export default function QuestionsPage() {
           <div className="grid grid-cols-2 gap-4 ">
             <div className="min-w-0 col-span-2 sm:col-span-1"><Select
               value={type}
-              onChange={(value) => setType(String(value))}
+              onChange={(value) => { setType(String(value)); setAnswer(""); }}
               optionList={[
                 { label: "单选题", value: "SINGLE" },
                 { label: "多选题", value: "MULTIPLE" },
                 { label: "判断题", value: "TRUE_FALSE" },
+                { label: "问答题", value: "SHORT_ANSWER" },
               ]}
               className="w-full"
             /></div>
@@ -312,7 +315,7 @@ export default function QuestionsPage() {
             autosize={{ minRows: 3, maxRows: 6 }}
             placeholder="题干内容"
           />
-          {type !== "TRUE_FALSE" && (
+          {hasOptions && (
             <div className="rounded-xl border border-slate-200 p-4">
               <div className="mb-3 flex justify-between text-sm text-slate-600">
                 <span>选项</span>
@@ -358,8 +361,10 @@ export default function QuestionsPage() {
             </div>
           )}
           <div>
-            <p className="mb-2 text-xs text-slate-500">正确选项</p>
-            {type === "TRUE_FALSE" ? (
+            <p className="mb-2 text-xs text-slate-500">{type === "SHORT_ANSWER" ? "参考答案" : "正确选项"}</p>
+            {type === "SHORT_ANSWER" ? (
+              <TextArea value={answer} onChange={setAnswer} autosize={{ minRows: 3, maxRows: 8 }} placeholder="填写参考答案或评分要点" />
+            ) : type === "TRUE_FALSE" ? (
               <Select
                 value={answer}
                 onChange={(value) => setAnswer(String(value))}
@@ -452,7 +457,7 @@ export default function QuestionsPage() {
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 p-4">
             <div className="min-w-0">
               <Typography.Text strong>1. 下载并填写模板</Typography.Text>
-              <div className="mt-1 text-xs leading-5 text-slate-500">支持单选、多选、判断题，请先替换示例题。</div>
+              <div className="mt-1 text-xs leading-5 text-slate-500">支持单选、多选、判断和问答题，请先替换示例题。</div>
             </div>
             <Button icon={<IconDownload />} disabled={importLoading}
               onClick={() => { getQuestionImportTemplate().catch((e) => Toast.error(e instanceof Error ? e.message : "模板下载失败")); }}>

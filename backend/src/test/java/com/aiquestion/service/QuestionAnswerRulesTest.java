@@ -24,6 +24,14 @@ class QuestionAnswerRulesTest {
   }
 
   @Test
+  void shortAnswerKeepsReferenceTextAndRejectsBlankTextOrOptions() {
+    String reference = "  Act first, then report.\n记录时间、地点。 ";
+    assertEquals(reference, QuestionAnswerRules.validate("SHORT_ANSWER", reference, List.of()));
+    assertThrows(BusinessException.class, () -> QuestionAnswerRules.validate("SHORT_ANSWER", "  ", List.of()));
+    assertThrows(BusinessException.class, () -> QuestionAnswerRules.validate("SHORT_ANSWER", reference, options));
+  }
+
+  @Test
   void validAnswersAreNormalized() {
     assertEquals("A,B", QuestionAnswerRules.validate("MULTIPLE", "a， b", options));
     assertEquals("FALSE", QuestionAnswerRules.validate("TRUE_FALSE", "false", List.of()));

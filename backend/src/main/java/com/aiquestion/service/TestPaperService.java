@@ -208,10 +208,10 @@ TestPaperService {
         ensureEditable(paper);
         if (items == null)
             items = List.of();
-        for (RandomConfigItem item : items) validateRandomItem(paperId, item);
+        for (RandomConfigItem item : items) validateRandomItem(item);
         persistence.deleteRandomConfig(paperId);
         for (RandomConfigItem item : items) {
-            persistence.insertRandomConfig(paperId, item.bankId(), count(item.singleCount()), score(item.singleScore()), count(item.multipleCount()), score(item.multipleScore()), count(item.trueFalseCount()), score(item.trueFalseScore()));
+            persistence.insertRandomConfig(paperId, item.bankId(), count(item.singleCount()), score(item.singleScore()), count(item.multipleCount()), score(item.multipleScore()), count(item.trueFalseCount()), score(item.trueFalseScore()), count(item.shortAnswerCount()), score(item.shortAnswerScore()));
         }
     }
 
@@ -230,24 +230,27 @@ TestPaperService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "随机题目总分为 " + total.stripTrailingZeros().toPlainString() + " 分，必须等于试卷设置的 " + paper.getTotalScore().stripTrailingZeros().toPlainString() + " 分");
     }
 
-    private void validateRandomItem(Long paperId, RandomConfigItem item) {
+    private void validateRandomItem(RandomConfigItem item) {
         if (item == null || item.bankId() == null)
             throw new BusinessException(ErrorCode.BAD_REQUEST, "随机题库不能为空");
         if (com.aiquestion.repository.RepositoryRows.one(persistence.countConfiguredBank(item.bankId())) == 0)
             throw new BusinessException(ErrorCode.NOT_FOUND, "题库不存在");
         checkBank(item.bankId());
-        int single = count(item.singleCount()), multiple = count(item.multipleCount()), judge = count(item.trueFalseCount());
-        if (single < 0 || multiple < 0 || judge < 0)
+        validateDraw(item.bankId(), "SINGLE", item.singleCount(), item.singleScore());
+        validateDraw(item.bankId(), "MULTIPLE", item.multipleCount(), item.multipleScore());
+        validateDraw(item.bankId(), "TRUE_FALSE", item.trueFalseCount(), item.trueFalseScore());
+        validateDraw(item.bankId(), "SHORT_ANSWER", item.shortAnswerCount(), item.shortAnswerScore());
+    }
+
+    private void validateDraw(Long bankId, String type, Integer quantity, BigDecimal points) {
+        int requested = count(quantity);
+        if (requested < 0)
             throw new BusinessException(ErrorCode.BAD_REQUEST, "抽题数量不能小于 0");
-        int availableSingle = available(item.bankId(), "SINGLE"), availableMultiple = available(item.bankId(), "MULTIPLE"), availableJudge = available(item.bankId(), "TRUE_FALSE");
-        if (single > availableSingle || multiple > availableMultiple || judge > availableJudge)
+        if (requested == 0) return;
+        if (requested > available(bankId, type))
             throw new BusinessException(ErrorCode.BAD_REQUEST, "题库可用题目数量不足，请减少抽题数量");
-        boolean singleScoreInvalid = single > 0 && score(item.singleScore()).signum() <= 0;
-        boolean multipleScoreInvalid = multiple > 0 && score(item.multipleScore()).signum() <= 0;
-        boolean judgeScoreInvalid = judge > 0 && score(item.trueFalseScore()).signum() <= 0;
-        if (singleScoreInvalid || multipleScoreInvalid || judgeScoreInvalid) {
+        if (score(points).signum() <= 0)
             throw new BusinessException(ErrorCode.BAD_REQUEST, "已配置题目的分值必须大于 0");
-        }
     }
 
     private void checkBank(Long id) {
@@ -297,6 +300,6 @@ TestPaperService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "题目总分为 " + actual.stripTrailingZeros().toPlainString() + " 分，必须等于试卷设置的 " + paper.getTotalScore().stripTrailingZeros().toPlainString() + " 分");
     }
 
-    public record RandomConfigItem(Long bankId, Integer singleCount, BigDecimal singleScore, Integer multipleCount, BigDecimal multipleScore, Integer trueFalseCount, BigDecimal trueFalseScore) {
+    public record RandomConfigItem(Long bankId, Integer singleCount, BigDecimal singleScore, Integer multipleCount, BigDecimal multipleScore, Integer trueFalseCount, BigDecimal trueFalseScore, Integer shortAnswerCount, BigDecimal shortAnswerScore) {
     }
 }

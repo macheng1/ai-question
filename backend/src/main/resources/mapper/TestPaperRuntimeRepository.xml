@@ -3,9 +3,9 @@
 <mapper namespace="com.aiquestion.repository.TestPaperRuntimeRepository">
   <insert id="copyRandomBankConfig">
     INSERT INTO test_paper_random_bank(
-  paper_id,bank_id,single_count,single_score,multiple_count,multiple_score,true_false_count,true_false_score
+  paper_id,bank_id,single_count,single_score,multiple_count,multiple_score,true_false_count,true_false_score,short_answer_count,short_answer_score
 )
-SELECT #{targetPaperId},bank_id,single_count,single_score,multiple_count,multiple_score,true_false_count,true_false_score
+SELECT #{targetPaperId},bank_id,single_count,single_score,multiple_count,multiple_score,true_false_count,true_false_score,short_answer_count,short_answer_score
 FROM test_paper_random_bank WHERE paper_id=#{sourcePaperId}
 
   </insert>
@@ -14,9 +14,11 @@ FROM test_paper_random_bank WHERE paper_id=#{sourcePaperId}
   r.single_count singleCount,r.single_score singleScore,
   r.multiple_count multipleCount,r.multiple_score multipleScore,
   r.true_false_count trueFalseCount,r.true_false_score trueFalseScore,
+  r.short_answer_count shortAnswerCount,r.short_answer_score shortAnswerScore,
   (SELECT COUNT(*) FROM question_item q WHERE q.bank_id=r.bank_id AND q.question_type='SINGLE' AND q.status='ENABLED') availableSingleCount,
   (SELECT COUNT(*) FROM question_item q WHERE q.bank_id=r.bank_id AND q.question_type='MULTIPLE' AND q.status='ENABLED') availableMultipleCount,
-  (SELECT COUNT(*) FROM question_item q WHERE q.bank_id=r.bank_id AND q.question_type='TRUE_FALSE' AND q.status='ENABLED') availableTrueFalseCount
+  (SELECT COUNT(*) FROM question_item q WHERE q.bank_id=r.bank_id AND q.question_type='TRUE_FALSE' AND q.status='ENABLED') availableTrueFalseCount,
+  (SELECT COUNT(*) FROM question_item q WHERE q.bank_id=r.bank_id AND q.question_type='SHORT_ANSWER' AND q.status='ENABLED') availableShortAnswerCount
 FROM test_paper_random_bank r JOIN question_bank b ON b.id=r.bank_id
 WHERE r.paper_id=#{paperId} ORDER BY r.id
 
@@ -37,13 +39,13 @@ WHERE r.paper_id=#{paperId} ORDER BY r.id
     DELETE FROM test_paper_random_bank WHERE paper_id=#{paperId}
   </delete>
   <insert id="insertRandomConfig">
-    INSERT INTO test_paper_random_bank(paper_id,bank_id,single_count,single_score,multiple_count,multiple_score,true_false_count,true_false_score) VALUES(#{paperId},#{bankId},#{singleCount},#{singleScore},#{multipleCount},#{multipleScore},#{trueFalseCount},#{trueFalseScore})
+    INSERT INTO test_paper_random_bank(paper_id,bank_id,single_count,single_score,multiple_count,multiple_score,true_false_count,true_false_score,short_answer_count,short_answer_score) VALUES(#{paperId},#{bankId},#{singleCount},#{singleScore},#{multipleCount},#{multipleScore},#{trueFalseCount},#{trueFalseScore},#{shortAnswerCount},#{shortAnswerScore})
   </insert>
   <select id="sumRandomScores" resultType="java.math.BigDecimal">
-    SELECT COALESCE(SUM(single_count*single_score+multiple_count*multiple_score+true_false_count*true_false_score),0) FROM test_paper_random_bank WHERE paper_id=#{paperId}
+    SELECT COALESCE(SUM(single_count*single_score+multiple_count*multiple_score+true_false_count*true_false_score+short_answer_count*short_answer_score),0) FROM test_paper_random_bank WHERE paper_id=#{paperId}
   </select>
   <select id="sumRandomQuestionCount" resultType="java.lang.Integer">
-    SELECT COALESCE(SUM(single_count+multiple_count+true_false_count),0) FROM test_paper_random_bank WHERE paper_id=#{paperId}
+    SELECT COALESCE(SUM(single_count+multiple_count+true_false_count+short_answer_count),0) FROM test_paper_random_bank WHERE paper_id=#{paperId}
   </select>
   <select id="countConfiguredBank" resultType="java.lang.Integer">
     SELECT COUNT(*) FROM question_bank WHERE id=#{bankId}

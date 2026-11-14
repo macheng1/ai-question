@@ -33,7 +33,7 @@ SELECT t.id trainingId,t.name trainingName,t.assessment_id assessmentId,t.end_at
  (SELECT MAX(p.completed_at) FROM candidate_video_progress p JOIN training_video v ON v.id=p.video_id WHERE v.training_id=t.id AND p.session_id=s.id) videoCompletedAt,
  (SELECT MAX(p.completed_at) FROM candidate_material_progress p JOIN training_material m ON m.id=p.material_id WHERE m.training_id=t.id AND p.session_id=s.id) readingCompletedAt,
  a.end_at examEnd,a.name examName,
- aa.id attemptId,aa.status attemptStatus,aa.score,aa.total_score totalScore,aa.passed,aa.submitted_at submittedAt,
+ aa.id attemptId,aa.status attemptStatus,aa.score,aa.total_score totalScore,aa.passed,aa.submitted_at submittedAt,aa.reviewed_at reviewedAt,
  CASE WHEN aa.submitted_at IS NOT NULL THEN GREATEST(0,TIMESTAMPDIFF(SECOND,aa.started_at,aa.submitted_at)) END durationSeconds,
  (SELECT COUNT(*) FROM assessment_attempt x JOIN assessment_participant p ON p.id=x.participant_id WHERE p.task_id=a.id AND p.employee_id=ta.employee_id) attemptCount
 FROM training t JOIN training_audience ta ON ta.training_id=t.id

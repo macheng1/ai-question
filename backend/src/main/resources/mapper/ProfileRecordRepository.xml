@@ -3,8 +3,8 @@
 <mapper namespace="com.aiquestion.repository.ProfileRecordRepository">
   <select id="findRecords" resultType="java.util.LinkedHashMap">
     SELECT a.id AS attemptId, a.task_id AS taskId, t.name AS examName,
-       p.name AS paperName, a.score AS score, a.total_score AS totalScore,
-       p.pass_score AS passScore, a.passed AS passed, a.status AS status,
+       p.name AS paperName, CASE WHEN a.status='SUBMITTED' AND t.show_result_immediately=1 THEN a.score END AS score, a.total_score AS totalScore,
+       p.pass_score AS passScore, CASE WHEN a.status='SUBMITTED' AND t.show_result_immediately=1 THEN a.passed END AS passed, a.status AS status,
        a.attempt_no AS attemptNo, a.started_at AS startedAt,
        a.submitted_at AS submittedAt,
        CASE WHEN a.started_at IS NULL THEN 0 ELSE TIMESTAMPDIFF(SECOND,
@@ -15,29 +15,30 @@ JOIN assessment_participant ap ON ap.id = a.participant_id
 JOIN assessment_task t ON t.id = a.task_id
 JOIN test_paper p ON p.id = t.paper_id
 WHERE (ap.user_id = #{userId} OR (ap.user_id IS NULL AND ap.phone = #{phone}))
-  AND a.status IN ('SUBMITTED', 'IN_PROGRESS')
+  AND a.status IN ('SUBMITTED', 'PENDING_REVIEW', 'IN_PROGRESS')
 ORDER BY COALESCE(a.submitted_at, a.started_at) DESC, a.id DESC
 
   </select>
   <select id="findLatestMistakes" resultType="java.util.LinkedHashMap">
     SELECT aa.attempt_id AS attemptId, aa.question_id AS questionId,
        a.task_id AS taskId, t.name AS examName, COALESCE(qb.name, '') AS bankName,
-       qi.question_type AS questionType, qi.stem AS stem,
-       qi.answer_text AS correctAnswer, qi.analysis AS analysis,
+       COALESCE(aq.snapshot_type,qi.question_type) AS questionType, COALESCE(aq.snapshot_stem,qi.stem) AS stem,
+       COALESCE(aq.snapshot_answer,qi.answer_text) AS correctAnswer, qi.analysis AS analysis,
        aa.answer_text AS userAnswer, aa.answered_at AS answeredAt
 FROM assessment_answer aa
 JOIN assessment_attempt a ON a.id = aa.attempt_id
 JOIN assessment_participant ap ON ap.id = a.participant_id
 JOIN assessment_task t ON t.id = a.task_id
 JOIN question_item qi ON qi.id = aa.question_id
+LEFT JOIN assessment_attempt_question aq ON aq.question_id=aa.question_id AND aq.attempt_id=a.id
 LEFT JOIN question_bank qb ON qb.id = qi.bank_id
-WHERE COALESCE(aa.is_correct, 0) = 0 AND a.status = 'SUBMITTED'
+WHERE t.show_result_immediately=1 AND COALESCE(aa.is_correct, 0) = 0 AND a.status = 'SUBMITTED'
   AND a.id = (
     SELECT MAX(a2.id)
     FROM assessment_attempt a2
     JOIN assessment_participant ap2 ON ap2.id = a2.participant_id
     WHERE a2.task_id = a.task_id
-      AND a2.status = 'SUBMITTED'
+      AND a2.status IN ('SUBMITTED','PENDING_REVIEW')
       AND (ap2.user_id = #{latestUserId} OR (ap2.user_id IS NULL AND ap2.phone = #{latestPhone}))
   )
   AND (ap.user_id = #{userId} OR (ap.user_id IS NULL AND ap.phone = #{phone}))

@@ -187,13 +187,14 @@ public class DashboardService {
             row.get("confirmedAt") != null);
     boolean learned = "COMPLETED".equals(learning),
         passed = "SUBMITTED".equals(row.get("attemptStatus")) && flag(row.get("passed"));
+    boolean pendingReview = "PENDING_REVIEW".equals(row.get("attemptStatus"));
     boolean complete = learned && (row.get("assessmentId") == null || passed);
     var reasons =
         TrainingReminderRules.reasons(
             date(row.get("trainingEnd")),
             learned,
             row.get("assessmentId") == null ? null : date(row.get("examEnd")),
-            passed,
+            passed || pendingReview,
             now);
     row.put("learningStatus", learning);
     row.put("examPassed", passed);
@@ -213,6 +214,7 @@ public class DashboardService {
             ? "NONE"
             : row.get("attemptId") == null
                 ? "NOT_STARTED"
+                : pendingReview ? "PENDING_REVIEW"
                 : "SUBMITTED".equals(row.get("attemptStatus"))
                     ? passed ? "PASSED" : "FAILED"
                     : "IN_PROGRESS");
@@ -225,7 +227,7 @@ public class DashboardService {
     var completedAt = later(date(row.get("videoCompletedAt")), date(row.get("readingCompletedAt")));
     if (number(row, "totalUnits") == 0) completedAt = date(row.get("confirmedAt"));
     if (row.get("assessmentId") != null)
-      completedAt = later(completedAt, date(row.get("submittedAt")));
+      completedAt = later(completedAt, date(row.get(row.get("reviewedAt") == null ? "submittedAt" : "reviewedAt")));
     row.put(
         "completedAt",
         complete && completedAt != null ? completedAt.toInstant(ZoneOffset.UTC).toString() : null);

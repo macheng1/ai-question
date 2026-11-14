@@ -4,7 +4,7 @@ import { Layout } from "@douyinfe/semi-ui";
 import { useEffect, useState } from "react";
 import { getPublicAttemptResult } from "@/features/exam/api";
 import { ExamRunner } from "@/features/exam/components/ExamRunner";
-import type { ExamPaper } from "@/features/exam/types";
+import { readSavedAnswer, type ExamPaper } from "@/features/exam/types";
 
 type ResultLoaderProps = {
   paper: ExamPaper;
@@ -34,6 +34,7 @@ export function ResultLoader({ paper, attemptId, details = false }: ResultLoader
     showAnswers: boolean;
     grades: { questionId: number; isCorrect: boolean; score: number }[];
   } | null>(null);
+  const [pendingReview, setPendingReview] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -42,19 +43,14 @@ export function ResultLoader({ paper, attemptId, details = false }: ResultLoader
       .then((response) => {
         if (!active) return;
         if (String(response.taskId) !== String(paper.id)) throw new Error("答题记录与本场考试不匹配");
+        if (response.pendingReview || response.status === "PENDING_REVIEW") {
+          setPendingReview(true);
+          return;
+        }
         const answers = Object.fromEntries(
           (response.answers || []).map((item) => {
             const question = paper.questions.find((q) => q.id === item.questionId);
-            const values = item.answerText
-              ? item.answerText.split(",").filter(Boolean)
-              : [];
-            // 判断题后端持久化 TRUE/FALSE，前端展示统一使用 A/B。
-            const normalized = question?.kind === "judge"
-              ? values.map((value) =>
-                  value.toUpperCase() === "TRUE" ? "A" : value.toUpperCase() === "FALSE" ? "B" : value,
-                )
-              : values;
-            return [item.questionId, normalized];
+            return [item.questionId, readSavedAnswer(question?.kind, item.answerText)];
           }),
         );
         setData({
@@ -85,7 +81,7 @@ export function ResultLoader({ paper, attemptId, details = false }: ResultLoader
     return () => {
       active = false;
     };
-  }, [attemptId, paper.passScore, paper.totalScore]);
+  }, [attemptId, paper]);
 
   if (error) {
     return (
@@ -94,6 +90,14 @@ export function ResultLoader({ paper, attemptId, details = false }: ResultLoader
       </Layout.Content>
     );
   }
+
+  if (pendingReview) return (
+    <section className="h5-content text-center">
+      <h1 className="h5-section-title">待批阅</h1>
+      <p className="h5-muted my-4">《{paper.title}》已交卷，教师完成批阅后可查看成绩。</p>
+      <a className="h5-link" href="/learner/exams">返回我的考试</a>
+    </section>
+  );
 
   if (!data) {
     return (

@@ -20,6 +20,7 @@ export type LearnerTraining = {
   examStartAt?: string;
   examEndAt?: string;
   examStatus?: string;
+  pendingReview?: boolean;
   attemptId?: number;
   attemptCount: number;
   remainingAttempts?: number;
@@ -40,6 +41,7 @@ export type ExamRecord = {
   taskId: number;
   name: string;
   status: string;
+  pendingReview?: boolean;
   attemptNo: number;
   score: number | null;
   totalScore: number;
@@ -52,6 +54,7 @@ export type Mistake = {
   id: number;
   examName: string;
   stem: string;
+  questionType?: string;
   userAnswer: string;
   correctAnswer: string;
   options: { optionKey: string; optionText: string }[];

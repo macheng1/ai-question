@@ -4,7 +4,7 @@
   <select id="maximumUsedAttempts" resultType="int">SELECT COALESCE(MAX(attempt_no),0) FROM assessment_attempt WHERE task_id=#{id}</select>
   <update id="retireUnlinkedTrainingExam">UPDATE assessment_task SET status='DISABLED' WHERE id=#{id} AND training_managed=TRUE AND NOT EXISTS (SELECT 1 FROM training WHERE assessment_id=#{id})</update>
   <update id="markTrainingManaged">UPDATE assessment_task SET training_managed=TRUE WHERE id=#{id}</update>
-  <sql id="columns">a.id,a.created_by,a.name,a.paper_id,a.start_at,a.end_at,a.duration_minutes,a.candidate_scope,a.status,a.allow_retake,a.max_attempts,a.shuffle_questions,a.shuffle_options,a.show_result_immediately,p.name AS paper_name,p.mode AS paper_mode,CASE WHEN p.mode='RANDOM' THEN COALESCE((SELECT SUM(rb.single_count+rb.multiple_count+rb.true_false_count) FROM test_paper_random_bank rb WHERE rb.paper_id=a.paper_id),0) ELSE (SELECT COUNT(*) FROM test_paper_question pq WHERE pq.paper_id=a.paper_id) END AS question_count</sql>
+  <sql id="columns">a.id,a.created_by,a.name,a.paper_id,a.start_at,a.end_at,a.duration_minutes,a.candidate_scope,a.status,a.allow_retake,a.max_attempts,a.shuffle_questions,a.shuffle_options,a.show_result_immediately,p.name AS paper_name,p.mode AS paper_mode,CASE WHEN p.mode='RANDOM' THEN COALESCE((SELECT SUM(rb.single_count+rb.multiple_count+rb.true_false_count+rb.short_answer_count) FROM test_paper_random_bank rb WHERE rb.paper_id=a.paper_id),0) ELSE (SELECT COUNT(*) FROM test_paper_question pq WHERE pq.paper_id=a.paper_id) END AS question_count</sql>
   <sql id="whereClause"><where><bind name="ownerId" value="@com.aiquestion.security.ManagementAccess@userId()"/>a.created_by=#{ownerId} AND a.training_managed=FALSE <if test="query.keyword!=null and query.keyword!=''">AND (a.name LIKE CONCAT('%',#{query.keyword},'%') OR p.name LIKE CONCAT('%',#{query.keyword},'%'))</if><if test="startAt!=null">AND a.start_at &gt;= #{startAt}</if><if test="endAt!=null">AND a.start_at &lt;= #{endAt}</if></where></sql>
   <select id="findPage" resultType="com.aiquestion.domain.AssessmentTask">SELECT <include refid="columns"/> FROM assessment_task a JOIN test_paper p ON p.id=a.paper_id <include refid="whereClause"/> ORDER BY a.id DESC LIMIT #{query.pageSize} OFFSET #{query.offset}</select>
   <select id="count" resultType="long">SELECT COUNT(*) FROM assessment_task a JOIN test_paper p ON p.id=a.paper_id <include refid="whereClause"/></select>
@@ -15,15 +15,57 @@
   <update id="markExpiredAsEnded">UPDATE assessment_task SET status='ENDED',updated_at=CURRENT_TIMESTAMP(3) WHERE status IN ('PUBLISHED','STARTED') AND end_at IS NOT NULL AND end_at &lt;= CURRENT_TIMESTAMP(3)</update>
   <delete id="deleteById">DELETE FROM assessment_task WHERE id=#{id}</delete>
   <update id="update">UPDATE assessment_task SET name=#{name},start_at=#{startAt},end_at=#{endAt},duration_minutes=#{durationMinutes},candidate_scope=#{candidateScope},status=#{status},allow_retake=#{allowRetake},max_attempts=#{maxAttempts},shuffle_questions=#{shuffleQuestions},shuffle_options=#{shuffleOptions},show_result_immediately=#{showResultImmediately},updated_at=CURRENT_TIMESTAMP(3) WHERE id=#{id}</update>
-  <!-- 统计始终以每位考生最后一次有效记录为准；是否包含重考只影响明细列表。 -->
-  <select id="statistics" resultType="map">SELECT COUNT(*) AS totalCount,COALESCE(AVG(a.score),0) AS averageScore,COALESCE(SUM(CASE WHEN a.passed THEN 1 ELSE 0 END),0) AS passedCount,COALESCE(MAX(a.total_score),0) AS totalScore FROM assessment_attempt a WHERE a.task_id=#{id} AND a.status='SUBMITTED' <if test="!includeRetake">AND NOT EXISTS (SELECT 1 FROM assessment_attempt newer WHERE newer.participant_id=a.participant_id AND newer.attempt_no&gt;a.attempt_no AND newer.status='SUBMITTED')</if></select>
-  <select id="records" resultType="map">SELECT a.id,tp.name AS paperName,COALESCE(NULLIF(ap.candidate_name,''),ap.phone,'匿名考生') AS candidateName,ap.phone,(SELECT r.department_id FROM training_audience r JOIN training t ON t.id=r.training_id WHERE t.assessment_id=a.task_id AND r.phone=ap.phone) AS departmentId,(SELECT r.department_name FROM training_audience r JOIN training t ON t.id=r.training_id WHERE t.assessment_id=a.task_id AND r.phone=ap.phone) AS departmentName,a.score,a.total_score AS totalScore,a.passed,a.attempt_no AS attemptNo,a.started_at AS startedAt,a.submitted_at AS submittedAt,CASE WHEN EXISTS (SELECT 1 FROM assessment_attempt newer WHERE newer.participant_id=a.participant_id AND newer.attempt_no&gt;a.attempt_no AND newer.status='SUBMITTED') THEN 'VOID' ELSE a.status END AS status FROM assessment_attempt a JOIN assessment_participant ap ON ap.id=a.participant_id JOIN assessment_task at ON at.id=a.task_id JOIN test_paper tp ON tp.id=at.paper_id WHERE a.task_id=#{id} <if test="!includeRetake">AND NOT EXISTS (SELECT 1 FROM assessment_attempt newer WHERE newer.participant_id=a.participant_id AND newer.attempt_no&gt;a.attempt_no AND newer.status='SUBMITTED')</if> <choose><when test="includeRetake">ORDER BY ap.id,a.attempt_no,a.id</when><otherwise>ORDER BY a.id DESC</otherwise></choose></select>
-  <sql id="detailAttemptWhere">a.task_id=#{id} AND a.status='SUBMITTED' <if test="!includeRetake">AND NOT EXISTS (SELECT 1 FROM assessment_attempt newer WHERE newer.participant_id=a.participant_id AND newer.attempt_no&gt;a.attempt_no AND newer.status='SUBMITTED')</if></sql>
-  <select id="statisticsOverview" resultType="map">SELECT <choose><when test="includeRetake">COUNT(*)</when><otherwise>COUNT(DISTINCT a.participant_id)</otherwise></choose> AS participantCount,COALESCE(AVG(a.score),0) AS averageScore,COALESCE(SUM(CASE WHEN a.passed THEN 1 ELSE 0 END)*100.0/NULLIF(COUNT(*),0),0) AS passRate,COALESCE(MAX(a.score),0) AS highestScore,COALESCE(MIN(a.score),0) AS lowestScore,COALESCE(AVG(TIMESTAMPDIFF(SECOND,a.started_at,a.submitted_at)),0) AS averageDurationSeconds,COALESCE(MAX(a.total_score),(SELECT p.total_score FROM assessment_task t JOIN test_paper p ON p.id=t.paper_id WHERE t.id=#{id}),0) AS totalScore,(SELECT p.pass_score FROM assessment_task t JOIN test_paper p ON p.id=t.paper_id WHERE t.id=#{id}) AS passScore FROM assessment_attempt a WHERE <include refid="detailAttemptWhere"/></select>
+  <sql id="hasNewerSubmission">
+    EXISTS (SELECT 1 FROM assessment_attempt newer WHERE newer.participant_id=a.participant_id
+      AND newer.attempt_no&gt;a.attempt_no AND newer.status IN ('SUBMITTED','PENDING_REVIEW'))
+  </sql>
+  <sql id="submissionWhere">
+    a.task_id=#{id} AND a.status IN ('SUBMITTED','PENDING_REVIEW')
+    <if test="!includeRetake">AND NOT <include refid="hasNewerSubmission"/></if>
+  </sql>
+  <sql id="detailAttemptWhere"><include refid="submissionWhere"/> AND a.status='SUBMITTED'</sql>
+  <select id="statistics" resultType="map">
+    SELECT COUNT(*) AS totalCount,COUNT(CASE WHEN a.status='SUBMITTED' THEN 1 END) AS gradedCount,
+      AVG(CASE WHEN a.status='SUBMITTED' THEN a.score END) AS averageScore,
+      COUNT(CASE WHEN a.status='SUBMITTED' AND a.passed THEN 1 END) AS passedCount,
+      COALESCE(MAX(a.total_score),0) AS totalScore
+    FROM assessment_attempt a WHERE <include refid="submissionWhere"/>
+  </select>
+  <select id="records" resultType="map">SELECT a.id,tp.name AS paperName,COALESCE(NULLIF(ap.candidate_name,''),ap.phone,'匿名考生') AS candidateName,ap.phone,(SELECT r.department_id FROM training_audience r JOIN training t ON t.id=r.training_id WHERE t.assessment_id=a.task_id AND r.phone=ap.phone) AS departmentId,(SELECT r.department_name FROM training_audience r JOIN training t ON t.id=r.training_id WHERE t.assessment_id=a.task_id AND r.phone=ap.phone) AS departmentName,CASE WHEN a.status='SUBMITTED' THEN a.score END AS score,a.total_score AS totalScore,CASE WHEN a.status='SUBMITTED' THEN a.passed END AS passed,a.attempt_no AS attemptNo,a.started_at AS startedAt,a.submitted_at AS submittedAt,CASE WHEN <include refid="hasNewerSubmission"/> THEN 'VOID' ELSE a.status END AS status FROM assessment_attempt a JOIN assessment_participant ap ON ap.id=a.participant_id JOIN assessment_task at ON at.id=a.task_id JOIN test_paper tp ON tp.id=at.paper_id WHERE a.task_id=#{id} <if test="!includeRetake">AND NOT <include refid="hasNewerSubmission"/></if> <choose><when test="includeRetake">ORDER BY ap.id,a.attempt_no,a.id</when><otherwise>ORDER BY a.id DESC</otherwise></choose></select>
+  <select id="statisticsOverview" resultType="map">
+    SELECT COUNT(*) AS participantCount,AVG(CASE WHEN a.status='SUBMITTED' THEN a.score END) AS averageScore,
+      AVG(CASE WHEN a.status='SUBMITTED' THEN IF(a.passed,100,0) END) AS passRate,
+      MAX(CASE WHEN a.status='SUBMITTED' THEN a.score END) AS highestScore,
+      MIN(CASE WHEN a.status='SUBMITTED' THEN a.score END) AS lowestScore,
+      COALESCE(AVG(TIMESTAMPDIFF(SECOND,a.started_at,a.submitted_at)),0) AS averageDurationSeconds,
+      COALESCE(MAX(a.total_score),(SELECT p.total_score FROM assessment_task t JOIN test_paper p ON p.id=t.paper_id WHERE t.id=#{id}),0) AS totalScore,
+      (SELECT p.pass_score FROM assessment_task t JOIN test_paper p ON p.id=t.paper_id WHERE t.id=#{id}) AS passScore
+    FROM assessment_attempt a WHERE <include refid="submissionWhere"/>
+  </select>
   <select id="scoreDistribution" resultType="map">SELECT bucket AS label,COUNT(*) AS count FROM (SELECT CASE WHEN a.total_score&lt;=0 THEN '无有效满分' WHEN a.score/NULLIF(a.total_score,0)&lt;0.6 THEN '0-59' WHEN a.score/NULLIF(a.total_score,0)&lt;0.7 THEN '60-69' WHEN a.score/NULLIF(a.total_score,0)&lt;0.8 THEN '70-79' WHEN a.score/NULLIF(a.total_score,0)&lt;0.9 THEN '80-89' ELSE '90-100' END AS bucket FROM assessment_attempt a WHERE <include refid="detailAttemptWhere"/>) s GROUP BY bucket ORDER BY FIELD(bucket,'0-59','60-69','70-79','80-89','90-100')</select>
   <select id="passDistribution" resultType="map">SELECT CASE WHEN a.passed THEN '已通过' ELSE '未通过' END AS label,COUNT(*) AS count FROM assessment_attempt a WHERE <include refid="detailAttemptWhere"/> GROUP BY a.passed ORDER BY a.passed DESC</select>
-  <select id="submissionTrend" resultType="map">SELECT DATE_FORMAT(a.submitted_at,'%Y-%m-%d %H:%i') AS label,COUNT(*) AS count FROM assessment_attempt a WHERE <include refid="detailAttemptWhere"/> GROUP BY DATE_FORMAT(a.submitted_at,'%Y-%m-%d %H:%i') ORDER BY MIN(a.submitted_at)</select>
-  <select id="typeScore" resultType="map">SELECT CASE qi.question_type WHEN 'SINGLE' THEN '单选题' WHEN 'MULTI' THEN '多选题' WHEN 'MULTIPLE' THEN '多选题' WHEN 'JUDGE' THEN '判断题' WHEN 'TRUE_FALSE' THEN '判断题' ELSE qi.question_type END AS type,COALESCE(SUM(aa.score),0) AS score,COALESCE(SUM(aq.score),0) AS fullScore,COALESCE(AVG(CASE WHEN aa.is_correct THEN 100 ELSE 0 END),0) AS correctRate FROM assessment_attempt_question aq JOIN assessment_attempt a ON a.id=aq.attempt_id JOIN question_item qi ON qi.id=aq.question_id LEFT JOIN assessment_answer aa ON aa.attempt_id=a.id AND aa.question_id=aq.question_id WHERE <include refid="detailAttemptWhere"/> GROUP BY qi.question_type ORDER BY FIELD(qi.question_type,'SINGLE','MULTI','MULTIPLE','JUDGE','TRUE_FALSE')</select>
-  <select id="difficultQuestions" resultType="map">SELECT qi.id AS questionId,qi.stem AS title,CASE qi.question_type WHEN 'SINGLE' THEN '单选题' WHEN 'MULTI' THEN '多选题' WHEN 'MULTIPLE' THEN '多选题' WHEN 'JUDGE' THEN '判断题' WHEN 'TRUE_FALSE' THEN '判断题' ELSE qi.question_type END AS type,COUNT(aq.id) AS answeredCount,COALESCE(AVG(CASE WHEN aa.is_correct THEN 100 ELSE 0 END),0) AS correctRate FROM assessment_attempt_question aq JOIN assessment_attempt a ON a.id=aq.attempt_id JOIN question_item qi ON qi.id=aq.question_id LEFT JOIN assessment_answer aa ON aa.attempt_id=a.id AND aa.question_id=aq.question_id WHERE <include refid="detailAttemptWhere"/> GROUP BY qi.id,qi.stem,qi.question_type ORDER BY correctRate ASC,answeredCount DESC LIMIT 5</select>
+  <select id="submissionTrend" resultType="map">SELECT DATE_FORMAT(a.submitted_at,'%Y-%m-%d %H:%i') AS label,COUNT(*) AS count FROM assessment_attempt a WHERE <include refid="submissionWhere"/> GROUP BY DATE_FORMAT(a.submitted_at,'%Y-%m-%d %H:%i') ORDER BY MIN(a.submitted_at)</select>
+  <sql id="questionTypeLabel">
+    CASE COALESCE(aq.snapshot_type,qi.question_type)
+      WHEN 'SINGLE' THEN '单选题' WHEN 'MULTI' THEN '多选题' WHEN 'MULTIPLE' THEN '多选题'
+      WHEN 'JUDGE' THEN '判断题' WHEN 'TRUE_FALSE' THEN '判断题' WHEN 'SHORT_ANSWER' THEN '问答题'
+      ELSE COALESCE(aq.snapshot_type,qi.question_type) END
+  </sql>
+  <sql id="gradedAnswers">
+    FROM assessment_attempt_question aq JOIN assessment_attempt a ON a.id=aq.attempt_id
+    JOIN question_item qi ON qi.id=aq.question_id
+    LEFT JOIN assessment_answer aa ON aa.attempt_id=a.id AND aa.question_id=aq.question_id
+    WHERE <include refid="detailAttemptWhere"/>
+  </sql>
+  <select id="typeScore" resultType="map">
+    SELECT <include refid="questionTypeLabel"/> AS type,COALESCE(SUM(aa.score),0) AS score,
+      SUM(aq.score) AS fullScore,AVG(CASE WHEN aa.is_correct THEN 100 ELSE 0 END) AS correctRate
+    <include refid="gradedAnswers"/> GROUP BY type ORDER BY FIELD(type,'单选题','多选题','判断题','问答题')
+  </select>
+  <select id="difficultQuestions" resultType="map">
+    SELECT qi.id AS questionId,COALESCE(aq.snapshot_stem,qi.stem) AS title,<include refid="questionTypeLabel"/> AS type,
+      COUNT(*) AS answeredCount,AVG(CASE WHEN aa.is_correct THEN 100 ELSE 0 END) AS correctRate
+    <include refid="gradedAnswers"/> GROUP BY qi.id,title,type ORDER BY correctRate ASC,answeredCount DESC LIMIT 5
+  </select>
   <select id="countTrainingReferences" resultType="int">SELECT COUNT(*) FROM training WHERE assessment_id=#{id}</select>
 </mapper>

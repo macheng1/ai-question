@@ -51,7 +51,7 @@ public class LearnerRecordService {
                 boolean closed = disabled || "ENDED".equals(row.get("examLifecycle")) || (end != null && !now.isBefore(end));
                 boolean published = !"DRAFT".equals(row.get("examLifecycle")) && (start == null || !now.isBefore(start));
                 boolean submitted = "SUBMITTED".equals(row.get("attemptStatus"));
-                row.put("examStatus", LearnerTaskStatus.exam(learning.equals("COMPLETED"), row.get("attemptId") != null && !submitted, submitted, flag(row.get("resultVisible")), flag(row.get("passed")), closed, published));
+                row.put("examStatus", "PENDING_REVIEW".equals(row.get("attemptStatus")) ? "PENDING_REVIEW" : LearnerTaskStatus.exam(learning.equals("COMPLETED"), row.get("attemptId") != null && !submitted, submitted, flag(row.get("resultVisible")), flag(row.get("passed")), closed, published));
                 row.put("canRetake", submitted && published && LearnerTaskStatus.canRetake(flag(row.get("allowRetake")), (int) number(row, "maxAttempts"), (int) number(row, "attemptCount"), start, end, closed, now));
                 row.put("remainingAttempts", Math.max(0, (flag(row.get("allowRetake")) ? number(row, "maxAttempts") : 1) - number(row, "attemptCount")));
                 if (!flag(row.get("resultVisible")) || !submitted) {
@@ -106,7 +106,7 @@ public class LearnerRecordService {
     public List<Map<String, Object>> exams(AccountIdentity identity) {
         accounts.employee(identity.accountId());
         return persistence.findExamRecords(identity.enterpriseId(), identity.accountId()).stream().map(row -> {
-            if (!Boolean.TRUE.equals(row.get("showResultImmediately")) && !"1".equals(String.valueOf(row.get("showResultImmediately")))) {
+            if (!"SUBMITTED".equals(row.get("status")) || !flag(row.get("showResultImmediately"))) {
                 row.put("score", null);
                 row.put("passed", null);
             }

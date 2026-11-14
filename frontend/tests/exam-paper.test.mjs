@@ -33,3 +33,15 @@ test('server TRUE and FALSE answers highlight the matching judge option', async 
     assert.ok(q.options.some(option=>option.key===q.answer[0]));
   }
 });
+
+test('short answers preserve commas, case, line breaks and significant spacing on resume and review', async t => {
+  const { readSavedAnswer, isAnswered } = await import('../features/exam/types.ts');
+  const text = '  Api,x，TRUE、false\n第二行  ';
+  const q = await loadQuestion(t, {id:2,kind:'short',options:[],answer:[text]});
+  assert.deepEqual(q.answer, [text]);
+  assert.deepEqual(readSavedAnswer(q.kind, text), [text]);
+  assert.deepEqual(readSavedAnswer('multi', 'A,C'), ['A','C']);
+  assert.deepEqual(readSavedAnswer('judge', 'FALSE'), ['B']);
+  assert.equal(isAnswered([text]), true);
+  assert.equal(isAnswered(['  \n']), false);
+});

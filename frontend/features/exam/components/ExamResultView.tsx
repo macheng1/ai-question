@@ -4,7 +4,7 @@ import { Layout } from "@douyinfe/semi-ui";
 import { useEffect, useState } from "react";
 import { Button, Banner } from "@douyinfe/semi-ui";
 import { IconTickCircle, IconAlertCircle, IconArrowLeft, IconArrowRight } from "@douyinfe/semi-icons";
-import type { ExamPaper, ExamQuestion } from "../types";
+import { questionLabels, type ExamPaper, type ExamQuestion } from "../types";
 import { TrainingExamLinks } from "@/features/trainings/components/TrainingExamLinks";
 
 export type QuestionGrade = { questionId: number; isCorrect: boolean; score: number };
@@ -69,12 +69,12 @@ export function ExamResultView(props: ExamResultViewProps) {
           const picked = answers[question.id] || [], grade = gradeFor(question);
           const questionIndex = paper.questions.findIndex(q => q.id === question.id);
           return <article className="h5-review-question result-print-question" key={question.id}>
-            <div className="h5-review-meta"><span className="h5-tag">{String(questionIndex + 1).padStart(2, "0")} · {question.kind === "multi" ? "多选题" : question.kind === "judge" ? "判断题" : "单选题"}</span><b className={grade.isCorrect ? "" : "incorrect"}>{grades ? grade.score : grade.isCorrect ? question.score || 0 : 0} / {question.score || 0} 分</b></div>
+            <div className="h5-review-meta"><span className="h5-tag">{String(questionIndex + 1).padStart(2, "0")} · {questionLabels[question.kind]}</span><b className={grade.isCorrect ? "" : "incorrect"}>{grades ? grade.score : grade.isCorrect ? question.score || 0 : 0} / {question.score || 0} 分</b></div>
             <Typography.Title heading={3} className="!my-3 !text-base !leading-7">{question.title}</Typography.Title><div className="h5-review-options">{optionsFor(question).map(option => {
               const correct = question.answer.includes(option.key), mine = picked.includes(option.key);
               return <div key={option.key} className={`h5-review-option ${correct ? "correct" : mine ? "wrong" : ""}`}><span>{option.key}</span><p>{option.text}</p>{(correct || mine) && <small>{correct ? "正确答案" : "我的选择"}</small>}</div>;
             })}</div>
-            <div className="h5-answer-comparison"><span>我的答案 <b>{answerLabel(question, picked) || "未作答"}</b></span><span>正确答案 <b>{answerLabel(question, question.answer) || "未公布"}</b></span><span>{grade.isCorrect ? "回答正确" : "回答错误"}</span></div>
+            <div className="h5-answer-comparison whitespace-pre-wrap [overflow-wrap:anywhere]"><span>我的答案 <b>{answerLabel(question, picked) || "未作答"}</b></span><span>{question.kind === "short" ? "参考答案" : "正确答案"} <b>{answerLabel(question, question.answer) || "未公布"}</b></span><span>{question.kind === "short" ? (grade.isCorrect ? "满分" : grade.score > 0 ? "部分得分" : "未得分") : grade.isCorrect ? "回答正确" : "回答错误"}</span></div>
             <div className="h5-explanation"><b>答案解析</b>{question.analysis || "暂无解析"}</div>
           </article>;
         })}

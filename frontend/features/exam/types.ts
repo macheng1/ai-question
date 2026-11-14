@@ -1,4 +1,4 @@
-export type QuestionKind = "single" | "multi" | "judge";
+export type QuestionKind = "single" | "multi" | "judge" | "short";
 export type ExamOption = { key: string; text: string };
 export type ExamQuestion = {
   id: number;
@@ -25,3 +25,23 @@ export type ExamPaper = {
   reviewEnabled?: boolean;
   questions: ExamQuestion[];
 };
+
+
+export const questionLabels: Record<QuestionKind, string> = {
+  single: "单选题", multi: "多选题", judge: "判断题", short: "问答题",
+};
+
+export function readSavedAnswer(kind: QuestionKind | undefined, value?: string): string[] {
+  if (!value) return [];
+  if (kind === "short") return [value];
+  const values = value.split(",").filter(Boolean);
+  if (kind !== "judge") return values;
+  return values.map(item => {
+    const key = item.trim().toUpperCase();
+    return key === "TRUE" ? "A" : key === "FALSE" ? "B" : item;
+  });
+}
+
+export function isAnswered(values?: string[]) {
+  return Boolean(values?.some(value => value.trim().length > 0));
+}

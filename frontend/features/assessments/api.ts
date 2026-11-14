@@ -64,7 +64,8 @@ export function deleteAssessment(id: number) {
 export function getAssessmentStatistics(id: number, includeRetake = false) {
   return apiClient.get<{
     totalCount: number;
-    averageScore: number;
+    averageScore?: number | null;
+    gradedCount: number;
     passedCount: number;
     totalScore: number;
   }>(`/management/assessments/${id}/statistics`, { includeRetake });
@@ -73,10 +74,10 @@ export type AssessmentStatisticsDetail = {
   task: Assessment;
   overview: {
     participantCount: number;
-    averageScore: number;
-    passRate: number;
-    highestScore: number;
-    lowestScore: number;
+    averageScore?: number | null;
+    passRate?: number | null;
+    highestScore?: number | null;
+    lowestScore?: number | null;
     averageDurationSeconds: number;
     totalScore: number;
     passScore: number;
@@ -115,9 +116,9 @@ export function getAssessmentRecords(id: number, includeRetake = false) {
       phone?: string;
       departmentId?: number;
       departmentName?: string;
-      score: number;
+      score?: number | null;
       totalScore: number;
-      passed: boolean;
+      passed?: boolean | null;
       attemptNo: number;
       startedAt?: string;
       submittedAt?: string;

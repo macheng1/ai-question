@@ -91,6 +91,9 @@ export type RandomConfig = {
   multipleScore: number;
   trueFalseCount: number;
   trueFalseScore: number;
+  shortAnswerCount: number;
+  shortAnswerScore: number;
+  availableShortAnswerCount: number;
   availableSingleCount: number;
   availableMultipleCount: number;
   availableTrueFalseCount: number;
@@ -104,6 +107,6 @@ export function addRandomBank(id: number, bankId: number) {
 export function removeRandomBank(id: number, bankId: number) {
   return apiClient.delete<void>(`/management/papers/${id}/random-config/banks/${bankId}`);
 }
-export function saveRandomConfig(id: number, items: Omit<RandomConfig, "id" | "bankName" | "availableSingleCount" | "availableMultipleCount" | "availableTrueFalseCount">[]) {
+export function saveRandomConfig(id: number, items: Omit<RandomConfig, "id" | "bankName" | "availableSingleCount" | "availableMultipleCount" | "availableTrueFalseCount" | "availableShortAnswerCount">[]) {
   return apiClient.put<void>(`/management/papers/${id}/random-config`, items);
 }

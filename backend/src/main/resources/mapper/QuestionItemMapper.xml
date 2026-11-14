@@ -5,7 +5,9 @@
   <select id="findPage" resultType="com.aiquestion.domain.QuestionItem">SELECT id,bank_id,question_type,stem,answer_text,analysis,tags,source,difficulty,score,sort_no,status FROM question_item <include refid="whereClause"/> ORDER BY id DESC LIMIT #{query.pageSize} OFFSET #{query.offset}</select>
   <select id="count" resultType="long">SELECT COUNT(*) FROM question_item <include refid="whereClause"/></select>
   <select id="findPublishedPage" resultType="com.aiquestion.domain.QuestionItem">
-    SELECT q.id,q.bank_id,q.question_type,q.stem,q.answer_text,q.analysis,q.tags,q.source,q.difficulty,q.score,q.sort_no,q.status
+    SELECT q.id,q.bank_id,q.question_type,q.stem,
+      CASE WHEN q.question_type != 'SHORT_ANSWER' THEN q.answer_text END AS answer_text,
+      CASE WHEN q.question_type != 'SHORT_ANSWER' THEN q.analysis END AS analysis,q.tags,q.source,q.difficulty,q.score,q.sort_no,q.status
     FROM question_item q JOIN question_bank b ON b.id=q.bank_id
     <where>
       q.bank_id=#{bankId} AND b.published=TRUE AND q.status='ENABLED'
