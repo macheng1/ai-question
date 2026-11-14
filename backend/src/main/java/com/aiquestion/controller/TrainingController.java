@@ -19,6 +19,12 @@ public class TrainingController {
         return service.materials(id, auth);
     }
 
+    @PostMapping("/management/trainings/{id}/materials/{material}/preview/retry")
+    public ApiResponse<?> retryPreview(@PathVariable long id, @PathVariable long material,
+        @RequestHeader(value="Authorization",required=false) String auth) {
+        return service.retryPreview(id, material, auth);
+    }
+
     @PutMapping("/management/trainings/{id}/materials/order")
     public ApiResponse<?> reorderMaterials(@PathVariable long id, @RequestBody List<Long> ids, @RequestHeader(value = "Authorization", required = false) String auth) {
         return service.reorderMaterials(id, ids, auth);

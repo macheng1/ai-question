@@ -17,10 +17,10 @@
     UPDATE candidate_learning_session SET completed_at=COALESCE(completed_at,CURRENT_TIMESTAMP(3)) WHERE <choose><when test="examTask">task_id</when><otherwise>training_id</otherwise></choose>=#{taskId} AND candidate_name=#{candidateName} AND phone=#{phone}
   </update>
   <select id="lockExamTrainings" resultType="java.util.LinkedHashMap">
-    SELECT id FROM training WHERE assessment_id=#{taskId} ORDER BY id FOR UPDATE
+    SELECT id FROM training WHERE assessment_id=#{taskId} ORDER BY id FOR SHARE
   </select>
   <select id="lockStandaloneTraining" resultType="java.util.LinkedHashMap">
-    SELECT id FROM training WHERE id=#{trainingId} FOR UPDATE
+    SELECT id FROM training WHERE id=#{trainingId} FOR SHARE
   </select>
   <select id="findTask" resultType="java.util.LinkedHashMap">
     SELECT id FROM assessment_task WHERE id=#{taskId}
@@ -47,9 +47,9 @@
     SELECT candidate_name,phone FROM candidate_learning_session WHERE token=#{token} AND <choose><when test="examTask">task_id</when><otherwise>training_id</otherwise></choose>=#{taskId}
   </select>
   <select id="lockVideoProgress" resultType="java.util.LinkedHashMap">
-    SELECT studied_seconds,last_play_position,GREATEST(0,TIMESTAMPDIFF(MICROSECOND,updated_at,CURRENT_TIMESTAMP(3))/1000000.0) recent_elapsed,position_seconds,baseline_position,completed,GREATEST(0,TIMESTAMPDIFF(MICROSECOND,baseline_at,CURRENT_TIMESTAMP(3))/1000000.0) elapsed FROM candidate_video_progress WHERE session_id=#{sessionId} AND video_id=#{videoId} FOR UPDATE
+    SELECT last_request_id,studied_seconds,last_play_position,GREATEST(0,TIMESTAMPDIFF(MICROSECOND,updated_at,CURRENT_TIMESTAMP(3))/1000000.0) recent_elapsed,position_seconds,baseline_position,completed,GREATEST(0,TIMESTAMPDIFF(MICROSECOND,baseline_at,CURRENT_TIMESTAMP(3))/1000000.0) elapsed FROM candidate_video_progress WHERE session_id=#{sessionId} AND video_id=#{videoId} FOR UPDATE
   </select>
   <update id="updateVideoProgress">
-    UPDATE candidate_video_progress SET position_seconds=#{positionSeconds},completed=#{completed},studied_seconds=#{studiedSeconds},last_play_position=#{playPosition},first_studied_at=COALESCE(first_studied_at,CURRENT_TIMESTAMP(3)),completed_at=IF(#{markCompleted} AND completed_at IS NULL,CURRENT_TIMESTAMP(3),completed_at),updated_at=CURRENT_TIMESTAMP(3) WHERE session_id=#{sessionId} AND video_id=#{videoId}
+    UPDATE candidate_video_progress SET last_request_id=#{requestId},position_seconds=#{positionSeconds},completed=#{completed},studied_seconds=#{studiedSeconds},last_play_position=#{playPosition},first_studied_at=COALESCE(first_studied_at,CURRENT_TIMESTAMP(3)),completed_at=IF(#{markCompleted} AND completed_at IS NULL,CURRENT_TIMESTAMP(3),completed_at),updated_at=CURRENT_TIMESTAMP(3) WHERE session_id=#{sessionId} AND video_id=#{videoId}
   </update>
 </mapper>

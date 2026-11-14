@@ -13,10 +13,27 @@ import org.springframework.web.multipart.MultipartFile;
 
 /** 阿里云 OSS 适配层，负责私有对象操作和连接释放。 */
 @Service
-public class AliyunOssService implements ObjectStorage {
+public class AliyunOssService implements ObjectStorage, AutoCloseable {
   private final AliyunOssProperties properties;
 
   public AliyunOssService(AliyunOssProperties properties) { this.properties = properties; }
+  private OSS sharedClient;
+  private boolean closed;
+
+  // Lazy initialization keeps an unused, unconfigured provider from blocking application startup.
+  private synchronized OSS client() {
+    if (closed) throw new IllegalStateException("Storage client is closed");
+    if (sharedClient == null) sharedClient = createClient();
+    return sharedClient;
+  }
+
+  @jakarta.annotation.PreDestroy
+  @Override public synchronized void close() {
+    if (closed) return;
+    closed = true;
+    if (sharedClient != null) sharedClient.shutdown();
+  }
+
   @Override public String provider() { return "aliyun"; }
 
   @Override public void validateConfiguration() {
@@ -27,7 +44,7 @@ public class AliyunOssService implements ObjectStorage {
   }
 
   @Override public void put(MultipartFile file, String contentType, String key) {
-    OSS client = createClient();
+    OSS client = client();
     try (var input = file.getInputStream()) {
       ObjectMetadata metadata = new ObjectMetadata();
       metadata.setContentLength(file.getSize());
@@ -36,36 +53,44 @@ public class AliyunOssService implements ObjectStorage {
       client.putObject(new PutObjectRequest(properties.bucket(), key, input, metadata));
     } catch (Exception ex) {
       throw new BusinessException(ErrorCode.SYSTEM_ERROR, "文件上传 OSS 失败");
-    } finally { client.shutdown(); }
+    }
   }
 
   @Override public StoredObject open(String key) {
-    OSS client = createClient();
+    OSS client = client();
     try {
       var object = client.getObject(properties.bucket(), key);
-      var stream = new java.io.FilterInputStream(object.getObjectContent()) {
-        @Override public void close() throws java.io.IOException {
-          try { super.close(); } finally { client.shutdown(); }
-        }
-      };
-      return new StoredObject(stream, object.getObjectMetadata().getContentLength(),
-          object.getObjectMetadata().getContentType());
+      var stream = object.getObjectContent();
+      try {
+        return new StoredObject(stream, object.getObjectMetadata().getContentLength(),
+            object.getObjectMetadata().getContentType());
+      } catch (RuntimeException failure) {
+        // Ownership transfers to the caller only after a StoredObject was successfully built.
+        try { object.close(); } catch (java.io.IOException cleanup) { failure.addSuppressed(cleanup); }
+        throw failure;
+      }
     } catch (Exception ex) {
-      client.shutdown();
       throw new BusinessException(ErrorCode.SYSTEM_ERROR, "文件读取失败，请稍后重试");
     }
   }
 
   @Override public void delete(String key) {
-    OSS client = createClient();
+    OSS client = client();
     try { client.deleteObject(properties.bucket(), key); }
     catch (Exception ex) { throw new BusinessException(ErrorCode.SYSTEM_ERROR, "文件删除失败"); }
-    finally { client.shutdown(); }
   }
 
   protected OSS createClient() {
     validateConfiguration();
-    return new OSSClientBuilder().build(properties.endpoint(), properties.accessKeyId(), properties.accessKeySecret());
+    var config = new com.aliyun.oss.ClientBuilderConfiguration();
+    config.setMaxConnections(128);
+    config.setConnectionTimeout(10000);
+    config.setConnectionRequestTimeout(10000);
+    config.setSocketTimeout(60000);
+    config.setConnectionTTL(300000);
+    config.setIdleConnectionTime(60000);
+    config.setMaxErrorRetry(2);
+    return new OSSClientBuilder().build(properties.endpoint(), properties.accessKeyId(), properties.accessKeySecret(), config);
   }
 
   private boolean blank(String value) { return value == null || value.isBlank(); }

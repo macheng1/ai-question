@@ -41,9 +41,8 @@ class EdsStorageServiceTest {
     String globalProperty = com.amazonaws.SDKGlobalConfiguration.DISABLE_CERT_CHECKING_SYSTEM_PROPERTY;
     String original = System.getProperty(globalProperty);
     server.start();
-    try {
-      var storage = new EdsStorageService(new EdsProperties(
-          "https://127.0.0.1:" + server.getAddress().getPort(), "bucket", "test-key", "test-secret", ""));
+    try (var storage = new EdsStorageService(new EdsProperties(
+          "https://127.0.0.1:" + server.getAddress().getPort(), "bucket", "test-key", "test-secret", ""))) {
       storage.put(new MockMultipartFile("file", new byte[]{1}), "application/pdf", "test.pdf");
       assertEquals(1, received.get());
       assertEquals(original, System.getProperty(globalProperty));
@@ -78,8 +77,9 @@ class EdsStorageServiceTest {
       assertTrue(logs.contains("training-materials/test.pdf"));
       assertFalse(logs.contains("credential-id"));
       assertFalse(logs.contains("credential-secret"));
-      verify(client).shutdown();
+      verify(client,never()).shutdown();
     } finally {
+      storage.close();
       logger.detachAppender(appender);
       appender.stop();
     }
@@ -111,9 +111,8 @@ class EdsStorageServiceTest {
       exchange.close();
     });
     server.start();
-    try {
-      var storage = new EdsStorageService(new EdsProperties("http://127.0.0.1:" + server.getAddress().getPort(),
-          "bucket", "test-key", "test-secret", region));
+    try (var storage = new EdsStorageService(new EdsProperties("http://127.0.0.1:" + server.getAddress().getPort(),
+          "bucket", "test-key", "test-secret", region))) {
       storage.put(new MockMultipartFile("file", "test.pdf", "application/pdf", data),
           "application/pdf", "training-materials/test.pdf");
       var object = storage.open("training-materials/test.pdf");
@@ -131,7 +130,7 @@ class EdsStorageServiceTest {
     } finally { server.stop(0); }
   }
 
-  @Test void missingConfigFailsAndClientIsReleasedOnReadFailure() {
+  @Test void missingConfigFailsAndReadFailureDoesNotCloseSharedClient() {
     assertThrows(BusinessException.class, () -> new EdsStorageService(
         new EdsProperties("", "", "", "", "us-east-1")).validateConfiguration());
     AmazonS3 client = mock(AmazonS3.class);
@@ -140,6 +139,9 @@ class EdsStorageServiceTest {
     };
     when(client.getObject("bucket", "missing")).thenThrow(new RuntimeException());
     assertThrows(BusinessException.class, () -> storage.open("missing"));
-    verify(client).shutdown();
+    storage.delete("another-object");
+    verify(client).deleteObject("bucket","another-object");
+    verify(client,never()).shutdown();
+    storage.close();verify(client).shutdown();
   }
 }

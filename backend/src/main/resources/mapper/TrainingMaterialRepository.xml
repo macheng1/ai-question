@@ -2,7 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.aiquestion.repository.TrainingMaterialRepository">
   <select id="findMaterials" resultType="java.util.LinkedHashMap">
-    SELECT id,title,material_type materialType,page_count pageCount,sort_order sortOrder FROM training_material WHERE training_id=#{trainingId} ORDER BY sort_order,id
+    SELECT id,title,material_type materialType,page_count pageCount,sort_order sortOrder,preview_status previewStatus,preview_error previewError FROM training_material WHERE training_id=#{trainingId} ORDER BY sort_order,id
   </select>
   <select id="findPages" resultType="java.util.LinkedHashMap">
     SELECT page_number pageNumber,required_seconds requiredSeconds FROM training_material_page WHERE material_id=#{materialId} ORDER BY page_number

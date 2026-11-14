@@ -45,6 +45,7 @@ public enum ErrorCode {
   UPLOAD_FILE_TOO_LARGE("UPLOAD402", "上传文件大小超过限制", HttpStatus.BAD_REQUEST),
   // 文件类型不允许
   UPLOAD_FILE_TYPE_NOT_ALLOWED("UPLOAD403", "文件类型不被允许", HttpStatus.BAD_REQUEST),
+  MATERIAL_PREVIEW_PENDING("PREVIEW_PENDING", "材料预览正在生成，请稍后重试", HttpStatus.CONFLICT),
   // 系统错误
   SYSTEM_ERROR("500000", "系统繁忙，请稍后重试", HttpStatus.INTERNAL_SERVER_ERROR);
   private final String code;

@@ -54,7 +54,7 @@ public class PublicLearningService {
     public ApiResponse<?> courseVideoProgress(long id, long video, ProgressCommand c) {
         if (id <= 0)
             throw new BusinessException(ErrorCode.BAD_REQUEST);
-        return ApiResponse.ok(service.progress(-id, video, c.token(), c.position(), c.duration(), c.completed()));
+        return ApiResponse.ok(service.progress(-id, video, c.token(), c.position(), c.duration(), c.completed(), c.requestId()));
     }
 
     public ResponseEntity<byte[]> coursePage(long id, long material, int page, String token) throws java.io.IOException {
@@ -91,7 +91,7 @@ public class PublicLearningService {
     }
 
     public ApiResponse<Map<String, Object>> progress(long id, long video, ProgressCommand command) {
-        return ApiResponse.ok(service.progress(id, video, command.token(), command.position(), command.duration(), command.completed()));
+        return ApiResponse.ok(service.progress(id, video, command.token(), command.position(), command.duration(), command.completed(), command.requestId()));
     }
 
     public ResponseEntity<byte[]> page(long id, long material, int page, String token) throws java.io.IOException {

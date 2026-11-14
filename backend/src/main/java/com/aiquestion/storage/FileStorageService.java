@@ -40,6 +40,26 @@ public class FileStorageService {
     return ("aliyun".equals(active.provider()) ? "oss:" : "eds:") + key;
   }
 
+  public String reservePreview(String original) {
+    return ("aliyun".equals(providerFor(original).provider()) ? "oss:" : "eds:")
+        + "training-previews/" + UUID.randomUUID() + ".png";
+  }
+
+  public void putPreview(String reference, byte[] bytes) {
+    if (!objectKey(reference).startsWith("training-previews/")) throw new IllegalArgumentException("Invalid preview key");
+    MultipartFile file = new MultipartFile() {
+      public String getName() { return "file"; }
+      public String getOriginalFilename() { return "page.png"; }
+      public String getContentType() { return "image/png"; }
+      public boolean isEmpty() { return bytes.length == 0; }
+      public long getSize() { return bytes.length; }
+      public byte[] getBytes() { return bytes; }
+      public java.io.InputStream getInputStream() { return new java.io.ByteArrayInputStream(bytes); }
+      public void transferTo(java.io.File dest) throws java.io.IOException { java.nio.file.Files.write(dest.toPath(), bytes); }
+    };
+    providerFor(reference).put(file, "image/png", objectKey(reference));
+  }
+
   public OssUploadResult upload(MultipartFile file) {
     // 普通附件沿用公开链接语义，仅开放单独的随机键目录，不暴露培训私有材料。
     String id = UUID.randomUUID().toString();

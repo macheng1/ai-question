@@ -24,5 +24,5 @@ public interface CandidateLearningRepository {
   List<Map<String, Object>> findAuthorizedVideo(@Param("taskId") Long taskId, @Param("sessionTaskId") Long sessionTaskId, @Param("token") String token, @Param("videoId") Long videoId, @Param("examTask") boolean examTask);
   List<Map<String, Object>> findSessionIdentity(@Param("token") String token, @Param("taskId") Long taskId, @Param("examTask") boolean examTask);
   List<Map<String, Object>> lockVideoProgress(@Param("sessionId") Long sessionId, @Param("videoId") Long videoId);
-  int updateVideoProgress(@Param("positionSeconds") double positionSeconds, @Param("completed") boolean completed, @Param("studiedSeconds") double studiedSeconds, @Param("playPosition") double playPosition, @Param("markCompleted") boolean markCompleted, @Param("sessionId") Long sessionId, @Param("videoId") Long videoId);
+  int updateVideoProgress(@Param("positionSeconds") double positionSeconds, @Param("completed") boolean completed, @Param("studiedSeconds") double studiedSeconds, @Param("playPosition") double playPosition, @Param("requestId") String requestId, @Param("markCompleted") boolean markCompleted, @Param("sessionId") Long sessionId, @Param("videoId") Long videoId);
 }

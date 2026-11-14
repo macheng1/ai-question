@@ -79,7 +79,8 @@ public class PublicLearningController {
     public record Reading(String token, String heartbeatToken, double seconds) {
     }
 
-    public record ProgressCommand(String token, double position, double duration, boolean completed) {
+    public record ProgressCommand(String token, double position, double duration, boolean completed, String requestId) {
+        public ProgressCommand(String token, double position, double duration, boolean completed) { this(token,position,duration,completed,null); }
     }
 
     private final com.aiquestion.service.PublicLearningService service;

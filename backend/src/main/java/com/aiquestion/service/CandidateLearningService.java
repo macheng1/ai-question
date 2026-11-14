@@ -37,12 +37,11 @@ public class CandidateLearningService {
         persistence.confirmSessionsCompleted(Math.abs(task), name, phone, task > 0);
     }
 
-    @Transactional
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public Map<String, Object> learning(long task, String name, String phone) {
         validate(name, phone);
         if (task > 0) {
-            assessmentRosterService.lockTask(task);
-            persistence.lockExamTrainings(task);
+            assessmentRosterService.shareTask(task);
             assessmentRosterService.requireEligible(task, name, phone);
         } else
             com.aiquestion.repository.RepositoryRows.one(persistence.lockStandaloneTraining(-task));
@@ -75,8 +74,17 @@ public class CandidateLearningService {
 
     @Transactional
     public Map<String, Object> progress(long task, long video, String token, double position, double duration, boolean completed) {
+        return progress(task, video, token, position, duration, completed, null);
+    }
+
+    @Transactional
+    public Map<String, Object> progress(long task, long video, String token, double position, double duration, boolean completed, String requestId) {
+        if (requestId != null && (requestId.isBlank() || requestId.length() > 80))
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "进度请求标识无效");
         var row = video(task, video, token);
         var saved = com.aiquestion.repository.RepositoryRows.one(persistence.lockVideoProgress(com.aiquestion.repository.RepositoryRows.nullableLong(row.get("session_id")), video));
+        if (requestId != null && requestId.equals(saved.get("last_request_id")))
+            return Map.of("positionSeconds", saved.get("position_seconds"), "completed", com.aiquestion.repository.RepositoryRows.booleanValue(saved,"completed"));
         double previous = ((Number) saved.get("position_seconds")).doubleValue();
         // The allowance belongs to the persisted baseline, never to each request.
         validateProgress(position, duration, ((Number) saved.get("baseline_position")).doubleValue(), ((Number) saved.get("elapsed")).doubleValue(), completed);
@@ -87,7 +95,7 @@ public class CandidateLearningService {
         double delta = saved.get("last_play_position") instanceof Number n ? position - n.doubleValue() : 0;
         double requested = elapsed <= 15 && delta > 0 && delta <= elapsed + 1 ? Math.min(delta, elapsed) : 0;
         watched += learningClock.credit(((Number) row.get("session_id")).longValue(), requested);
-        persistence.updateVideoProgress(next, done, watched, position, done, com.aiquestion.repository.RepositoryRows.nullableLong(row.get("session_id")), video);
+        persistence.updateVideoProgress(next, done, watched, position, requestId, done, com.aiquestion.repository.RepositoryRows.nullableLong(row.get("session_id")), video);
         return Map.of("positionSeconds", next, "completed", done);
     }
 

@@ -65,15 +65,16 @@ public class PublicExamService {
         return ApiResponse.ok(task);
     }
 
-    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.transaction.annotation.Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public ApiResponse<Map<String, Object>> start(Long id, CandidateCommand command) {
-        assessmentRosterService.lockTask(id);
+        assessmentRosterService.shareTask(id);
         Map<String, Object> task = task(id);
         ensureTaskOpen(task);
         com.aiquestion.service.CandidateLearningService.validate(command.name(), command.phone());
         String phone = command.phone().trim();
         String name = command.name().trim();
         assessmentRosterService.requireEligible(id, name, phone);
+        assessmentRosterService.lockCandidate(id, name, phone);
         List<Map<String, Object>> participants = persistence.findLatestParticipant(id, name, phone);
         long participantId;
         int attemptCount;
@@ -352,8 +353,10 @@ public class PublicExamService {
         Map<String, Object> attempt;
         try {
             var identity = com.aiquestion.repository.RepositoryRows.one(persistence.findAttemptIdentity(attemptId));
-            // Use the same task-first lock order as start/retake to serialize answer writes and submission.
-            assessmentRosterService.lockTask(((Number) identity.get("task_id")).longValue());
+            // Global order: task/training shared -> candidate exclusive -> own attempt exclusive.
+            long taskId = ((Number) identity.get("task_id")).longValue();
+            assessmentRosterService.shareTask(taskId);
+            assessmentRosterService.lockCandidate(taskId, String.valueOf(identity.get("candidate_name")), String.valueOf(identity.get("phone")));
             assessmentRosterService.requireEligible(((Number) identity.get("task_id")).longValue(), String.valueOf(identity.get("candidate_name")), String.valueOf(identity.get("phone")));
             attempt = com.aiquestion.repository.RepositoryRows.one(persistence.lockAttempt(attemptId));
         } catch (org.springframework.dao.EmptyResultDataAccessException exception) {

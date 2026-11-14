@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiquestion.repository.MaterialPreviewRepository">
+  <select id="pending" resultType="java.lang.Long">
+    SELECT id FROM training_material WHERE preview_status IN ('PENDING','PROCESSING') ORDER BY id LIMIT 20
+  </select>
+  <select id="acquire" resultType="java.lang.Integer">
+    SELECT GET_LOCK(CONCAT('preview:',MD5(DATABASE()),':',#{id}),0)
+  </select>
+  <select id="release" resultType="java.lang.Integer">
+    SELECT RELEASE_LOCK(CONCAT('preview:',MD5(DATABASE()),':',#{id}))
+  </select>
+  <update id="claim">
+    UPDATE training_material SET preview_status='PROCESSING',preview_error=NULL WHERE id=#{id} AND preview_status IN ('PENDING','PROCESSING')
+  </update>
+  <select id="material" resultType="java.util.LinkedHashMap">
+    SELECT * FROM training_material WHERE id=#{id}
+  </select>
+  <select id="pages" resultType="java.util.LinkedHashMap">
+    SELECT * FROM training_material_page WHERE material_id=#{id} ORDER BY page_number
+  </select>
+  <update id="reserve">
+    UPDATE training_material_page SET preview_key=#{key} WHERE material_id=#{id} AND page_number=#{page} AND preview_key IS NULL
+  </update>
+  <update id="pageReady">
+    UPDATE training_material_page SET preview_ready=TRUE WHERE material_id=#{id} AND page_number=#{page}
+  </update>
+  <update id="ready">
+    UPDATE training_material SET preview_status='READY',preview_error=NULL WHERE id=#{id} AND preview_status='PROCESSING' AND NOT EXISTS (SELECT 1 FROM training_material_page WHERE material_id=#{id} AND preview_ready=FALSE)
+  </update>
+  <update id="failed">
+    UPDATE training_material SET preview_status='FAILED',preview_error='预览生成失败，请重试；若仍失败请联系管理员检查文件和存储连接' WHERE id=#{id} AND preview_status='PROCESSING'
+  </update>
+  <update id="retry">
+    UPDATE training_material SET preview_status='PENDING',preview_error=NULL WHERE id=#{id} AND preview_status='FAILED'
+  </update>
+</mapper>

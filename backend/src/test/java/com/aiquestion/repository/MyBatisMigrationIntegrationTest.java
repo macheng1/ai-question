@@ -32,7 +32,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 /** Run only against an explicitly supplied disposable MySQL database; JDBC is used solely for fixtures/assertions. */
-@SpringBootTest(properties = {"storage.provider=aliyun", "spring.mail.host=localhost"})
+@SpringBootTest(properties = {"storage.provider=aliyun", "spring.mail.host=localhost", "training.preview.enabled=false"})
 @AutoConfigureMockMvc
 @EnabledIfEnvironmentVariable(named = "MYBATIS_TEST_URL", matches = ".+aiquestion_mybatis_test.*")
 class MyBatisMigrationIntegrationTest {
@@ -56,6 +56,10 @@ class MyBatisMigrationIntegrationTest {
   @Autowired RequiredTrainingAssignmentService automaticAssignments;
   @Autowired CandidateLearningService learning;
   @Autowired MaterialLearningService reading;
+  @Autowired TrainingMaterialService trainingMaterials;
+  @Autowired MaterialPreviewService previews;
+  @Autowired org.apache.ibatis.session.SqlSessionFactory sqlSessions;
+  @Autowired org.springframework.transaction.PlatformTransactionManager transactionManager;
   @Autowired TrainingLogService trainingLogs;
   @Autowired LearnerRecordService learnerRecords;
   @Autowired PublicExamService publicExams;
@@ -173,7 +177,8 @@ class MyBatisMigrationIntegrationTest {
     assertEquals(5.0, ((Number) credited.get("studiedSeconds")).doubleValue(), 0.01);
     assertEquals(true, credited.get("completed"));
     assertTrue(reading.authorize(-training, material, token, 2) > 0);
-    assertThrows(BusinessException.class, () -> reading.heartbeat(-training, material, 1, token, heartbeat, 5));
+    assertEquals(credited, reading.heartbeat(-training, material, 1, token, heartbeat, 5));
+    assertThrows(BusinessException.class, () -> reading.heartbeat(-training, material, 1, token, heartbeat, 4));
     assertThrows(BusinessException.class, () -> learning.requireComplete(-training, "测试学员", phone));
   }
 
@@ -221,6 +226,138 @@ class MyBatisMigrationIntegrationTest {
     assertTrue(learnerRecords.mistakes(new AccountIdentity(employee, AccountType.EMPLOYEE, owner + 99999)).isEmpty());
   }
 
+  @Test void differentCandidatesCanStartTheSameExamBeforeFirstCommit() throws Exception {
+    long exam=createExam();
+    var entered=new java.util.concurrent.CountDownLatch(1);
+    var release=new java.util.concurrent.CountDownLatch(1);
+    var pool=java.util.concurrent.Executors.newFixedThreadPool(2);
+    try {
+      var first=pool.submit(()->readingTransaction().execute(status->{
+        var result=publicExams.start(exam,new com.aiquestion.controller.PublicExamController.CandidateCommand("测试学员",phone));
+        entered.countDown();awaitRelease(release);return result;
+      }));
+      assertTrue(entered.await(5,java.util.concurrent.TimeUnit.SECONDS));
+      var second=pool.submit(()->publicExams.start(exam,new com.aiquestion.controller.PublicExamController.CandidateCommand("另一学员","137"+String.format("%08d",SEQUENCE.incrementAndGet()))));
+      assertNotNull(second.get(3,java.util.concurrent.TimeUnit.SECONDS));
+      release.countDown();first.get(5,java.util.concurrent.TimeUnit.SECONDS);
+      assertEquals(2,jdbc.queryForObject("SELECT COUNT(*) FROM assessment_attempt WHERE task_id=?",Integer.class,exam));
+    } finally {release.countDown();pool.shutdownNow();pool.awaitTermination(5,java.util.concurrent.TimeUnit.SECONDS);}
+  }
+
+  @Test void differentCandidatesCanSaveAnswersBeforeFirstCommit() throws Exception {
+    long exam=createExam(), question=examQuestion(exam);
+    long firstAttempt=startAttempt(exam,"测试学员",phone), secondAttempt=startAttempt(exam,"另一学员","137"+String.format("%08d",SEQUENCE.incrementAndGet()));
+    var entered=new java.util.concurrent.CountDownLatch(1);var release=new java.util.concurrent.CountDownLatch(1);
+    var pool=java.util.concurrent.Executors.newFixedThreadPool(2);
+    try {
+      var first=pool.submit(()->readingTransaction().execute(status->{
+        publicExams.answer(firstAttempt,question,new com.aiquestion.controller.PublicExamController.AnswerCommand("A"));
+        entered.countDown();awaitRelease(release);return true;
+      }));
+      assertTrue(entered.await(5,java.util.concurrent.TimeUnit.SECONDS));
+      var second=pool.submit(()->publicExams.answer(secondAttempt,question,new com.aiquestion.controller.PublicExamController.AnswerCommand("B")));
+      assertNotNull(second.get(3,java.util.concurrent.TimeUnit.SECONDS));
+      release.countDown();first.get(5,java.util.concurrent.TimeUnit.SECONDS);
+      assertEquals(2,jdbc.queryForObject("SELECT COUNT(*) FROM assessment_answer WHERE question_id=?",Integer.class,question));
+    } finally {release.countDown();pool.shutdownNow();pool.awaitTermination(5,java.util.concurrent.TimeUnit.SECONDS);}
+  }
+
+  @Test void duplicateStartsSerializePerCandidateAndRespectRetakeLimit() throws Exception {
+    long exam=createExam(), question=examQuestion(exam);
+    jdbc.update("UPDATE assessment_task SET allow_retake=1,max_attempts=2 WHERE id=?",exam);
+    for(int round=1;round<=2;round++) {
+      var entered=new java.util.concurrent.CountDownLatch(1);var release=new java.util.concurrent.CountDownLatch(1);
+      var pool=java.util.concurrent.Executors.newFixedThreadPool(2);
+      try {
+        var first=pool.submit(()->readingTransaction().execute(status->{
+          long attempt=startAttempt(exam,"测试学员",phone);entered.countDown();awaitRelease(release);return attempt;
+        }));
+        assertTrue(entered.await(5,java.util.concurrent.TimeUnit.SECONDS));
+        var second=pool.submit(()->startAttempt(exam,"测试学员",phone));
+        assertThrows(java.util.concurrent.TimeoutException.class,()->second.get(300,java.util.concurrent.TimeUnit.MILLISECONDS));
+        release.countDown();long attempt=first.get(5,java.util.concurrent.TimeUnit.SECONDS);
+        assertEquals(attempt,second.get(5,java.util.concurrent.TimeUnit.SECONDS));
+        assertEquals(round,jdbc.queryForObject("SELECT COUNT(*) FROM assessment_attempt WHERE task_id=?",Integer.class,exam));
+        publicExams.answer(attempt,question,new com.aiquestion.controller.PublicExamController.AnswerCommand("A"));
+        publicExams.submit(attempt);
+      } finally {release.countDown();pool.shutdownNow();pool.awaitTermination(5,java.util.concurrent.TimeUnit.SECONDS);}
+    }
+    publicExams.start(exam,new com.aiquestion.controller.PublicExamController.CandidateCommand("测试学员",phone));
+    assertEquals(2,jdbc.queryForObject("SELECT COUNT(*) FROM assessment_attempt WHERE task_id=?",Integer.class,exam));
+    assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM assessment_participant WHERE task_id=?",Integer.class,exam));
+  }
+
+  @Test void answerCannotOverwriteConcurrentSubmission() throws Exception {
+    long exam=createExam(),question=examQuestion(exam),attempt=startAttempt(exam,"测试学员",phone);
+    publicExams.answer(attempt,question,new com.aiquestion.controller.PublicExamController.AnswerCommand("A"));
+    var entered=new java.util.concurrent.CountDownLatch(1);var release=new java.util.concurrent.CountDownLatch(1);
+    var pool=java.util.concurrent.Executors.newFixedThreadPool(2);
+    try {
+      var first=pool.submit(()->readingTransaction().execute(status->{
+        publicExams.submit(attempt);entered.countDown();awaitRelease(release);return true;
+      }));
+      assertTrue(entered.await(5,java.util.concurrent.TimeUnit.SECONDS));
+      var second=pool.submit(()->publicExams.answer(attempt,question,new com.aiquestion.controller.PublicExamController.AnswerCommand("B")));
+      assertThrows(java.util.concurrent.TimeoutException.class,()->second.get(300,java.util.concurrent.TimeUnit.MILLISECONDS));
+      release.countDown();first.get(5,java.util.concurrent.TimeUnit.SECONDS);
+      var failure=assertThrows(java.util.concurrent.ExecutionException.class,()->second.get(5,java.util.concurrent.TimeUnit.SECONDS));
+      assertInstanceOf(BusinessException.class,failure.getCause());
+      assertEquals(100,jdbc.queryForObject("SELECT score FROM assessment_attempt WHERE id=?",Integer.class,attempt));
+    } finally {release.countDown();pool.shutdownNow();pool.awaitTermination(5,java.util.concurrent.TimeUnit.SECONDS);}
+  }
+
+  @Test void endingExamWaitsForAnswerAndGradesCommittedScore() throws Exception {
+    long exam=createExam(),question=examQuestion(exam),training=createTraining(exam,false);
+    long attempt=startAttempt(exam,"测试学员",phone);
+    var entered=new java.util.concurrent.CountDownLatch(1);var release=new java.util.concurrent.CountDownLatch(1);
+    var pool=java.util.concurrent.Executors.newFixedThreadPool(2);
+    try {
+      var first=pool.submit(()->readingTransaction().execute(status->{
+        publicExams.answer(attempt,question,new com.aiquestion.controller.PublicExamController.AnswerCommand("A"));
+        entered.countDown();awaitRelease(release);return true;
+      }));
+      assertTrue(entered.await(5,java.util.concurrent.TimeUnit.SECONDS));
+      var second=pool.submit(()->trainings.endExam(training,owner));
+      assertThrows(java.util.concurrent.TimeoutException.class,()->second.get(300,java.util.concurrent.TimeUnit.MILLISECONDS));
+      release.countDown();first.get(5,java.util.concurrent.TimeUnit.SECONDS);second.get(5,java.util.concurrent.TimeUnit.SECONDS);
+      assertEquals("SUBMITTED",jdbc.queryForObject("SELECT status FROM assessment_attempt WHERE id=?",String.class,attempt));
+      assertEquals(100,jdbc.queryForObject("SELECT score FROM assessment_attempt WHERE id=?",Integer.class,attempt));
+      assertThrows(BusinessException.class,()->publicExams.answer(attempt,question,new com.aiquestion.controller.PublicExamController.AnswerCommand("B")));
+    } finally {release.countDown();pool.shutdownNow();pool.awaitTermination(5,java.util.concurrent.TimeUnit.SECONDS);}
+  }
+
+  @Test void differentLearnersCanEnterLinkedAndStandaloneTrainingConcurrently() throws Exception {
+    String otherPhone="137"+String.format("%08d",SEQUENCE.incrementAndGet());
+    insert("INSERT INTO organization_employee(created_by,department_id,name,phone) VALUES(?,?,'并发学员',?)",owner,department,otherPhone);
+    for(Long exam:Arrays.asList(null,createExam())) {
+      long training=createTraining(exam,false),entry=exam==null?-training:exam;
+      var entered=new java.util.concurrent.CountDownLatch(1);var release=new java.util.concurrent.CountDownLatch(1);
+      var pool=java.util.concurrent.Executors.newFixedThreadPool(2);
+      try {
+        var first=pool.submit(()->readingTransaction().execute(status->{
+          var result=learning.learning(entry,"测试学员",phone);entered.countDown();awaitRelease(release);return result;
+        }));
+        assertTrue(entered.await(5,java.util.concurrent.TimeUnit.SECONDS));
+        var second=pool.submit(()->learning.learning(entry,"并发学员",otherPhone));
+        assertNotNull(second.get(3,java.util.concurrent.TimeUnit.SECONDS).get("token"));
+        release.countDown();first.get(5,java.util.concurrent.TimeUnit.SECONDS);
+      } finally {release.countDown();pool.shutdownNow();pool.awaitTermination(5,java.util.concurrent.TimeUnit.SECONDS);}
+    }
+  }
+
+  private long examQuestion(long exam) {
+    long paper=jdbc.queryForObject("SELECT paper_id FROM assessment_task WHERE id=?",Long.class,exam);
+    long bank=insert("INSERT INTO question_bank(name,category,created_by,created_at,updated_at) VALUES('并发题库','安全',?,CURRENT_TIMESTAMP(3),CURRENT_TIMESTAMP(3))",owner);
+    long question=insert("INSERT INTO question_item(bank_id,question_type,stem,answer_text,score,created_by) VALUES(?,'SINGLE','选择 A','A',100,?)",bank,owner);
+    jdbc.update("INSERT INTO test_paper_question(paper_id,question_id,score) VALUES(?,?,100)",paper,question);
+    jdbc.update("UPDATE test_paper SET total_score=100,pass_score=60 WHERE id=?",paper);
+    return question;
+  }
+
+  private long startAttempt(long exam,String name,String candidatePhone) {
+    return ((Number)publicExams.start(exam,new com.aiquestion.controller.PublicExamController.CandidateCommand(name,candidatePhone)).data().get("attemptId")).longValue();
+  }
+
   @Test void examAttemptAnswerSubmissionAndLearnerRecordsPreserveContract() throws Exception {
     long exam = createExam();
     long paper = jdbc.queryForObject("SELECT paper_id FROM assessment_task WHERE id=?", Long.class, exam);
@@ -261,6 +398,91 @@ class MyBatisMigrationIntegrationTest {
     mvc.perform(get("/management/dashboard/options").header("Authorization", authorization)).andExpect(status().isOk());
   }
 
+  @Test void differentLearnersCanSaveTheSamePageBeforeAnotherLearnerCommits() throws Exception {
+    String otherPhone = "137" + String.format("%08d", SEQUENCE.incrementAndGet());
+    long other = insert("INSERT INTO organization_employee(created_by,department_id,name,phone) VALUES(?,?,'并发学员',?)", owner, department, otherPhone);
+    var command = trainingCommand(null, false);
+    command.put("audience", Map.of("type", "USERS", "ids", List.of(employee, other)));
+    long training = request(post("/management/trainings").header("Authorization", authorization), command).path("id").asLong();
+    long material = material(training);
+    String firstToken = learning.learning(-training, "测试学员", phone).get("token").toString();
+    String secondToken = learning.learning(-training, "并发学员", otherPhone).get("token").toString();
+    var saved = new java.util.concurrent.CountDownLatch(1);
+    var release = new java.util.concurrent.CountDownLatch(1);
+    var pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+    try {
+      var first = pool.submit(() -> readingTransaction()
+          .execute(status -> {
+            var result = reading.heartbeat(-training, material, 1, firstToken, null, 0);
+            saved.countDown();
+            awaitRelease(release);
+            return result;
+          }));
+      assertTrue(saved.await(5, java.util.concurrent.TimeUnit.SECONDS));
+      var second = pool.submit(() -> reading.heartbeat(-training, material, 1, secondToken, null, 0));
+      try {
+        assertNotNull(second.get(3, java.util.concurrent.TimeUnit.SECONDS).get("heartbeatToken"),
+            "Another learner must finish while the first learner's transaction remains open");
+      } catch (java.util.concurrent.TimeoutException e) {
+        throw new AssertionError("Concurrent learner blocked: " + jdbc.queryForList(
+            "SELECT OBJECT_NAME,INDEX_NAME,LOCK_TYPE,LOCK_MODE,LOCK_STATUS,LOCK_DATA FROM performance_schema.data_locks WHERE OBJECT_SCHEMA=DATABASE()"), e);
+      }
+      release.countDown();
+      first.get(5, java.util.concurrent.TimeUnit.SECONDS);
+      assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM candidate_material_progress WHERE material_id=?", Integer.class, material));
+    } finally { release.countDown(); pool.shutdownNow(); pool.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS); }
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(strings = {"timing", "delete"})
+  void materialEditsWaitForReadingAndThenRejectNewlyCommittedProgress(String operation) throws Exception {
+    long training = createTraining(null, false);
+    long material = material(training);
+    String token = learning.learning(-training, "测试学员", phone).get("token").toString();
+    var saved = new java.util.concurrent.CountDownLatch(1);
+    var release = new java.util.concurrent.CountDownLatch(1);
+    var editing = new java.util.concurrent.CountDownLatch(1);
+    var pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+    try {
+      var first = pool.submit(() -> readingTransaction()
+          .execute(status -> {
+            reading.heartbeat(-training, material, 1, token, null, 0);
+            saved.countDown();
+            awaitRelease(release);
+            return true;
+          }));
+      assertTrue(saved.await(5, java.util.concurrent.TimeUnit.SECONDS));
+      var edit = pool.submit(() -> {
+        editing.countDown();
+        return assertThrows(BusinessException.class, () -> {
+          if ("delete".equals(operation)) trainingMaterials.delete(training, material, owner);
+          else trainingMaterials.timings(training, material, owner, List.of(
+              new TrainingMaterialService.PageTime(1, 30), new TrainingMaterialService.PageTime(2, 30)));
+        });
+      });
+      assertTrue(editing.await(5, java.util.concurrent.TimeUnit.SECONDS));
+      assertThrows(java.util.concurrent.TimeoutException.class, () -> edit.get(300, java.util.concurrent.TimeUnit.MILLISECONDS));
+      release.countDown();
+      first.get(5, java.util.concurrent.TimeUnit.SECONDS);
+      assertTrue(edit.get(5, java.util.concurrent.TimeUnit.SECONDS).getMessage().contains("已有学习记录"));
+      assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM candidate_material_progress WHERE material_id=?", Integer.class, material));
+      assertEquals(List.of(5, 5), jdbc.queryForList("SELECT required_seconds FROM training_material_page WHERE material_id=? ORDER BY page_number", Integer.class, material));
+    } finally { release.countDown(); pool.shutdownNow(); pool.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS); }
+  }
+
+  private org.springframework.transaction.support.TransactionTemplate readingTransaction() {
+    var tx = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+    // Keep the heartbeat transaction open using the same isolation as the production entry point.
+    tx.setIsolationLevel(org.springframework.transaction.TransactionDefinition.ISOLATION_READ_COMMITTED);
+    return tx;
+  }
+
+  private static void awaitRelease(java.util.concurrent.CountDownLatch release) {
+    try {
+      if (!release.await(10, java.util.concurrent.TimeUnit.SECONDS)) throw new IllegalStateException("Test transaction was not released");
+    } catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new IllegalStateException(e); }
+  }
+
   @Test void concurrentReadingHeartbeatsCreditTheSameIntervalOnlyOnce() throws Exception {
     long training = createTraining(null, false);
     long material = material(training);
@@ -280,7 +502,7 @@ class MyBatisMigrationIntegrationTest {
       var second = pool.submit(heartbeatCall);
       boolean one = first.get(10, java.util.concurrent.TimeUnit.SECONDS);
       boolean two = second.get(10, java.util.concurrent.TimeUnit.SECONDS);
-      assertNotEquals(one, two, "Exactly one request may consume the heartbeat token");
+      assertTrue(one && two, "A lost response may be retried successfully without crediting twice");
       assertEquals(5.0, jdbc.queryForObject("SELECT studied_seconds FROM candidate_material_progress WHERE material_id=? AND page_number=1", Double.class, material), 0.01);
     } finally { pool.shutdownNow(); }
   }
@@ -298,6 +520,20 @@ class MyBatisMigrationIntegrationTest {
     assertEquals(5.0, ((Number) progress.get("positionSeconds")).doubleValue(), 0.01);
     assertFalse((Boolean) progress.get("completed"));
     assertThrows(BusinessException.class, () -> learning.requireComplete(exam, "测试学员", phone));
+  }
+
+  @Test void videoRetryReturnsAcknowledgementWithoutChangingSavedTime() throws Exception {
+    long training=createTraining(null,false);
+    long video=insert("INSERT INTO training_video(training_id,title,storage_path,content_type) VALUES(?,'重试视频','private.mp4','video/mp4')",training);
+    String token=learning.learning(-training,"测试学员",phone).get("token").toString();
+    learning.progress(-training,video,token,0,100,false,"start");
+    jdbc.update("UPDATE candidate_video_progress SET baseline_at=DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 6 SECOND),updated_at=DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 6 SECOND) WHERE video_id=?",video);
+    jdbc.update("UPDATE learning_clock SET credited_at=DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 6 SECOND) WHERE phone=?",phone);
+    var first=learning.progress(-training,video,token,3,100,false,"batch-1");
+    var before=jdbc.queryForMap("SELECT studied_seconds,updated_at FROM candidate_video_progress WHERE video_id=?",video);
+    assertEquals(3.0,((Number)before.get("studied_seconds")).doubleValue(),0.01);
+    assertEquals(first,learning.progress(-training,video,token,3,100,false,"batch-1"));
+    assertEquals(before,jdbc.queryForMap("SELECT studied_seconds,updated_at FROM candidate_video_progress WHERE video_id=?",video));
   }
 
   @Test void randomExamSnapshotsQuestionsOnceAndResumesSameAttempt() throws Exception {
@@ -1235,8 +1471,66 @@ class MyBatisMigrationIntegrationTest {
     return insert("INSERT INTO assessment_task(name,paper_id,start_at,end_at,status,created_by) VALUES('映射考试',?,DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 1 DAY),DATE_ADD(CURRENT_TIMESTAMP(3),INTERVAL 7 DAY),'STARTED',?)", paper, owner);
   }
 
+  @Test void previewsRenderOnceAndReadStoredPagesWithOwnershipChecks() throws Exception {
+    long training=createTraining(null,false), id=material(training);
+    jdbc.update("UPDATE training_material SET preview_status='PENDING' WHERE id=?",id);
+    var objects=new java.util.concurrent.ConcurrentHashMap<String,byte[]>();
+    byte[] original;
+    try(var pdf=new org.apache.pdfbox.pdmodel.PDDocument();var out=new java.io.ByteArrayOutputStream()) {
+      pdf.addPage(new org.apache.pdfbox.pdmodel.PDPage()); pdf.addPage(new org.apache.pdfbox.pdmodel.PDPage()); pdf.save(out);original=out.toByteArray();
+    }
+    objects.put("eds:training-materials/original.pdf",original);
+    when(storage.open(anyString())).thenAnswer(a -> new com.aiquestion.storage.ObjectStorage.StoredObject(new java.io.ByteArrayInputStream(objects.get(a.getArgument(0))),objects.get(a.getArgument(0)).length,"image/png"));
+    when(storage.reservePreview(anyString())).thenAnswer(a -> "eds:training-previews/"+UUID.randomUUID()+".png");
+    doAnswer(a -> { objects.put(a.getArgument(0),a.getArgument(1));return null; }).when(storage).putPreview(anyString(),any(byte[].class));
+    assertThrows(BusinessException.class,()->trainingMaterials.page(training,id,1));
+    previews.process(id);
+    assertEquals("READY",jdbc.queryForObject("SELECT preview_status FROM training_material WHERE id=?",String.class,id));
+    byte[] first=trainingMaterials.page(training,id,1);
+    assertNotNull(javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(first)));
+    assertArrayEquals(first,trainingMaterials.page(training,id,1));
+    previews.process(id);
+    verify(storage,times(1)).open("eds:training-materials/original.pdf");
+    verify(storage,times(2)).putPreview(anyString(),any(byte[].class));
+    mvc.perform(post("/management/trainings/"+training+"/materials/"+id+"/preview/retry")).andExpect(status().isUnauthorized());
+    assertThrows(BusinessException.class,()->trainingMaterials.retryPreview(training,id,owner+999999));
+    trainingMaterials.delete(training,id,owner);
+    for(String key:objects.keySet()) verify(storage).delete(key);
+  }
+
+  @Test void previewFailureResumesReservedPageAndRecoversProcessingAfterRestart() throws Exception {
+    long training=createTraining(null,false), id=material(training);
+    jdbc.update("UPDATE training_material SET preview_status='PROCESSING',material_type='IMAGE',page_count=1 WHERE id=?",id);
+    jdbc.update("DELETE FROM training_material_page WHERE material_id=? AND page_number=2",id);
+    byte[] image;
+    try(var out=new java.io.ByteArrayOutputStream()) { javax.imageio.ImageIO.write(new java.awt.image.BufferedImage(20,20,java.awt.image.BufferedImage.TYPE_INT_RGB),"png",out); image=out.toByteArray(); }
+    when(storage.open(anyString())).thenAnswer(a -> new com.aiquestion.storage.ObjectStorage.StoredObject(new java.io.ByteArrayInputStream(image),image.length,"image/png"));
+    when(storage.reservePreview(anyString())).thenReturn("eds:training-previews/reserved.png");
+    doThrow(new IllegalStateException("storage unavailable")).doNothing().when(storage).putPreview(anyString(),any(byte[].class));
+    previews.process(id);
+    assertEquals("FAILED",jdbc.queryForObject("SELECT preview_status FROM training_material WHERE id=?",String.class,id));
+    trainingMaterials.retryPreview(training,id,owner);
+    previews.process(id);
+    assertEquals("READY",jdbc.queryForObject("SELECT preview_status FROM training_material WHERE id=?",String.class,id));
+    verify(storage,times(1)).reservePreview(anyString());
+    verify(storage,times(2)).putPreview(eq("eds:training-previews/reserved.png"),any(byte[].class));
+  }
+
+  @Test void anotherWorkerCannotClaimLockedMaterialAndProcessingCannotBeDeleted() throws Exception {
+    long training=createTraining(null,false), id=material(training);
+    jdbc.update("UPDATE training_material SET preview_status='PROCESSING' WHERE id=?",id);
+    try(var session=sqlSessions.openSession(true)) {
+      var locks=session.getMapper(MaterialPreviewRepository.class);
+      assertEquals(1,locks.acquire(id));
+      try { previews.process(id); verify(storage,never()).open(anyString()); }
+      finally { locks.release(id); }
+    }
+    assertThrows(BusinessException.class,()->trainingMaterials.delete(training,id,owner));
+  }
+
   private long material(long training) {
     long id = insert("INSERT INTO training_material(training_id,title,material_type,storage_key,page_count) VALUES(?,'阅读材料','PDF','eds:training-materials/original.pdf',2)", training);
+    jdbc.update("UPDATE training_material SET preview_status='READY' WHERE id=?", id);
     jdbc.update("INSERT INTO training_material_page(material_id,page_number,required_seconds) VALUES(?,1,5),(?,2,5)", id, id);
     return id;
   }

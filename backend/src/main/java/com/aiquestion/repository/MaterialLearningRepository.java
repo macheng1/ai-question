@@ -18,5 +18,5 @@ public interface MaterialLearningRepository {
   int initializePageProgress(@Param("sessionId") Long sessionId, @Param("materialId") Long materialId, @Param("pageNumber") int pageNumber);
   List<Map<String, Object>> lockPageProgress(@Param("sessionId") Long sessionId, @Param("materialId") Long materialId, @Param("pageNumber") int pageNumber);
   int clearHeartbeatTokens(@Param("sessionId") Long sessionId);
-  int updatePageProgress(@Param("studiedSeconds") double studiedSeconds, @Param("completed") boolean completed, @Param("heartbeatToken") String heartbeatToken, @Param("markCompleted") boolean markCompleted, @Param("sessionId") Long sessionId, @Param("materialId") Long materialId, @Param("pageNumber") int pageNumber);
+  int updatePageProgress(@Param("studiedSeconds") double studiedSeconds, @Param("completed") boolean completed, @Param("heartbeatToken") String heartbeatToken, @Param("consumedToken") String consumedToken, @Param("consumedSeconds") double consumedSeconds, @Param("markCompleted") boolean markCompleted, @Param("sessionId") Long sessionId, @Param("materialId") Long materialId, @Param("pageNumber") int pageNumber);
 }

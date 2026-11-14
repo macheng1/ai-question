@@ -9,6 +9,7 @@ import { loadExamLearning, type ExamLearning } from "./ExamTrainingVideos";
 import { trainingCategories } from "../api";
 import "./learning.css";
 import { useLearnerStore } from "@/features/auth/store";
+import { flushActiveProgress } from "../progress-navigation";
 import { TrainingReview } from "./TrainingReview";
 type Course = { assessmentId?: number; name: string; description: string; category: string; requirementType: string; surveyEnabled: boolean };
 export function Learning({ id }: { id: string }) {
@@ -61,7 +62,7 @@ export function Learning({ id }: { id: string }) {
     catch (e) { Toast.error(e instanceof Error ? e.message : "进入学习失败"); }
     finally { setBusy(false); }
   };
-  const backToTraining = () => router.push(`/learner/trainings/${id}`);
+  const backToTraining = async () => { try { await flushActiveProgress();router.push(`/learner/trainings/${id}`); } catch(e) { Toast.error(e instanceof Error?e.message:"进度保存失败，请重试"); } };
   return <Layout className="course-learning min-h-screen"><Layout.Header className="border-b border-slate-200 bg-white"><div className="mx-auto grid min-h-16 max-w-[1280px] grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 sm:px-6"><span className="flex items-center gap-2 justify-self-start"><Image src="/casela-logo.png" alt="CASELA Technologies" width={113} height={30} preview={false} /><span className="hidden text-sm sm:inline">e-learning</span></span><span className="whitespace-nowrap font-semibold">培训学习</span><Button className="justify-self-end" theme="borderless" type="tertiary" icon={<IconArrowLeft />} onClick={backToTraining}>返回</Button></div></Layout.Header>
     <Layout.Content className="mx-auto w-full max-w-[1280px] px-4 py-6 sm:px-6 sm:py-10">
       {error && <Banner className="!mb-5" type="danger" description={error} />}

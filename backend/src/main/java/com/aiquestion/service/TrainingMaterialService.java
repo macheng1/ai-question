@@ -6,7 +6,7 @@ import java.util.*;
 import java.io.*;
 import javax.imageio.ImageIO;
 import org.apache.pdfbox.Loader;
-import org.apache.pdfbox.rendering.PDFRenderer;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -21,7 +21,10 @@ public class TrainingMaterialService {
 
     private final TrainingService trainings;
 
-    public TrainingMaterialService(TrainingMaterialRepository persistence, FileStorageService oss, TrainingService trainings) {
+    private final com.aiquestion.repository.MaterialPreviewRepository previews;
+
+    public TrainingMaterialService(TrainingMaterialRepository persistence, FileStorageService oss, TrainingService trainings, com.aiquestion.repository.MaterialPreviewRepository previews) {
+        this.previews = previews;
         this.persistence = persistence;
         this.oss = oss;
         this.trainings = trainings;
@@ -122,28 +125,19 @@ public class TrainingMaterialService {
         var row = material(training, id);
         if (page < 1 || page > ((Number) row.get("page_count")).intValue())
             throw new BusinessException(ErrorCode.BAD_REQUEST, "页码无效");
-        var object = oss.open(String.valueOf(row.get("storage_key")));
-        byte[] bytes;
-        try (var input = object.stream()) {
-            bytes = input.readAllBytes();
+        if (!"READY".equals(row.get("preview_status")))
+            throw new BusinessException("FAILED".equals(row.get("preview_status")) ? ErrorCode.BAD_REQUEST : ErrorCode.MATERIAL_PREVIEW_PENDING, "FAILED".equals(row.get("preview_status"))
+                ? "材料预览生成失败，请联系管理员重试" : "材料预览正在生成，请稍后重试");
+        var preview = previews.pages(id).stream().filter(p -> ((Number)p.get("page_number")).intValue()==page).findFirst().orElseThrow();
+        try (var input = oss.open(String.valueOf(preview.get("preview_key"))).stream()) {
+            return input.readAllBytes();
         }
-        if ("PDF".equals(row.get("material_type"))) {
-            try (var document = Loader.loadPDF(bytes);
-                var out = new ByteArrayOutputStream()) {
-                var box = document.getPage(page - 1).getCropBox();
-                float scale = Math.min(1.5f, 1600f / Math.max(box.getWidth(), box.getHeight()));
-                if (!Float.isFinite(scale) || scale <= 0)
-                    throw new BusinessException(ErrorCode.BAD_REQUEST, "PDF页面尺寸无效");
-                var renderer = new PDFRenderer(document);
-                renderer.setSubsamplingAllowed(true);
-                ImageIO.write(renderer.renderImage(page - 1, scale), "png", out);
-                return out.toByteArray();
-            }
-        }
-        try (var out = new ByteArrayOutputStream()) {
-            ImageIO.write(ImageIO.read(new ByteArrayInputStream(bytes)), "png", out);
-            return out.toByteArray();
-        }
+    }
+
+    public void retryPreview(long training, long id, long user) {
+        trainings.get(training, user);
+        material(training, id);
+        previews.retry(id);
     }
 
     @Transactional
@@ -159,7 +153,8 @@ public class TrainingMaterialService {
     public record PageTime(int pageNumber, int requiredSeconds) {
     }
 
-    @Transactional
+    // After waiting for readers, count progress committed by those readers instead of an older snapshot.
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public void timings(long training, long id, long user, List<PageTime> times) {
         trainings.get(training, user);
         com.aiquestion.repository.RepositoryRows.one(persistence.lockMaterialForTiming(id, training));
@@ -175,19 +170,24 @@ public class TrainingMaterialService {
         }
     }
 
-    @Transactional
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public void delete(long training, long id, long user) {
         trainings.get(training, user);
         com.aiquestion.repository.RepositoryRows.one(persistence.lockMaterialForDelete(id, training));
         var row = material(training, id);
         if (com.aiquestion.repository.RepositoryRows.one(persistence.countProgressForDelete(id)) > 0)
             throw new BusinessException(ErrorCode.BAD_REQUEST, "已有学习记录，不能删除材料");
+        if ("PROCESSING".equals(row.get("preview_status")))
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "材料预览正在生成，请完成后再删除");
+        var keys = new ArrayList<String>();
+        keys.add(String.valueOf(row.get("storage_key")));
+        for (var p : previews.pages(id)) if (p.get("preview_key") != null) keys.add(p.get("preview_key").toString());
         persistence.deleteMaterial(id);
         org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {
 
             public void afterCommit() {
-                try {
-                    oss.delete(String.valueOf(row.get("storage_key")));
+                for (String key : keys) try {
+                    oss.delete(key);
                 } catch (RuntimeException e) {
                     org.slf4j.LoggerFactory.getLogger(TrainingMaterialService.class).warn("材料对象清理失败 id={}", id, e);
                 }

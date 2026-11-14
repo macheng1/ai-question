@@ -5,7 +5,7 @@
     SELECT * FROM candidate_learning_session WHERE <choose><when test="examTask">task_id</when><otherwise>training_id</otherwise></choose>=#{taskId} AND token=#{token}
   </select>
   <select id="findMaterials" resultType="java.util.LinkedHashMap">
-    SELECT m.id,m.training_id trainingId,m.title,m.material_type materialType,m.page_count pageCount FROM training_material m JOIN training t ON t.id=m.training_id WHERE <choose><when test="examTask">t.assessment_id=#{taskId}</when><otherwise>t.id=#{taskId}</otherwise></choose> AND EXISTS (SELECT 1 FROM candidate_learning_session learner JOIN training_audience r ON r.candidate_name=learner.candidate_name AND r.phone=learner.phone WHERE learner.id=#{sessionId} AND r.training_id=t.id) ORDER BY t.id,m.sort_order,m.id
+    SELECT m.id,m.training_id trainingId,m.title,m.material_type materialType,m.page_count pageCount,m.preview_status previewStatus FROM training_material m JOIN training t ON t.id=m.training_id WHERE <choose><when test="examTask">t.assessment_id=#{taskId}</when><otherwise>t.id=#{taskId}</otherwise></choose> AND EXISTS (SELECT 1 FROM candidate_learning_session learner JOIN training_audience r ON r.candidate_name=learner.candidate_name AND r.phone=learner.phone WHERE learner.id=#{sessionId} AND r.training_id=t.id) ORDER BY t.id,m.sort_order,m.id
   </select>
   <select id="findPageProgress" resultType="java.util.LinkedHashMap">
     SELECT p.page_number pageNumber,p.required_seconds requiredSeconds,COALESCE(s.studied_seconds,0) studiedSeconds,COALESCE(s.completed,FALSE) completed FROM training_material_page p LEFT JOIN candidate_material_progress s ON s.material_id=p.material_id AND s.page_number=p.page_number AND s.session_id=#{sessionId} WHERE p.material_id=#{materialId} ORDER BY p.page_number
@@ -16,8 +16,9 @@
   <select id="countIncompleteEarlierPages" resultType="java.lang.Integer">
     SELECT COUNT(*) FROM training_material_page p WHERE p.material_id=#{materialId} AND p.page_number&lt;#{pageNumber} AND NOT EXISTS (SELECT 1 FROM candidate_material_progress s WHERE s.session_id=#{sessionId} AND s.material_id=p.material_id AND s.page_number=p.page_number AND s.completed=TRUE)
   </select>
+  <!-- Shared configuration lock: different learners may save concurrently; edits/deletes remain exclusive. -->
   <select id="lockMaterial" resultType="java.util.LinkedHashMap">
-    SELECT id FROM training_material WHERE id=#{materialId} FOR UPDATE
+    SELECT id,preview_status FROM training_material WHERE id=#{materialId} FOR SHARE
   </select>
   <select id="lockSession" resultType="java.util.LinkedHashMap">
     SELECT id FROM candidate_learning_session WHERE id=#{sessionId} FOR UPDATE
@@ -25,13 +26,14 @@
   <insert id="initializePageProgress">
     INSERT IGNORE INTO candidate_material_progress(session_id,material_id,page_number) VALUES(#{sessionId},#{materialId},#{pageNumber})
   </insert>
+  <!-- Lock only the learner progress row, not the joined shared page configuration. -->
   <select id="lockPageProgress" resultType="java.util.LinkedHashMap">
-    SELECT s.*,p.required_seconds,GREATEST(0,TIMESTAMPDIFF(MICROSECOND,s.last_seen,CURRENT_TIMESTAMP(3))/1000000.0) elapsed FROM candidate_material_progress s JOIN training_material_page p ON p.material_id=s.material_id AND p.page_number=s.page_number WHERE s.session_id=#{sessionId} AND s.material_id=#{materialId} AND s.page_number=#{pageNumber} FOR UPDATE
+    SELECT s.*,p.required_seconds,GREATEST(0,TIMESTAMPDIFF(MICROSECOND,s.last_seen,CURRENT_TIMESTAMP(3))/1000000.0) elapsed FROM candidate_material_progress s JOIN training_material_page p ON p.material_id=s.material_id AND p.page_number=s.page_number WHERE s.session_id=#{sessionId} AND s.material_id=#{materialId} AND s.page_number=#{pageNumber} FOR UPDATE OF s
   </select>
   <update id="clearHeartbeatTokens">
-    UPDATE candidate_material_progress SET heartbeat_token=NULL WHERE session_id=#{sessionId}
+    UPDATE candidate_material_progress SET heartbeat_token=NULL WHERE session_id=#{sessionId} AND heartbeat_token IS NOT NULL
   </update>
   <update id="updatePageProgress">
-    UPDATE candidate_material_progress SET studied_seconds=#{studiedSeconds},completed=#{completed},last_seen=CURRENT_TIMESTAMP(3),heartbeat_token=#{heartbeatToken},completed_at=IF(#{markCompleted} AND completed_at IS NULL,CURRENT_TIMESTAMP(3),completed_at) WHERE session_id=#{sessionId} AND material_id=#{materialId} AND page_number=#{pageNumber}
+    UPDATE candidate_material_progress SET consumed_heartbeat_token=#{consumedToken},consumed_seconds=#{consumedSeconds},studied_seconds=#{studiedSeconds},completed=#{completed},last_seen=CURRENT_TIMESTAMP(3),heartbeat_token=#{heartbeatToken},completed_at=IF(#{markCompleted} AND completed_at IS NULL,CURRENT_TIMESTAMP(3),completed_at) WHERE session_id=#{sessionId} AND material_id=#{materialId} AND page_number=#{pageNumber}
   </update>
 </mapper>

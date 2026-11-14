@@ -1,6 +1,16 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.aiquestion.repository.AssessmentRosterRepository">
+  <select id="shareTask" resultType="java.lang.Long">
+    SELECT id FROM assessment_task WHERE id=#{taskId} FOR SHARE
+  </select>
+  <select id="shareTrainings" resultType="java.lang.Long">
+    SELECT id FROM training WHERE assessment_id=#{taskId} ORDER BY id FOR SHARE
+  </select>
+  <insert id="lockCandidate">
+    INSERT INTO assessment_candidate_guard(task_id,candidate_name,phone)
+    VALUES(#{taskId},#{candidateName},#{phone}) ON DUPLICATE KEY UPDATE task_id=VALUES(task_id)
+  </insert>
   <select id="lockTask" resultType="java.lang.Long">
     SELECT id FROM assessment_task WHERE id=#{taskId} FOR UPDATE
   </select>

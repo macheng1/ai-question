@@ -13,8 +13,8 @@ export class ApiError extends Error {
 export function normalizeApiError(error: unknown): ApiError {
   if (error instanceof ApiError) return error;
   if (axios.isAxiosError(error)) {
-    const payload = error.response?.data as { message?: string; traceId?: string } | undefined;
-    return new ApiError(payload?.message ?? (error.code === "ECONNABORTED" ? "请求超时，请稍后重试" : "网络请求失败"), { status: error.response?.status, traceId: payload?.traceId, details: payload });
+    const payload = error.response?.data as { message?: string; traceId?: string; code?: string } | undefined;
+    return new ApiError(payload?.message ?? (error.code === "ECONNABORTED" ? "请求超时，请稍后重试" : "网络请求失败"), { status: error.response?.status, code: payload?.code, traceId: payload?.traceId, details: payload });
   }
   return new ApiError(error instanceof Error ? error.message : "未知错误");
 }

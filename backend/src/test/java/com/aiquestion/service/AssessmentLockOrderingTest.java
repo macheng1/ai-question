@@ -39,7 +39,7 @@ class AssessmentLockOrderingTest {
   @Test
   void startLocksBeforeTaskReadAndConvertsMissingTask() {
     var jdbc = mock(AssessmentRosterRepository.class);
-    when(jdbc.lockTask(1L))
+    when(jdbc.shareTask(1L))
         .thenThrow(new org.springframework.dao.EmptyResultDataAccessException(1));
     assertThrows(
         BusinessException.class,
@@ -47,7 +47,7 @@ class AssessmentLockOrderingTest {
             new PublicExamService(mock(PublicExamRepository.class), new AssessmentRosterService(jdbc, mock(TrainingAudienceService.class)), mock(CandidateLearningService.class))
                 .start(1L, new PublicExamController.CandidateCommand("Alice", "13800000000")));
     verify(jdbc)
-        .lockTask(1L);
+        .shareTask(1L);
     verifyNoMoreInteractions(jdbc);
   }
 }

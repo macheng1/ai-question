@@ -59,6 +59,11 @@ public class TrainingEndpointService {
         return ApiResponse.ok(materials.list(id));
     }
 
+    public ApiResponse<?> retryPreview(long id, long material, String auth) {
+        materials.retryPreview(id, material, user(auth));
+        return ApiResponse.ok(null);
+    }
+
     public ApiResponse<?> reorderMaterials(long id, List<Long> ids, String auth) {
         materials.reorder(id, user(auth), ids);
         return ApiResponse.ok(null);

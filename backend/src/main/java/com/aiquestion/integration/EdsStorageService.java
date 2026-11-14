@@ -18,10 +18,27 @@ import org.springframework.web.multipart.MultipartFile;
 
 /** EDS 的 S3 适配：按内网部署要求，仅此客户端跳过 TLS 证书和主机名校验。 */
 @Service
-public class EdsStorageService implements ObjectStorage {
+public class EdsStorageService implements ObjectStorage, AutoCloseable {
   private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(EdsStorageService.class);
   private final EdsProperties properties;
   public EdsStorageService(EdsProperties properties) { this.properties = properties; }
+  private AmazonS3 sharedClient;
+  private boolean closed;
+
+  // Lazy initialization keeps an unused, unconfigured provider from blocking application startup.
+  private synchronized AmazonS3 client() {
+    if (closed) throw new IllegalStateException("Storage client is closed");
+    if (sharedClient == null) sharedClient = createClient();
+    return sharedClient;
+  }
+
+  @jakarta.annotation.PreDestroy
+  @Override public synchronized void close() {
+    if (closed) return;
+    closed = true;
+    if (sharedClient != null) sharedClient.shutdown();
+  }
+
   @Override public String provider() { return "eds"; }
 
   @Override public void validateConfiguration() {
@@ -42,6 +59,10 @@ public class EdsStorageService implements ObjectStorage {
   protected AmazonS3 createClient() {
     validateConfiguration();
     ClientConfiguration config = new ClientConfiguration();
+    // Initial bounded pool; size must be validated against storage latency and video traffic.
+    config.setMaxConnections(128);
+    config.setConnectionTTL(300000);
+    config.setConnectionMaxIdleMillis(60000);
     config.setConnectionTimeout(10000);
     config.setSocketTimeout(60000);
     config.setMaxErrorRetry(2);
@@ -68,7 +89,7 @@ public class EdsStorageService implements ObjectStorage {
   }
 
   @Override public void put(MultipartFile file, String mime, String key) {
-    AmazonS3 client = createClient();
+    AmazonS3 client = client();
     try (var input = file.getInputStream()) {
       ObjectMetadata metadata = new ObjectMetadata();
       metadata.setContentLength(file.getSize());
@@ -77,31 +98,31 @@ public class EdsStorageService implements ObjectStorage {
     } catch (Exception ex) {
       logUploadFailure(ex, key, mime, file.getSize());
       throw new BusinessException(ErrorCode.SYSTEM_ERROR, "EDS 文件上传失败，请检查存储连接和权限");
-    } finally { client.shutdown(); }
+    }
   }
 
   @Override public StoredObject open(String key) {
-    AmazonS3 client = createClient();
+    AmazonS3 client = client();
     try {
       var object = client.getObject(properties.bucket(), key);
-      var stream = new java.io.FilterInputStream(object.getObjectContent()) {
-        @Override public void close() throws java.io.IOException {
-          try { super.close(); } finally { client.shutdown(); }
-        }
-      };
-      return new StoredObject(stream, object.getObjectMetadata().getContentLength(),
-          object.getObjectMetadata().getContentType());
+      var stream = object.getObjectContent();
+      try {
+        return new StoredObject(stream, object.getObjectMetadata().getContentLength(),
+            object.getObjectMetadata().getContentType());
+      } catch (RuntimeException failure) {
+        // Ownership transfers to the caller only after a StoredObject was successfully built.
+        try { object.close(); } catch (java.io.IOException cleanup) { failure.addSuppressed(cleanup); }
+        throw failure;
+      }
     } catch (Exception ex) {
-      client.shutdown();
       throw new BusinessException(ErrorCode.SYSTEM_ERROR, "EDS 文件读取失败，请检查存储连接和权限");
     }
   }
 
   @Override public void delete(String key) {
-    AmazonS3 client = createClient();
+    AmazonS3 client = client();
     try { client.deleteObject(properties.bucket(), key); }
     catch (Exception ex) { throw new BusinessException(ErrorCode.SYSTEM_ERROR, "EDS 文件删除失败"); }
-    finally { client.shutdown(); }
   }
 
   private void logUploadFailure(Exception failure, String key, String mime, long size) {
