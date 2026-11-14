@@ -17,10 +17,10 @@
     UPDATE candidate_learning_session SET completed_at=COALESCE(completed_at,CURRENT_TIMESTAMP(3)) WHERE <choose><when test="examTask">task_id</when><otherwise>training_id</otherwise></choose>=#{taskId} AND candidate_name=#{candidateName} AND phone=#{phone}
   </update>
   <select id="lockExamTrainings" resultType="java.util.LinkedHashMap">
-    SELECT id FROM training WHERE assessment_id=#{taskId} ORDER BY id FOR SHARE
+    SELECT id FROM training WHERE assessment_id=#{taskId} ORDER BY id LOCK IN SHARE MODE
   </select>
   <select id="lockStandaloneTraining" resultType="java.util.LinkedHashMap">
-    SELECT id FROM training WHERE id=#{trainingId} FOR SHARE
+    SELECT id FROM training WHERE id=#{trainingId} LOCK IN SHARE MODE
   </select>
   <select id="findTask" resultType="java.util.LinkedHashMap">
     SELECT id FROM assessment_task WHERE id=#{taskId}

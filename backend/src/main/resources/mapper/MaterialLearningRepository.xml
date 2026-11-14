@@ -18,7 +18,7 @@
   </select>
   <!-- Shared configuration lock: different learners may save concurrently; edits/deletes remain exclusive. -->
   <select id="lockMaterial" resultType="java.util.LinkedHashMap">
-    SELECT id,preview_status FROM training_material WHERE id=#{materialId} FOR SHARE
+    SELECT id,preview_status FROM training_material WHERE id=#{materialId} LOCK IN SHARE MODE
   </select>
   <select id="lockSession" resultType="java.util.LinkedHashMap">
     SELECT id FROM candidate_learning_session WHERE id=#{sessionId} FOR UPDATE
@@ -28,7 +28,13 @@
   </insert>
   <!-- Lock only the learner progress row, not the joined shared page configuration. -->
   <select id="lockPageProgress" resultType="java.util.LinkedHashMap">
-    SELECT s.*,p.required_seconds,GREATEST(0,TIMESTAMPDIFF(MICROSECOND,s.last_seen,CURRENT_TIMESTAMP(3))/1000000.0) elapsed FROM candidate_material_progress s JOIN training_material_page p ON p.material_id=s.material_id AND p.page_number=s.page_number WHERE s.session_id=#{sessionId} AND s.material_id=#{materialId} AND s.page_number=#{pageNumber} FOR UPDATE OF s
+    SELECT s.*,
+           (SELECT p.required_seconds FROM training_material_page p
+             WHERE p.material_id=s.material_id AND p.page_number=s.page_number) required_seconds,
+           GREATEST(0,TIMESTAMPDIFF(MICROSECOND,s.last_seen,CURRENT_TIMESTAMP(3))/1000000.0) elapsed
+      FROM candidate_material_progress s
+     WHERE s.session_id=#{sessionId} AND s.material_id=#{materialId} AND s.page_number=#{pageNumber}
+       FOR UPDATE
   </select>
   <update id="clearHeartbeatTokens">
     UPDATE candidate_material_progress SET heartbeat_token=NULL WHERE session_id=#{sessionId} AND heartbeat_token IS NOT NULL

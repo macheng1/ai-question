@@ -111,6 +111,13 @@
     SELECT p.task_id,p.candidate_name,p.phone FROM assessment_participant p JOIN assessment_attempt a ON a.participant_id=p.id WHERE a.id=#{attemptId}
   </select>
   <select id="lockAttempt" resultType="java.util.LinkedHashMap">
-    SELECT a.id,a.status,a.started_at startedAt,t.duration_minutes duration,t.status taskStatus,t.start_at startAt,t.end_at endAt,(SELECT UNIX_TIMESTAMP(tr.start_at)*1000 FROM training tr WHERE tr.assessment_id=t.id) trainingStartAt,(SELECT UNIX_TIMESTAMP(tr.end_at)*1000 FROM training tr WHERE tr.assessment_id=t.id) trainingEndAt FROM assessment_attempt a JOIN assessment_task t ON t.id=a.task_id WHERE a.id=#{attemptId} FOR UPDATE OF a
+    SELECT a.id,a.status,a.started_at startedAt,
+           (SELECT t.duration_minutes FROM assessment_task t WHERE t.id=a.task_id) duration,
+           (SELECT t.status FROM assessment_task t WHERE t.id=a.task_id) taskStatus,
+           (SELECT t.start_at FROM assessment_task t WHERE t.id=a.task_id) startAt,
+           (SELECT t.end_at FROM assessment_task t WHERE t.id=a.task_id) endAt,
+           (SELECT UNIX_TIMESTAMP(tr.start_at)*1000 FROM training tr WHERE tr.assessment_id=a.task_id) trainingStartAt,
+           (SELECT UNIX_TIMESTAMP(tr.end_at)*1000 FROM training tr WHERE tr.assessment_id=a.task_id) trainingEndAt
+      FROM assessment_attempt a WHERE a.id=#{attemptId} FOR UPDATE
   </select>
 </mapper>

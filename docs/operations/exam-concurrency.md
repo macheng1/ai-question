@@ -12,7 +12,7 @@
 
 新后端需要应用 V53__exam_candidate_guards.sql，现有迁移启动流程会应用。新增个人事务锁表 assessment_candidate_guard，第一次操作时自动补齐记录。不会删除、合并或重置已有学员、答卷和成绩；删除考试时锁记录由外键级联删除。
 
-需要当前项目使用的 MySQL 8，SQL 使用 FOR SHARE 和 FOR UPDATE OF a。
+学习和考试的共享锁使用 MySQL 5.7 和 8 均支持的 LOCK IN SHARE MODE。排他锁查询的外层只读取个人答卷或个人阅读记录，关联配置通过只读子查询获取。
 
 ## 验证
 

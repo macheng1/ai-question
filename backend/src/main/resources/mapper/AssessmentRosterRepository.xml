@@ -2,10 +2,10 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.aiquestion.repository.AssessmentRosterRepository">
   <select id="shareTask" resultType="java.lang.Long">
-    SELECT id FROM assessment_task WHERE id=#{taskId} FOR SHARE
+    SELECT id FROM assessment_task WHERE id=#{taskId} LOCK IN SHARE MODE
   </select>
   <select id="shareTrainings" resultType="java.lang.Long">
-    SELECT id FROM training WHERE assessment_id=#{taskId} ORDER BY id FOR SHARE
+    SELECT id FROM training WHERE assessment_id=#{taskId} ORDER BY id LOCK IN SHARE MODE
   </select>
   <insert id="lockCandidate">
     INSERT INTO assessment_candidate_guard(task_id,candidate_name,phone)
