@@ -1,7 +1,7 @@
 "use client";
 import { Typography, Space } from "@douyinfe/semi-ui";
 import { Layout } from "@douyinfe/semi-ui";
-import { IconPlus } from "@douyinfe/semi-icons";
+import { IconArrowLeft, IconPlus } from "@douyinfe/semi-icons";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Table, Button, Modal, Toast, InputNumber } from "@douyinfe/semi-ui";
@@ -83,6 +83,13 @@ export function RandomComposePanel({ paper, locked, onCompleted }: Props) {
 
   if (loading) return <div className="grid min-h-[500px] place-items-center text-sm text-slate-400">加载随机配置中...</div>;
   return <Layout.Content className="min-w-0 p-4 sm:p-6">
+    <Typography.Text
+      link={{ href: "/profile/papers" }}
+      icon={<IconArrowLeft size="small" />}
+      className="!mb-4 !inline-flex !min-h-8 !items-center !text-sm"
+    >
+      返回试卷管理
+    </Typography.Text>
     <Layout.Content className="w-full rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div><Typography.Title heading={2} className="!text-lg !font-semibold !text-slate-800">随机抽题配置</Typography.Title><p className="mt-2 text-sm text-slate-500">按题库设置抽题数量和每题分值，下方显示各题型可用题量。</p></div>
