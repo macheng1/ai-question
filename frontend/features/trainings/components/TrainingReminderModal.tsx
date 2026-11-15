@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Banner, Button, Modal, Space, Table, Toast, Typography } from "@douyinfe/semi-ui";
-import { getReminderPreview, sendReminders, type Training, type ReminderPreview, type ReminderRecipient, type ReminderResult } from "../api";
+import { getReminderPreview, sendReminders, type Training, type ReminderPreview, type ReminderRecipient } from "../api";
 
 const dateText = (value: string | null) => value ? value.replace("T", " ").slice(0, 16) : "未设置";
 
@@ -12,11 +12,11 @@ export function TrainingReminderModal({ training, onClose }: { training: Trainin
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
-  const [results, setResults] = useState<ReminderResult[]>();
+  const [submitted, setSubmitted] = useState(false);
   const [reload, setReload] = useState(0);
   useEffect(() => {
     let active = true;
-    setLoading(true); setError(""); setResults(undefined); setSelected([]);
+    setLoading(true); setError(""); setSubmitted(false); setPreview(undefined); setSelected([]);
     getReminderPreview(training.id).then(data => {
       if (!active) return;
       setPreview(data);
@@ -29,13 +29,25 @@ export function TrainingReminderModal({ training, onClose }: { training: Trainin
   const hasExam = training.assessmentId != null;
 
   const send = async () => {
-    if (!preview || sending || !selected.length) return;
+    if (!preview || sending || submitted || !selected.length) return;
     setSending(true); setError("");
     try {
       const response = await sendReminders(training.id, preview.requestId, selected);
-      setResults(response);
+      setSubmitted(true);
       const sent = response.filter(result => result.status === "SENT").length;
-      Toast.info(`邮件服务已接收 ${sent} 封，请查看下方逐人结果`);
+      if (sent === selected.length) {
+        Toast.success("发送成功");
+        onClose();
+        return;
+      }
+      const failed = response.filter(result => result.status === "FAILED").length;
+      const skipped = response.filter(result => result.status === "SKIPPED").length;
+      const summary = [
+        sent && `${sent} 人发送成功`,
+        failed && `${failed} 人发送失败`,
+        skipped && `${skipped} 人已跳过`,
+      ].filter(Boolean).join("，");
+      setError(summary || "未收到发送结果，请刷新名单核对");
     } catch (e) { setError(e instanceof Error ? e.message : "发送失败，请重试；同一次请求不会重复发送"); }
     finally { setSending(false); }
   };
@@ -43,7 +55,7 @@ export function TrainingReminderModal({ training, onClose }: { training: Trainin
   return <Modal visible title={`一键提醒 · ${training.name}`} width="min(960px, calc(100vw - 24px))" maskClosable={!sending} closable={!sending} onCancel={() => { if (!sending) onClose(); }} bodyStyle={{ maxHeight: "65dvh", overflowY: "auto" }} footer={<Space wrap>
     <Button disabled={sending} onClick={onClose}>关闭</Button>
     <Button disabled={sending || loading} onClick={() => setReload(value => value + 1)}>刷新名单</Button>
-    <Button theme="solid" loading={sending} disabled={loading || !preview?.mailConfigured || !selected.length || selected.length > 50 || !!results} onClick={send}>发送提醒（{selected.length} 人）</Button>
+    <Button theme="solid" loading={sending} disabled={loading || !preview?.mailConfigured || !selected.length || selected.length > 50 || submitted} onClick={send}>发送提醒（{selected.length} 人）</Button>
   </Space>}>
     <div className="flex flex-col gap-4">
       <Banner type="info" closeIcon={null} description={<div className="space-y-2">
@@ -58,18 +70,13 @@ export function TrainingReminderModal({ training, onClose }: { training: Trainin
       {preview && !preview.mailConfigured && <Banner type="warning" description="当前后端未读取到完整的邮件配置，请确认已加载发件邮箱和平台访问地址配置，并重启后端后刷新名单。" />}
       {error && <Banner type="danger" description={error} />}
       <p className="text-sm text-slate-500">每次最多选择 50 人。缺少有效邮箱的员工不可选；发送前再次检查完成情况。刷新名单后再次发送会产生新的提醒。</p>
-      <Table<ReminderRecipient> rowKey="employeeId" loading={loading} dataSource={preview?.recipients || []} pagination={{ pageSize: 10 }} scroll={{ x: 880 }} empty="当前没有逾期未完成的学员，仅在结束时间后列出未完成人员" rowSelection={{ selectedRowKeys: selected, onChange: keys => setSelected((keys || []).map(Number)), getCheckboxProps: row => ({ disabled: sending || !!results || !row.selectable }) }} columns={[
+      <Table<ReminderRecipient> rowKey="employeeId" loading={loading} dataSource={preview?.recipients || []} pagination={{ pageSize: 10 }} scroll={{ x: 880 }} empty="当前没有逾期未完成的学员，仅在结束时间后列出未完成人员" rowSelection={{ selectedRowKeys: selected, onChange: keys => setSelected((keys || []).map(Number)), getCheckboxProps: row => ({ disabled: sending || submitted || !row.selectable }) }} columns={[
         { title: "姓名", dataIndex: "name", width: 100 },
         { title: "部门", dataIndex: "department", width: 120 },
         { title: "邮箱", width: 220, render: (_, row) => <span className="break-all">{row.email || "未填写"}{!row.selectable && <Typography.Text type="danger">（邮箱无效）</Typography.Text>}</span> },
         { title: "未完成原因", width: 180, render: (_, row) => row.reasons.join("、") },
         { title: "上次发送", width: 160, render: (_, row) => row.lastSentAt ? dateText(row.lastSentAt) : "未发送" },
       ]} />
-      {results && <Table<ReminderResult> rowKey="employeeId" pagination={false} dataSource={results} scroll={{ x: 500 }} columns={[
-        { title: "姓名", width: 120, render: (_, row) => row.name || preview?.recipients.find(person => person.employeeId === row.employeeId)?.name || "已移出范围" },
-        { title: "发送结果", width: 100, render: (_, row) => ({ SENT: "已发送", FAILED: "失败", SKIPPED: "已跳过" })[row.status] },
-        { title: "说明", dataIndex: "message", width: 280 },
-      ]} />}
     </div>
   </Modal>;
 }
