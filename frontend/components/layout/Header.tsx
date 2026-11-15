@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { IconBookOpenStroked } from "@douyinfe/semi-icons";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -33,6 +34,17 @@ export function Header() {
         </Link>
         {identity ? (
           <Space>
+            {identity.accountType === "ADMIN" && (
+              <a
+                href="/manuals/admin-guide.docx"
+                download="企业管理员操作手册.docx"
+                aria-label="下载企业管理员操作手册"
+                title="下载企业管理员操作手册"
+                className="inline-flex h-9 w-9 items-center justify-center rounded text-blue-600 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-blue-600"
+              >
+                <IconBookOpenStroked size="large" aria-hidden="true" />
+              </a>
+            )}
             <Tag>
               {identity.accountType === "ADMIN" ? "企业管理员" : "员工"}
             </Tag>
