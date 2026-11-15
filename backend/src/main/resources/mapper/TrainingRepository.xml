@@ -14,10 +14,10 @@
     SELECT t.*, a.status exam_status, a.end_at exam_end_at, (SELECT COUNT(*) FROM training linked WHERE linked.assessment_id=t.assessment_id) exam_reference_count, (SELECT COUNT(*) FROM assessment_attempt aa WHERE aa.task_id=a.id AND aa.status='PENDING_REVIEW') pending_review_count FROM training t LEFT JOIN assessment_task a ON a.id=t.assessment_id WHERE t.created_by=#{ownerId} ORDER BY t.id DESC
   </select>
   <select id="countExamParticipants" resultType="java.lang.Integer">
-    SELECT COUNT(*) FROM assessment_participant p JOIN training t ON t.assessment_id=p.task_id WHERE t.id=#{trainingId} AND EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=t.id AND r.candidate_name=p.candidate_name AND r.phone=p.phone)
+    SELECT COUNT(*) FROM assessment_participant p JOIN training t ON t.assessment_id=p.task_id WHERE t.id=#{trainingId} AND EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=t.id AND r.employee_id=p.employee_id)
   </select>
   <select id="countTrainingLearningSessions" resultType="java.lang.Integer">
-    SELECT COUNT(*) FROM candidate_learning_session s JOIN training t ON (t.assessment_id=s.task_id OR t.id=s.training_id) WHERE t.id=#{trainingId} AND (s.training_id=t.id OR EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=t.id AND r.candidate_name=s.candidate_name AND r.phone=s.phone))
+    SELECT COUNT(*) FROM candidate_learning_session s JOIN training t ON (t.assessment_id=s.task_id OR t.id=s.training_id) WHERE t.id=#{trainingId} AND (s.training_id=t.id OR EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=t.id AND r.employee_id=s.employee_id))
   </select>
   <select id="countOwnedAssessments" resultType="java.lang.Integer">
     SELECT COUNT(*) FROM assessment_task WHERE id=#{assessmentId} AND created_by=#{ownerId}
@@ -26,10 +26,10 @@
     INSERT INTO training(name,description,survey_enabled,questions_json,created_by) VALUES(#{name},#{description},#{surveyEnabled},#{questionsJson},#{ownerId})
   </insert>
   <select id="countLearningBeforeRebind" resultType="java.lang.Integer">
-    SELECT COUNT(*) FROM candidate_learning_session s WHERE s.training_id=#{trainingId} OR (s.task_id=#{assessmentId} AND EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=#{trainingId} AND r.candidate_name=s.candidate_name AND r.phone=s.phone))
+    SELECT COUNT(*) FROM candidate_learning_session s WHERE s.training_id=#{trainingId} OR (s.task_id=#{assessmentId} AND EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=#{trainingId} AND r.employee_id=s.employee_id))
   </select>
   <select id="countParticipantsBeforeRebind" resultType="java.lang.Integer">
-    SELECT COUNT(*) FROM assessment_participant p JOIN training t ON t.assessment_id=p.task_id WHERE t.id=#{trainingId} AND EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=t.id AND r.candidate_name=p.candidate_name AND r.phone=p.phone)
+    SELECT COUNT(*) FROM assessment_participant p JOIN training t ON t.assessment_id=p.task_id WHERE t.id=#{trainingId} AND EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=t.id AND r.employee_id=p.employee_id)
   </select>
   <update id="updateContent">
     UPDATE training SET name=#{name},description=#{description},survey_enabled=#{surveyEnabled},questions_json=#{questionsJson},version=version+1 WHERE id=#{trainingId}
@@ -44,10 +44,10 @@
     SELECT COUNT(*) FROM training WHERE id=#{trainingId} AND start_at&gt;CURRENT_TIMESTAMP(3) AND (end_at IS NULL OR end_at&gt;=CURRENT_TIMESTAMP(3))
   </select>
   <select id="countParticipantsBeforeDelete" resultType="java.lang.Integer">
-    SELECT COUNT(*) FROM assessment_participant p JOIN training t ON t.assessment_id=p.task_id WHERE t.id=#{trainingId} AND EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=t.id AND r.candidate_name=p.candidate_name AND r.phone=p.phone)
+    SELECT COUNT(*) FROM assessment_participant p JOIN training t ON t.assessment_id=p.task_id WHERE t.id=#{trainingId} AND EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=t.id AND r.employee_id=p.employee_id)
   </select>
   <select id="countSessionsBeforeDelete" resultType="java.lang.Integer">
-    SELECT COUNT(*) FROM candidate_learning_session s JOIN training t ON (t.assessment_id=s.task_id OR t.id=s.training_id) WHERE t.id=#{trainingId} AND (s.training_id=t.id OR EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=t.id AND r.candidate_name=s.candidate_name AND r.phone=s.phone))
+    SELECT COUNT(*) FROM candidate_learning_session s JOIN training t ON (t.assessment_id=s.task_id OR t.id=s.training_id) WHERE t.id=#{trainingId} AND (s.training_id=t.id OR EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=t.id AND r.employee_id=s.employee_id))
   </select>
   <select id="countMaterials" resultType="java.lang.Integer">
     SELECT COUNT(*) FROM training_material WHERE training_id=#{trainingId}
@@ -94,7 +94,7 @@
     SELECT * FROM training_video WHERE training_id=#{trainingId} AND id=#{videoId}
   </select>
   <select id="countSessionsBeforeAddingVideo" resultType="java.lang.Integer">
-    SELECT COUNT(*) FROM candidate_learning_session s JOIN training t ON (t.assessment_id=s.task_id OR t.id=s.training_id) WHERE t.id=#{trainingId} AND (s.training_id=t.id OR EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=t.id AND r.candidate_name=s.candidate_name AND r.phone=s.phone))
+    SELECT COUNT(*) FROM candidate_learning_session s JOIN training t ON (t.assessment_id=s.task_id OR t.id=s.training_id) WHERE t.id=#{trainingId} AND (s.training_id=t.id OR EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=t.id AND r.employee_id=s.employee_id))
   </select>
   <insert id="insertVideo">
     INSERT INTO training_video(training_id,title,storage_path,content_type) VALUES(#{trainingId},#{title},#{storagePath},#{contentType})

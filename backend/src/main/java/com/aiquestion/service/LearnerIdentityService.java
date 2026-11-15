@@ -35,9 +35,9 @@ public class LearnerIdentityService {
             throw new BusinessException(ErrorCode.FORBIDDEN, "姓名或手机号与在用员工名单不匹配，请联系管理员");
         var profile = accounts.employee(employees.get(0));
         if (training)
-            trainingAudienceService.require(id, name, phone);
+            trainingAudienceService.require(id, profile.userId());
         else
-            assessmentRosterService.requireEligible(id, name, phone);
+            assessmentRosterService.requireEligible(id, profile.userId());
         return profile;
     }
 

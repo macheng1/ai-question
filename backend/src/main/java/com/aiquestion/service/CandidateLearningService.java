@@ -29,41 +29,49 @@ public class CandidateLearningService {
     }
 
     public void requireComplete(long task, String name, String phone) {
-        trainingAudienceService.requireOpenTask(task, name, phone);
-        Integer missing = com.aiquestion.repository.RepositoryRows.one(persistence.countIncompleteVideos(Math.abs(task), Math.abs(task), name, phone, task > 0));
-        missing += com.aiquestion.repository.RepositoryRows.one(persistence.countIncompletePages(Math.abs(task), Math.abs(task), name, phone, task > 0));
-        if (missing != null && missing > 0)
+        requireComplete(task, trainingAudienceService.employeeId(task, name, phone));
+    }
+
+    public void requireComplete(long task, long employeeId) {
+        trainingAudienceService.requireOpenTask(task, employeeId);
+        int missing = com.aiquestion.repository.RepositoryRows.one(persistence.countIncompleteVideos(Math.abs(task), Math.abs(task), employeeId, task > 0));
+        missing += com.aiquestion.repository.RepositoryRows.one(persistence.countIncompletePages(Math.abs(task), Math.abs(task), employeeId, task > 0));
+        if (missing > 0)
             throw new BusinessException(ErrorCode.BAD_REQUEST, "请先完成全部培训材料学习");
-        persistence.confirmSessionsCompleted(Math.abs(task), name, phone, task > 0);
+        persistence.confirmSessionsCompleted(Math.abs(task), employeeId, task > 0);
     }
 
     @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public Map<String, Object> learning(long task, String name, String phone) {
         validate(name, phone);
+        return learning(task, trainingAudienceService.employeeId(task, name, phone), name.trim(), phone.trim());
+    }
+
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
+    public Map<String, Object> learning(long task, long employeeId, String name, String phone) {
         if (task > 0) {
             assessmentRosterService.shareTask(task);
-            assessmentRosterService.requireEligible(task, name, phone);
+            assessmentRosterService.requireEligible(task, employeeId);
         } else
             com.aiquestion.repository.RepositoryRows.one(persistence.lockStandaloneTraining(-task));
-        trainingAudienceService.requireOpenTask(task, name, phone);
+        trainingAudienceService.requireOpenTask(task, employeeId);
         if (task > 0 && persistence.findTask(task).isEmpty())
             throw new BusinessException(ErrorCode.NOT_FOUND, "考试不存在");
-        persistence.insertSessionIfAbsent(Math.abs(task), name.trim(), phone.trim(), UUID.randomUUID().toString(), task > 0);
-        persistence.assignSessionEmployee(Math.abs(task), name.trim(), phone.trim(), task > 0);
-        var session = com.aiquestion.repository.RepositoryRows.one(persistence.findCandidateSession(Math.abs(task), name.trim(), phone.trim(), task > 0));
+        persistence.insertSessionIfAbsent(Math.abs(task), employeeId, name, phone, UUID.randomUUID().toString(), task > 0);
+        var session = com.aiquestion.repository.RepositoryRows.one(persistence.findCandidateSession(Math.abs(task), employeeId, task > 0));
         persistence.initializeVideoProgress(com.aiquestion.repository.RepositoryRows.nullableLong(session.get("id")), Math.abs(task), task > 0);
         var videos = persistence.findSessionVideos(com.aiquestion.repository.RepositoryRows.nullableLong(session.get("id")), Math.abs(task), task > 0);
-        return Map.of("videos", videos, "materials", materialLearningService.list(task, ((Number) session.get("id")).longValue()), "trainings", persistence.findCandidateTrainings(Math.abs(task), task > 0, name.trim(), phone.trim()), "token", session.get("token"));
+        return Map.of("videos", videos, "materials", materialLearningService.list(task, ((Number) session.get("id")).longValue()), "trainings", persistence.findCandidateTrainings(Math.abs(task), task > 0, employeeId), "token", session.get("token"));
     }
 
     public Map<String, Object> video(long task, long video, String token) {
         var rows = persistence.findAuthorizedVideo(Math.abs(task), Math.abs(task), token, video, task > 0);
         if (rows.isEmpty())
             throw new BusinessException(ErrorCode.NOT_FOUND, "视频或学习凭证无效");
-        var identity = com.aiquestion.repository.RepositoryRows.one(persistence.findSessionIdentity(token, Math.abs(task), task > 0));
+        long employeeId = ((Number) rows.get(0).get("employee_id")).longValue();
         if (task > 0)
-            assessmentRosterService.requireEligible(task, String.valueOf(identity.get("candidate_name")), String.valueOf(identity.get("phone")));
-        trainingAudienceService.requireOpenTask(task, String.valueOf(identity.get("candidate_name")), String.valueOf(identity.get("phone")));
+            assessmentRosterService.requireEligible(task, employeeId);
+        trainingAudienceService.requireOpenTask(task, employeeId);
         return rows.get(0);
     }
 

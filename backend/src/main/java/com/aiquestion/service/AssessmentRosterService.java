@@ -37,8 +37,8 @@ public class AssessmentRosterService {
     }
 
     /** Insert/upsert holds one candidate's exclusive guard until the caller's transaction ends. */
-    public void lockCandidate(long task, String name, String phone) {
-        persistence.lockCandidate(task, name.trim(), phone.trim());
+    public void lockCandidate(long task, long employeeId) {
+        persistence.lockCandidate(task, employeeId);
     }
 
     public boolean hasTraining(long task) {
@@ -54,10 +54,14 @@ public class AssessmentRosterService {
         return rows;
     }
 
-    public void requireEligible(long task, String name, String phone) {
+    public long employeeId(long task, String name, String phone) {
+        return trainingAudienceService.employeeId(task, name, phone);
+    }
+
+    public void requireEligible(long task, long employeeId) {
         if (com.aiquestion.repository.RepositoryRows.one(persistence.countTask(task)) == 0)
             throw new BusinessException(ErrorCode.NOT_FOUND, "考试不存在");
-        trainingAudienceService.requireTask(task, name, phone);
+        trainingAudienceService.requireTask(task, employeeId);
     }
 
     private final TrainingAudienceService trainingAudienceService;

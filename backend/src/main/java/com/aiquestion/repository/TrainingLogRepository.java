@@ -13,5 +13,5 @@ public interface TrainingLogRepository {
   List<Map<String, Object>> findLearningSessions(@Param("trainingId") Long trainingId);
   List<Map<String, Object>> findVideoLogs(@Param("trainingId") Long trainingId, @Param("sessionTrainingId") Long sessionTrainingId);
   List<Map<String, Object>> findMaterialLogs(@Param("trainingId") Long trainingId, @Param("sessionTrainingId") Long sessionTrainingId);
-  List<Map<String, Object>> findCandidateAttempts(@Param("taskId") Long taskId, @Param("phone") String phone, @Param("candidateName") String candidateName);
+  List<Map<String, Object>> findCandidateAttempts(@Param("taskId") Long taskId, @Param("employeeId") Long employeeId);
 }

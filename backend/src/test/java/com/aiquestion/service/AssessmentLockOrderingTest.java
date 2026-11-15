@@ -45,7 +45,7 @@ class AssessmentLockOrderingTest {
         BusinessException.class,
         () ->
             new PublicExamService(mock(PublicExamRepository.class), new AssessmentRosterService(jdbc, mock(TrainingAudienceService.class)), mock(CandidateLearningService.class))
-                .start(1L, new PublicExamController.CandidateCommand("Alice", "13800000000")));
+                .start(1L, 7L, new PublicExamController.CandidateCommand("Alice", "13800000000")));
     verify(jdbc)
         .shareTask(1L);
     verifyNoMoreInteractions(jdbc);

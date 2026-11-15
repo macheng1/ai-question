@@ -43,7 +43,7 @@ public class PublicExamService {
         }
         if (assessmentRosterService.hasTraining(id)) {
             var identity = com.aiquestion.repository.RepositoryRows.one(persistence.findAttemptCandidate(attemptId, id));
-            assessmentRosterService.requireEligible(id, String.valueOf(identity.get("candidate_name")), String.valueOf(identity.get("phone")));
+            assessmentRosterService.requireEligible(id, participantEmployee(identity));
         }
         boolean reviewEnabled = revealAnswers && submitted && flag(task.get("reviewEnabled"));
         List<Map<String, Object>> questions = questionRows(id, attemptId);
@@ -67,34 +67,43 @@ public class PublicExamService {
 
     @org.springframework.transaction.annotation.Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public ApiResponse<Map<String, Object>> start(Long id, CandidateCommand command) {
+        CandidateLearningService.validate(command.name(), command.phone());
+        long employeeId = assessmentRosterService.employeeId(id, command.name(), command.phone());
+        return start(id, employeeId, command);
+    }
+
+    @org.springframework.transaction.annotation.Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
+    public ApiResponse<Map<String, Object>> start(Long id, long employeeId, CandidateCommand command) {
         assessmentRosterService.shareTask(id);
         Map<String, Object> task = task(id);
         ensureTaskOpen(task);
         com.aiquestion.service.CandidateLearningService.validate(command.name(), command.phone());
         String phone = command.phone().trim();
         String name = command.name().trim();
-        assessmentRosterService.requireEligible(id, name, phone);
-        assessmentRosterService.lockCandidate(id, name, phone);
-        List<Map<String, Object>> participants = persistence.findLatestParticipant(id, name, phone);
+        assessmentRosterService.requireEligible(id, employeeId);
+        assessmentRosterService.lockCandidate(id, employeeId);
+        List<Map<String, Object>> participants = persistence.findLatestParticipant(id, employeeId);
         long participantId;
         int attemptCount;
+        int maxAttemptNo;
         if (participants.isEmpty()) {
             var inserted1 = new com.aiquestion.repository.GeneratedId();
-            persistence.insertParticipant(id, name, phone, inserted1);
+            persistence.insertParticipant(id, employeeId, name, phone, inserted1);
             participantId = inserted1.getId();
             attemptCount = 0;
+            maxAttemptNo = 0;
         } else {
             participantId = ((Number) participants.get(0).get("id")).longValue();
-            attemptCount = ((Number) participants.get(0).get("attempt_count")).intValue();
+            attemptCount = number(participants.get(0).get("attempt_count"));
+            maxAttemptNo = number(participants.get(0).get("max_attempt_no"));
         }
-        persistence.assignParticipantEmployee(participantId);
-        List<Map<String, Object>> active = persistence.findActiveAttempt(id, participantId);
+        List<Map<String, Object>> active = persistence.findActiveAttempt(id, employeeId);
         long attemptId;
         Object startedAt;
-        Long pending = attemptCount == 0 ? null : persistence.pendingReviewId(id, participantId);
+        Long pending = attemptCount == 0 ? null : persistence.pendingReviewId(id, employeeId);
         if (pending != null) return result(pending);
         if (active.isEmpty() && attemptCount >= maxAttempts(task)) {
-            Map<String, Object> latest = com.aiquestion.repository.RepositoryRows.one(persistence.findLatestSubmittedAttempt(id, participantId));
+            Map<String, Object> latest = com.aiquestion.repository.RepositoryRows.one(persistence.findLatestSubmittedAttempt(id, employeeId));
             long latestAttemptId = ((Number) latest.get("id")).longValue();
             List<Map<String, Object>> answers = persistence.findLatestAttemptAnswers(latestAttemptId);
             Map<String, Object> result = new HashMap<>(16);
@@ -113,18 +122,18 @@ public class PublicExamService {
             int configuredMaxAttempts = maxAttempts(task);
             result.put("attemptNo", latestAttemptNo);
             result.put("maxAttempts", configuredMaxAttempts);
-            result.put("remainingAttempts", Math.max(0, configuredMaxAttempts - latestAttemptNo));
+            result.put("remainingAttempts", Math.max(0, configuredMaxAttempts - attemptCount));
             return ApiResponse.ok(result);
         }
         if (active.isEmpty()) {
-            candidateLearningService.requireComplete(id, name, phone);
+            candidateLearningService.requireComplete(id, employeeId);
             attemptCount++;
             var inserted2 = new com.aiquestion.repository.GeneratedId();
-            persistence.insertAttemptFromTask(id, participantId, attemptCount, id, inserted2);
+            persistence.insertAttemptFromTask(id, participantId, Math.max(attemptCount, maxAttemptNo + 1), id, inserted2);
             attemptId = inserted2.getId();
             startedAt = com.aiquestion.repository.RepositoryRows.one(persistence.findAttemptStartedAt(attemptId));
             snapshotQuestions(attemptId, id, String.valueOf(task.get("paperMode")));
-            persistence.updateParticipantAttemptCount(attemptCount, participantId);
+            persistence.incrementParticipantAttemptCount(participantId);
         } else {
             attemptId = ((Number) active.get(0).get("id")).longValue();
             startedAt = active.get(0).get("started_at");
@@ -139,24 +148,22 @@ public class PublicExamService {
         int configuredMaxAttempts = maxAttempts(task);
         result.put("attemptNo", currentAttemptNo);
         result.put("maxAttempts", configuredMaxAttempts);
-        result.put("remainingAttempts", Math.max(0, configuredMaxAttempts - currentAttemptNo));
+        result.put("remainingAttempts", Math.max(0, configuredMaxAttempts - attemptCount));
         result.put("answers", answers);
         return ApiResponse.ok(result);
     }
 
-    public ApiResponse<Map<String, Object>> eligibility(Long id, String name, String phone) {
+    public ApiResponse<Map<String, Object>> eligibility(Long id, long employeeId) {
         Map<String, Object> task = task(id);
-        com.aiquestion.service.CandidateLearningService.validate(name, phone);
-        assessmentRosterService.requireEligible(id, name, phone);
+        assessmentRosterService.requireEligible(id, employeeId);
         int configuredMaxAttempts = maxAttempts(task);
-        List<Map<String, Object>> participants = persistence.findEligibilityParticipant(id, name.trim(), phone.trim());
+        List<Map<String, Object>> participants = persistence.findLatestParticipant(id, employeeId);
         int attemptCount = participants.isEmpty() ? 0 : ((Number) participants.get(0).get("attempt_count")).intValue();
         boolean inProgress = false;
         Long pending = null;
         if (!participants.isEmpty()) {
-            long participantId = ((Number) participants.get(0).get("id")).longValue();
-            pending = persistence.pendingReviewId(id, participantId);
-            inProgress = !persistence.findAnyActiveAttempt(id, participantId).isEmpty();
+            pending = persistence.pendingReviewId(id, employeeId);
+            inProgress = !persistence.findActiveAttempt(id, employeeId).isEmpty();
         }
         Map<String, Object> result = new HashMap<>(16);
         result.put("allowRetake", allowRetake(task));
@@ -170,15 +177,14 @@ public class PublicExamService {
         return ApiResponse.ok(result);
     }
 
-    public ApiResponse<Map<String, Object>> progress(Long id, String name, String phone) {
+    public ApiResponse<Map<String, Object>> progress(Long id, long employeeId) {
         task(id);
-        com.aiquestion.service.CandidateLearningService.validate(name, phone);
-        assessmentRosterService.requireEligible(id, name, phone);
-        List<Map<String, Object>> active = persistence.findCandidateActiveAttempt(id, name.trim(), phone.trim());
+        assessmentRosterService.requireEligible(id, employeeId);
+        List<Map<String, Object>> active = persistence.findActiveAttempt(id, employeeId);
         if (active.isEmpty()) {
             return ApiResponse.ok(Map.of("inProgress", false));
         }
-        long attemptId = ((Number) active.get(0).get("attempt_id")).longValue();
+        long attemptId = ((Number) active.get(0).get("id")).longValue();
         List<Map<String, Object>> answers = persistence.findProgressAnswers(attemptId);
         return ApiResponse.ok(Map.of("inProgress", true, "attemptId", attemptId, "startedAt", active.get(0).get("started_at"), "answers", answers));
     }
@@ -248,16 +254,17 @@ public class PublicExamService {
         result.put("passed", passed);
         result.put("attemptNo", attemptNo);
         result.put("maxAttempts", configuredMaxAttempts);
-        result.put("remainingAttempts", Math.max(0, configuredMaxAttempts - attemptNo));
+        result.put("remainingAttempts", Math.max(0, configuredMaxAttempts - number(attempt.get("attemptCount"))));
         return ApiResponse.ok(result);
     }
 
-    public ApiResponse<List<Map<String, Object>>> records(Long id, String phone) {
-        return ApiResponse.ok(persistence.findCandidateRecords(id, phone));
+    public ApiResponse<List<Map<String, Object>>> records(Long id, long employeeId) {
+        return ApiResponse.ok(persistence.findCandidateRecords(id, employeeId));
     }
 
     public ApiResponse<Map<String, Object>> result(Long attemptId) {
         Map<String, Object> attempt = com.aiquestion.repository.RepositoryRows.one(persistence.findAttemptResult(attemptId));
+        int attemptCount = number(attempt.remove("attemptCount"));
         if ("PENDING_REVIEW".equals(attempt.get("status"))) {
             attempt.remove("score");
             attempt.remove("passed");
@@ -272,13 +279,12 @@ public class PublicExamService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "该答题记录尚未交卷");
         }
         List<Map<String, Object>> answers = persistence.findResultAnswers(attemptId);
-        int attemptNo = ((Number) attempt.get("attemptNo")).intValue();
         int configuredMaxAttempts = maxAttempts(attempt);
         attempt.remove("status");
         attempt.remove("allowRetake");
         attempt.remove("maxAttempts");
         boolean showAnswers = flag(attempt.remove("reviewEnabled"));
-        attempt.put("remainingAttempts", Math.max(0, configuredMaxAttempts - attemptNo));
+        attempt.put("remainingAttempts", Math.max(0, configuredMaxAttempts - attemptCount));
         attempt.put("showAnswers", showAnswers);
         attempt.put("answers", showAnswers ? answers : List.of());
         return ApiResponse.ok(attempt);
@@ -380,8 +386,9 @@ public class PublicExamService {
             // Global order: task/training shared -> candidate exclusive -> own attempt exclusive.
             long taskId = ((Number) identity.get("task_id")).longValue();
             assessmentRosterService.shareTask(taskId);
-            assessmentRosterService.lockCandidate(taskId, String.valueOf(identity.get("candidate_name")), String.valueOf(identity.get("phone")));
-            assessmentRosterService.requireEligible(((Number) identity.get("task_id")).longValue(), String.valueOf(identity.get("candidate_name")), String.valueOf(identity.get("phone")));
+            long employeeId = participantEmployee(identity);
+            assessmentRosterService.lockCandidate(taskId, employeeId);
+            assessmentRosterService.requireEligible(taskId, employeeId);
             attempt = com.aiquestion.repository.RepositoryRows.one(persistence.lockAttempt(attemptId));
         } catch (org.springframework.dao.EmptyResultDataAccessException exception) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "答题记录不存在");
@@ -398,6 +405,11 @@ public class PublicExamService {
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "答题时间已结束，请交卷");
         }
         return attempt;
+    }
+
+    private static long participantEmployee(Map<String, Object> identity) {
+        if (identity.get("employee_id") instanceof Number id) return id.longValue();
+        throw new BusinessException(ErrorCode.FORBIDDEN, "答题记录未关联学员");
     }
 
     private static boolean expired(Map<String, Object> attempt) {

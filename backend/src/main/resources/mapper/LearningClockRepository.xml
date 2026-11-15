@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.aiquestion.repository.LearningClockRepository">
-  <select id="findSessionPhone" resultType="java.lang.String">
-    SELECT phone FROM candidate_learning_session WHERE id=#{sessionId}
+  <select id="findSessionEmployeeId" resultType="java.lang.Long">
+    SELECT employee_id FROM candidate_learning_session WHERE id=#{sessionId}
   </select>
   <insert id="initializeClock">
-    INSERT IGNORE INTO learning_clock(phone) VALUES(#{phone})
+    INSERT IGNORE INTO learning_clock(employee_id) VALUES(#{employeeId})
   </insert>
   <select id="lockClock" resultType="java.util.LinkedHashMap">
-    SELECT GREATEST(0,TIMESTAMPDIFF(MICROSECOND,credited_at,CURRENT_TIMESTAMP(3))/1000000.0) elapsed FROM learning_clock WHERE phone=#{phone} FOR UPDATE
+    SELECT GREATEST(0,TIMESTAMPDIFF(MICROSECOND,credited_at,CURRENT_TIMESTAMP(3))/1000000.0) elapsed FROM learning_clock WHERE employee_id=#{employeeId} FOR UPDATE
   </select>
   <update id="touchClock">
-    UPDATE learning_clock SET credited_at=CURRENT_TIMESTAMP(3) WHERE phone=#{phone}
+    UPDATE learning_clock SET credited_at=CURRENT_TIMESTAMP(3) WHERE employee_id=#{employeeId}
   </update>
 </mapper>

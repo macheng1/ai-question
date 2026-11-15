@@ -14,12 +14,13 @@ class CandidateLearningServiceTest {
  @Test void noLinkedVideosAllowStarting() {
   var repository = org.mockito.Mockito.mock(com.aiquestion.repository.CandidateLearningRepository.class);
   var audience = org.mockito.Mockito.mock(TrainingAudienceService.class);
-  org.mockito.Mockito.when(repository.countIncompleteVideos(1L,1L,"A","1",true)).thenReturn(java.util.List.of(0));
-  org.mockito.Mockito.when(repository.countIncompletePages(1L,1L,"A","1",true)).thenReturn(java.util.List.of(0));
+  org.mockito.Mockito.when(audience.employeeId(1L,"A","1")).thenReturn(42L);
+  org.mockito.Mockito.when(repository.countIncompleteVideos(1L,1L,42L,true)).thenReturn(java.util.List.of(0));
+  org.mockito.Mockito.when(repository.countIncompletePages(1L,1L,42L,true)).thenReturn(java.util.List.of(0));
   var service = new CandidateLearningService(repository, org.mockito.Mockito.mock(AssessmentRosterService.class), org.mockito.Mockito.mock(LearningClock.class), org.mockito.Mockito.mock(MaterialLearningService.class), audience);
   assertDoesNotThrow(()->service.requireComplete(1,"A","1"));
-  org.mockito.Mockito.verify(audience).requireOpenTask(1L,"A","1");
-  org.mockito.Mockito.verify(repository).confirmSessionsCompleted(1L,"A","1",true);
+  org.mockito.Mockito.verify(audience).requireOpenTask(1L,42L);
+  org.mockito.Mockito.verify(repository).confirmSessionsCompleted(1L,42L,true);
  }
  @Test void repeatedRequestsDoNotReceiveRepeatedTolerance() {
   // Both requests retain the same persisted baseline, even after the first save.

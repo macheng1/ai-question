@@ -1,6 +1,8 @@
 package com.aiquestion.controller;
 
 import com.aiquestion.common.ApiResponse;
+import com.aiquestion.security.LearnerAccess;
+import com.aiquestion.service.AccountService.Profile;
 import com.aiquestion.common.BusinessException;
 import com.aiquestion.common.ErrorCode;
 import io.swagger.v3.oas.annotations.Operation;
@@ -31,20 +33,20 @@ PublicExamController {
 
     @Operation(summary = "开始或恢复考试")
     @PostMapping("/{id}/start")
-    public ApiResponse<Map<String, Object>> start(@PathVariable Long id, @RequestBody CandidateCommand command) {
-        return service.start(id, command);
+    public ApiResponse<Map<String, Object>> start(@PathVariable Long id, @RequestBody CandidateCommand command, @RequestAttribute(LearnerAccess.PROFILE) Profile learner) {
+        return service.start(id, learner.userId(), command);
     }
 
     @Operation(summary = "检查考生是否可以开始或重做考试")
     @GetMapping("/{id}/eligibility")
-    public ApiResponse<Map<String, Object>> eligibility(@PathVariable Long id, @RequestParam String name, @RequestParam String phone) {
-        return service.eligibility(id, name, phone);
+    public ApiResponse<Map<String, Object>> eligibility(@PathVariable Long id, @RequestParam String name, @RequestParam String phone, @RequestAttribute(LearnerAccess.PROFILE) Profile learner) {
+        return service.eligibility(id, learner.userId());
     }
 
     @Operation(summary = "查询考生进行中的考试")
     @GetMapping("/{id}/progress")
-    public ApiResponse<Map<String, Object>> progress(@PathVariable Long id, @RequestParam String name, @RequestParam String phone) {
-        return service.progress(id, name, phone);
+    public ApiResponse<Map<String, Object>> progress(@PathVariable Long id, @RequestParam String name, @RequestParam String phone, @RequestAttribute(LearnerAccess.PROFILE) Profile learner) {
+        return service.progress(id, learner.userId());
     }
 
     @Operation(summary = "保存单题答案")
@@ -59,10 +61,10 @@ PublicExamController {
         return service.submit(attemptId);
     }
 
-    @Operation(summary = "按手机号查询成绩")
+    @Operation(summary = "查询当前学员的考试成绩")
     @GetMapping("/{id}/records")
-    public ApiResponse<List<Map<String, Object>>> records(@PathVariable Long id, @RequestParam String phone) {
-        return service.records(id, phone);
+    public ApiResponse<List<Map<String, Object>>> records(@PathVariable Long id, @RequestParam String phone, @RequestAttribute(LearnerAccess.PROFILE) Profile learner) {
+        return service.records(id, learner.userId());
     }
 
     @Operation(summary = "查询单次考试成绩详情")

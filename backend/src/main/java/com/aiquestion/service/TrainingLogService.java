@@ -19,13 +19,13 @@ public class TrainingLogService {
     /**
      * 提醒名单只需完成状态，批量查询计数，避免逐人加载材料与答卷明细。
      */
-    public Set<String> completedParticipants(long id, long user) {
+    public Set<Long> completedParticipants(long id, long user) {
         trainings.get(id, user);
         long total = com.aiquestion.repository.RepositoryRows.one(persistence.countTrainingUnits(id, id));
-        var completed = new HashSet<String>();
+        var completed = new HashSet<Long>();
         for (var session : persistence.findCandidateCompletion(id)) {
             if ("COMPLETED".equals(LearnerTaskStatus.learning(true, total, ((Number) session.get("completed_parts")).longValue(), session.get("completed_at") != null))) {
-                completed.add(session.get("phone") + "|" + session.get("candidate_name"));
+                completed.add(((Number) session.get("employee_id")).longValue());
             }
         }
         return completed;
@@ -44,7 +44,7 @@ public class TrainingLogService {
             s.put("studiedSeconds", parts.stream().filter(p -> p.get("studiedSeconds") instanceof Number).mapToDouble(p -> ((Number) p.get("studiedSeconds")).doubleValue()).sum());
             long completedParts = parts.stream().filter(p -> Boolean.TRUE.equals(p.get("completed")) || "1".equals(String.valueOf(p.get("completed")))).count();
             s.put("completed", "COMPLETED".equals(LearnerTaskStatus.learning(true, parts.size(), (int) completedParts, s.get("completedAt") != null)));
-            s.put("attempts", persistence.findCandidateAttempts(com.aiquestion.repository.RepositoryRows.nullableLong(s.get("taskId")), (String) s.get("phone"), (String) s.get("name")));
+            s.put("attempts", persistence.findCandidateAttempts(com.aiquestion.repository.RepositoryRows.nullableLong(s.get("taskId")), com.aiquestion.repository.RepositoryRows.nullableLong(s.get("employeeId"))));
         }
         return sessions;
     }

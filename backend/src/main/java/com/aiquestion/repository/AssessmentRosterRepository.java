@@ -10,7 +10,7 @@ import org.apache.ibatis.annotations.Param;
 public interface AssessmentRosterRepository {
   List<Long> shareTask(@Param("taskId") Long taskId);
   List<Long> shareTrainings(@Param("taskId") Long taskId);
-  int lockCandidate(@Param("taskId") Long taskId, @Param("candidateName") String candidateName, @Param("phone") String phone);
+  int lockCandidate(@Param("taskId") Long taskId, @Param("employeeId") long employeeId);
   List<Long> lockTask(@Param("taskId") Long taskId);
   List<Integer> countTrainingReferences(@Param("taskId") Long taskId);
   List<Map<String, Object>> findTrainingRoster(@Param("taskId") Long taskId);

@@ -16,7 +16,7 @@ class PublicExamRegressionTest {
     private final PublicExamService service = new PublicExamService(repository, roster, learning);
 
     private void attempt(String status) {
-        when(repository.findAttemptIdentity(1L)).thenReturn(List.of(Map.of("task_id", 2L, "candidate_name", "Alice", "phone", "13900000000")));
+        when(repository.findAttemptIdentity(1L)).thenReturn(List.of(Map.of("task_id", 2L, "employee_id", 7L)));
         when(repository.lockAttempt(1L)).thenReturn(List.of(Map.of("status", status, "duration", 30)));
     }
 
@@ -83,11 +83,11 @@ class PublicExamRegressionTest {
     }
     @Test void newAttemptCannotBypassLearning() {
         when(repository.findTaskDetails(1L)).thenReturn(List.of(Map.of("maxAttempts", 1)));
-        doAnswer(call -> { call.getArgument(3, GeneratedId.class).setId(7L); return 1; })
-            .when(repository).insertParticipant(anyLong(), anyString(), anyString(), any());
+        doAnswer(call -> { call.getArgument(4, GeneratedId.class).setId(7L); return 1; })
+            .when(repository).insertParticipant(anyLong(), anyLong(), anyString(), anyString(), any());
         doThrow(new BusinessException(ErrorCode.BAD_REQUEST, "请先完成全部培训材料学习"))
-            .when(learning).requireComplete(1L, "Alice", "13800000000");
-        var error = assertThrows(BusinessException.class, () -> service.start(1L, new PublicExamController.CandidateCommand("Alice", "13800000000")));
+            .when(learning).requireComplete(1L, 7L);
+        var error = assertThrows(BusinessException.class, () -> service.start(1L, 7L, new PublicExamController.CandidateCommand("Alice", "13800000000")));
         assertEquals("请先完成全部培训材料学习", error.getMessage());
         verify(repository, never()).insertAttemptFromTask(any(), any(), anyInt(), any(), any());
     }
@@ -102,9 +102,9 @@ class PublicExamRegressionTest {
     @Test void progressRejectsCandidateOutsideRoster() {
         when(repository.findTaskDetails(1L)).thenReturn(List.of(Map.of("reviewEnabled", false)));
         doThrow(new BusinessException(ErrorCode.FORBIDDEN, "你不在本培训的学习范围内"))
-            .when(roster).requireEligible(1L, "非名单人员", "13900009999");
-        var error = assertThrows(BusinessException.class, () -> service.progress(1L, "非名单人员", "13900009999"));
+            .when(roster).requireEligible(1L, 7L);
+        var error = assertThrows(BusinessException.class, () -> service.progress(1L, 7L));
         assertEquals("你不在本培训的学习范围内", error.getMessage());
-        verify(repository, never()).findCandidateActiveAttempt(any(), any(), any());
+        verify(repository, never()).findActiveAttempt(any(), anyLong());
     }
 }

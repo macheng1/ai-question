@@ -8,8 +8,8 @@
     SELECT id FROM training WHERE assessment_id=#{taskId} ORDER BY id LOCK IN SHARE MODE
   </select>
   <insert id="lockCandidate">
-    INSERT INTO assessment_candidate_guard(task_id,candidate_name,phone)
-    VALUES(#{taskId},#{candidateName},#{phone}) ON DUPLICATE KEY UPDATE task_id=VALUES(task_id)
+    INSERT INTO assessment_candidate_guard(task_id,employee_id)
+    VALUES(#{taskId},#{employeeId}) ON DUPLICATE KEY UPDATE task_id=VALUES(task_id)
   </insert>
   <select id="lockTask" resultType="java.lang.Long">
     SELECT id FROM assessment_task WHERE id=#{taskId} FOR UPDATE
@@ -18,7 +18,7 @@
     SELECT COUNT(*) FROM training WHERE assessment_id=#{taskId}
   </select>
   <select id="findTrainingRoster" resultType="java.util.LinkedHashMap">
-    SELECT DISTINCT r.employee_id employeeId,r.department_id departmentId,r.department_name departmentName,r.candidate_name candidateName,r.phone,EXISTS(SELECT 1 FROM assessment_participant p JOIN assessment_attempt a ON a.participant_id=p.id WHERE p.task_id=t.assessment_id AND p.phone=r.phone AND a.submitted_at IS NOT NULL) submitted FROM training_audience r JOIN training t ON t.id=r.training_id WHERE t.assessment_id=#{taskId} ORDER BY r.employee_id
+    SELECT DISTINCT r.employee_id employeeId,r.department_id departmentId,r.department_name departmentName,r.candidate_name candidateName,r.phone,EXISTS(SELECT 1 FROM assessment_participant p JOIN assessment_attempt a ON a.participant_id=p.id WHERE p.task_id=t.assessment_id AND p.employee_id=r.employee_id AND a.submitted_at IS NOT NULL) submitted FROM training_audience r JOIN training t ON t.id=r.training_id WHERE t.assessment_id=#{taskId} ORDER BY r.employee_id
   </select>
   <select id="countTask" resultType="java.lang.Integer">
     SELECT COUNT(*) FROM assessment_task WHERE id=#{taskId}

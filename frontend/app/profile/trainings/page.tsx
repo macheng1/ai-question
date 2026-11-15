@@ -84,7 +84,7 @@ export default function TrainingsPage() {
       ? `确认结束“${item.name}”的培训和考试？进行中的答卷将结算，学习记录和成绩保留。结束后可回看材料，不再记录学习进度，也不能参加考试。`
       : `确认结束“${item.name}”的培训？学习记录保留，结束后可回看材料，不再记录学习进度。`,
     okText: item.assessmentId ? "结束培训和考试" : "结束培训", cancelText: "取消",
-    onOk: async () => { try { await endTraining(item.id); Toast.success(item.assessmentId ? "培训和考试已结束" : "培训已结束"); load(); } catch (e) { Toast.error(e instanceof Error ? e.message : "结束失败"); throw e; } },
+    onOk: async () => { try { await endTraining(item.id); setNow(Date.now()); Toast.success(item.assessmentId ? "培训和考试已结束" : "培训已结束"); load(); } catch (e) { Toast.error(e instanceof Error ? e.message : "结束失败"); throw e; } },
   });
   const visible = items.filter(item => item.name.includes(keyword.trim()) && (!category || item.category === category) && (!requirement || item.requirementType === requirement));
   const currentPage = Math.min(page, Math.max(1, Math.ceil(visible.length / pageSize)));

@@ -20,12 +20,12 @@ public class MaterialLearningService {
 
     public Map<String, Object> session(long task, String token) {
         var rows = persistence.findSession(Math.abs(task), token, task > 0);
-        if (rows.isEmpty())
+        if (rows.isEmpty() || !(rows.get(0).get("employee_id") instanceof Number employeeId))
             throw new BusinessException(ErrorCode.UNAUTHORIZED, "学习凭证无效");
         var s = rows.get(0);
         if (task > 0)
-            assessmentRosterService.requireEligible(task, s.get("candidate_name").toString(), s.get("phone").toString());
-        trainingAudienceService.requireOpenTask(task, s.get("candidate_name").toString(), s.get("phone").toString());
+            assessmentRosterService.requireEligible(task, employeeId.longValue());
+        trainingAudienceService.requireOpenTask(task, employeeId.longValue());
         return s;
     }
 

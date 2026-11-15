@@ -324,7 +324,7 @@ public class TrainingService {
         if (((Number) r.get("created_by")).longValue() == user)
             return;
         var person = com.aiquestion.repository.RepositoryRows.one(persistence.findAdministratorIdentity(user));
-        trainingAudienceService.require(id, person.get("name").toString(), person.get("phone").toString());
+        trainingAudienceService.require(id, trainingAudienceService.employeeId(-id, person.get("name").toString(), person.get("phone").toString()));
     }
 
     public Map<String, Object> survey(long id, long user) {
@@ -341,7 +341,7 @@ public class TrainingService {
         var course = row(id, false);
         if (((Number) course.get("created_by")).longValue() != employee.enterpriseId())
             throw new BusinessException(ErrorCode.FORBIDDEN);
-        trainingAudienceService.require(id, employee.name(), employee.phone());
+        trainingAudienceService.require(id, employee.userId());
     }
 
     private Map<String, Object> surveyView(long id, String identityColumn, long accountId) {

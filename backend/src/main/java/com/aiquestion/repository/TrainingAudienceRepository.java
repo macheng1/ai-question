@@ -29,7 +29,9 @@ public interface TrainingAudienceRepository {
       @Param("departmentId") Long departmentId,
       @Param("departmentName") String departmentName,
       @Param("assignedAt") java.sql.Timestamp assignedAt);
-  List<Integer> countCandidateAssignments(@Param("trainingId") Long trainingId, @Param("name") String name, @Param("phone") String phone);
+  boolean isActiveExamEmployee(@Param("taskId") long taskId, @Param("employeeId") long employeeId);
+  List<Long> findActiveEntryEmployee(@Param("entryId") long entryId, @Param("examTask") boolean examTask, @Param("name") String name, @Param("phone") String phone);
+  List<Integer> countCandidateAssignments(@Param("trainingId") Long trainingId, @Param("employeeId") long employeeId);
   List<Integer> countEndedTrainings(@Param("trainingId") Long trainingId);
   List<Integer> countNotStartedTrainings(@Param("entryId") Long entryId, @Param("examTask") boolean examTask);
   List<Integer> countExamLinkedTrainings(@Param("trainingId") Long trainingId);

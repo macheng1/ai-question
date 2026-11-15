@@ -119,27 +119,36 @@ public class TrainingAudienceService {
         for (var e : selected) persistence.insertAssignment(id, ((Number) e.get("id")).longValue(), (String) e.get("name"), (String) e.get("phone"), ((Number) e.get("department_id")).longValue(), (String) e.get("department_name"), (java.sql.Timestamp) assignedTimes.get(((Number) e.get("id")).longValue()));
     }
 
-    public void require(long training, String name, String phone) {
-        if (com.aiquestion.repository.RepositoryRows.one(persistence.countCandidateAssignments(training, name.trim(), phone.trim())) == 0)
+    public long employeeId(long task, String name, String phone) {
+        var ids = persistence.findActiveEntryEmployee(Math.abs(task), task > 0, name.trim(), phone.trim());
+        if (ids.size() != 1)
+            throw new BusinessException(ErrorCode.FORBIDDEN, "姓名或手机号与在用员工名单不匹配，请联系管理员");
+        return ids.get(0);
+    }
+
+    public void require(long training, long employeeId) {
+        if (com.aiquestion.repository.RepositoryRows.one(persistence.countCandidateAssignments(training, employeeId)) == 0)
             throw new BusinessException(ErrorCode.FORBIDDEN, "你不在本培训的学习范围内");
     }
 
-    public void requireOpenTask(long task, String name, String phone) {
-        requireTask(task, name, phone);
+    public void requireOpenTask(long task, long employeeId) {
+        requireTask(task, employeeId);
         for (long id : persistence.findTrainingIdsForEntry(Math.abs(task), task > 0)) {
             if (com.aiquestion.repository.RepositoryRows.one(persistence.countEndedTrainings(id)) > 0)
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "培训已结束，不能继续学习或考试");
         }
     }
 
-    public void requireTask(long task, String name, String phone) {
+    public void requireTask(long task, long employeeId) {
         if (task < 0 && com.aiquestion.repository.RepositoryRows.one(persistence.countExamLinkedTrainings(-task)) > 0)
             throw new BusinessException(ErrorCode.BAD_REQUEST, "请从关联考试进入配套培训");
         var linked = persistence.findTrainingIdsForEntry(Math.abs(task), task > 0);
         if (task < 0 && linked.isEmpty())
             throw new BusinessException(ErrorCode.NOT_FOUND, "培训不存在");
+        if (task > 0 && linked.isEmpty() && !persistence.isActiveExamEmployee(task, employeeId))
+            throw new BusinessException(ErrorCode.FORBIDDEN, "你不在本考试的考生范围内");
         var assigned = linked.stream().filter(id -> com.aiquestion.repository.RepositoryRows.one(
-                persistence.countCandidateAssignments(id, name.trim(), phone.trim())) > 0).toList();
+                persistence.countCandidateAssignments(id, employeeId)) > 0).toList();
         if (!linked.isEmpty() && assigned.isEmpty())
             throw new BusinessException(ErrorCode.FORBIDDEN, "你不在本培训的学习范围内");
         for (long id : assigned) {

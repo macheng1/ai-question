@@ -14,10 +14,10 @@
     SELECT * FROM training WHERE id=#{trainingId} FOR UPDATE
   </select>
   <select id="countLearningSessions" resultType="java.lang.Integer">
-    SELECT COUNT(*) FROM candidate_learning_session s JOIN training t ON (t.assessment_id=s.task_id OR t.id=s.training_id) WHERE t.id=#{trainingId} AND (s.training_id=t.id OR EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=t.id AND r.candidate_name=s.candidate_name AND r.phone=s.phone))
+    SELECT COUNT(*) FROM candidate_learning_session s JOIN training t ON (t.assessment_id=s.task_id OR t.id=s.training_id) WHERE t.id=#{trainingId} AND (s.training_id=t.id OR EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=t.id AND r.employee_id=s.employee_id))
   </select>
   <select id="countExamParticipants" resultType="java.lang.Integer">
-    SELECT COUNT(*) FROM assessment_participant p JOIN training t ON t.assessment_id=p.task_id WHERE t.id=#{trainingId} AND EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=t.id AND r.candidate_name=p.candidate_name AND r.phone=p.phone)
+    SELECT COUNT(*) FROM assessment_participant p JOIN training t ON t.assessment_id=p.task_id WHERE t.id=#{trainingId} AND EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=t.id AND r.employee_id=p.employee_id)
   </select>
   <select id="findActiveEmployees" resultType="java.util.LinkedHashMap">
     SELECT e.id,e.name,e.phone,e.department_id,d.name department_name FROM organization_employee e JOIN organization_department d ON d.id=e.department_id AND d.created_by=e.created_by WHERE e.created_by=#{ownerId} AND e.status='ACTIVE' AND d.status='ACTIVE'
@@ -44,7 +44,17 @@
     INSERT INTO training_audience(training_id,employee_id,candidate_name,phone,department_id,department_name,assigned_at) VALUES(#{trainingId},#{employeeId},#{name},#{phone},#{departmentId},#{departmentName},COALESCE(#{assignedAt},CURRENT_TIMESTAMP(3)))
   </insert>
   <select id="countCandidateAssignments" resultType="java.lang.Integer">
-    SELECT COUNT(*) FROM training_audience WHERE training_id=#{trainingId} AND candidate_name=#{name} AND phone=#{phone}
+    SELECT COUNT(*) FROM training_audience WHERE training_id=#{trainingId} AND employee_id=#{employeeId}
+  </select>
+  <select id="isActiveExamEmployee" resultType="boolean">
+    SELECT EXISTS (SELECT 1 FROM organization_employee e JOIN assessment_task t ON t.created_by=e.created_by
+      WHERE t.id=#{taskId} AND e.id=#{employeeId} AND e.status='ACTIVE')
+  </select>
+  <select id="findActiveEntryEmployee" resultType="java.lang.Long">
+    SELECT e.id FROM organization_employee e
+    JOIN <choose><when test="examTask">assessment_task</when><otherwise>training</otherwise></choose> t
+      ON t.created_by=e.created_by
+    WHERE t.id=#{entryId} AND e.status='ACTIVE' AND e.name=#{name} AND e.phone=#{phone}
   </select>
   <select id="countEndedTrainings" resultType="java.lang.Integer">
     SELECT COUNT(*) FROM training WHERE id=#{trainingId} AND end_at&lt;=CURRENT_TIMESTAMP(3)

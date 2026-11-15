@@ -172,7 +172,7 @@ class MyBatisMigrationIntegrationTest {
     var initial = reading.heartbeat(-training, material, 1, token, null, 0);
     String heartbeat = initial.get("heartbeatToken").toString();
     jdbc.update("UPDATE candidate_material_progress SET last_seen=DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 6 SECOND) WHERE material_id=?", material);
-    jdbc.update("UPDATE learning_clock SET credited_at=DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 6 SECOND) WHERE phone=?", phone);
+    jdbc.update("UPDATE learning_clock SET credited_at=DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 6 SECOND) WHERE employee_id=?", employee);
     var credited = reading.heartbeat(-training, material, 1, token, heartbeat, 5);
     assertEquals(5.0, ((Number) credited.get("studiedSeconds")).doubleValue(), 0.01);
     assertEquals(true, credited.get("completed"));
@@ -180,6 +180,35 @@ class MyBatisMigrationIntegrationTest {
     assertEquals(credited, reading.heartbeat(-training, material, 1, token, heartbeat, 5));
     assertThrows(BusinessException.class, () -> reading.heartbeat(-training, material, 1, token, heartbeat, 4));
     assertThrows(BusinessException.class, () -> learning.requireComplete(-training, "测试学员", phone));
+  }
+
+  @Test void renamedLearnerResumesAssignedMaterialsAndKeepsOriginalProgress() throws Exception {
+    long training = createTraining(null, false);
+    long material = material(training);
+    long video = insert("INSERT INTO training_video(training_id,title,storage_path,content_type) VALUES(?,'课程视频','test.mp4','video/mp4')", training);
+    String token = learning.learning(-training, "测试学员", phone).get("token").toString();
+    long session = reading.authorize(-training, material, token, 1);
+    jdbc.update("UPDATE candidate_video_progress SET completed=TRUE WHERE session_id=? AND video_id=?", session, video);
+    String newPhone = "137" + String.format("%08d", SEQUENCE.incrementAndGet());
+    jdbc.update("UPDATE organization_employee SET name=?,phone=? WHERE id=?", "改名学员", newPhone, employee);
+    var learner = "Bearer " + tokens.issue(new AccountIdentity(employee, AccountType.EMPLOYEE, owner)).accessToken();
+    var resumed = request(post("/public/courses/" + training + "/learning").header("Authorization", learner),
+        Map.of("name", "改名学员", "phone", newPhone));
+    assertEquals(token, resumed.path("token").asText());
+    assertEquals(material, resumed.path("materials").get(0).path("id").asLong());
+    assertEquals(session, ((Number) learning.video(-training, video, token).get("session_id")).longValue());
+    assertEquals(session, reading.authorize(-training, material, token, 1));
+    assertThrows(BusinessException.class, () -> learning.requireComplete(-training, employee));
+    jdbc.update("INSERT INTO candidate_material_progress(session_id,material_id,page_number,completed) VALUES(?,?,1,TRUE),(?,?,2,TRUE)", session, material, session, material);
+    assertTrue(request(post("/public/courses/" + training + "/complete").header("Authorization", learner), Map.of("token", token)).path("completed").asBoolean());
+    assertNotNull(jdbc.queryForMap("SELECT completed_at FROM candidate_learning_session WHERE id=?",session).get("completed_at"));
+    mvc.perform(get("/learner/trainings/" + training + "/review").header("Authorization", learner)).andExpect(status().isOk());
+    long replacement = insert("INSERT INTO organization_employee(created_by,department_id,name,phone) VALUES(?,?,'测试学员',?)", owner, department, phone);
+    assertThrows(BusinessException.class, () -> learning.learning(-training, "测试学员", phone));
+    var replacementToken = "Bearer " + tokens.issue(new AccountIdentity(replacement, AccountType.EMPLOYEE, owner)).accessToken();
+    mvc.perform(post("/public/courses/" + training + "/complete").header("Authorization", replacementToken)
+        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("token",token))))
+        .andExpect(status().isForbidden());
   }
 
   @Test void failedAudienceValidationRollsBackNewTraining() throws Exception {
@@ -237,7 +266,8 @@ class MyBatisMigrationIntegrationTest {
         entered.countDown();awaitRelease(release);return result;
       }));
       assertTrue(entered.await(5,java.util.concurrent.TimeUnit.SECONDS));
-      var second=pool.submit(()->publicExams.start(exam,new com.aiquestion.controller.PublicExamController.CandidateCommand("另一学员","137"+String.format("%08d",SEQUENCE.incrementAndGet()))));
+      String otherPhone = createConcurrentExamEmployee();
+      var second=pool.submit(()->publicExams.start(exam,new com.aiquestion.controller.PublicExamController.CandidateCommand("另一学员",otherPhone)));
       assertNotNull(second.get(3,java.util.concurrent.TimeUnit.SECONDS));
       release.countDown();first.get(5,java.util.concurrent.TimeUnit.SECONDS);
       assertEquals(2,jdbc.queryForObject("SELECT COUNT(*) FROM assessment_attempt WHERE task_id=?",Integer.class,exam));
@@ -246,7 +276,7 @@ class MyBatisMigrationIntegrationTest {
 
   @Test void differentCandidatesCanSaveAnswersBeforeFirstCommit() throws Exception {
     long exam=createExam(), question=examQuestion(exam);
-    long firstAttempt=startAttempt(exam,"测试学员",phone), secondAttempt=startAttempt(exam,"另一学员","137"+String.format("%08d",SEQUENCE.incrementAndGet()));
+    long firstAttempt=startAttempt(exam,"测试学员",phone), secondAttempt=startAttempt(exam,"另一学员",createConcurrentExamEmployee());
     var entered=new java.util.concurrent.CountDownLatch(1);var release=new java.util.concurrent.CountDownLatch(1);
     var pool=java.util.concurrent.Executors.newFixedThreadPool(2);
     try {
@@ -354,6 +384,12 @@ class MyBatisMigrationIntegrationTest {
     return question;
   }
 
+  private String createConcurrentExamEmployee() {
+    String otherPhone = "137" + String.format("%08d", SEQUENCE.incrementAndGet());
+    insert("INSERT INTO organization_employee(created_by,department_id,name,phone) VALUES(?,?,'另一学员',?)",owner,department,otherPhone);
+    return otherPhone;
+  }
+
   private long startAttempt(long exam,String name,String candidatePhone) {
     return ((Number)publicExams.start(exam,new com.aiquestion.controller.PublicExamController.CandidateCommand(name,candidatePhone)).data().get("attemptId")).longValue();
   }
@@ -383,6 +419,69 @@ class MyBatisMigrationIntegrationTest {
     mvc.perform(get("/public/exams/" + exam).param("attemptId", Long.toString(attempt))).andExpect(status().isUnauthorized());
     String foreign = "Bearer " + tokens.issue(new AccountIdentity(employee + 999999, AccountType.EMPLOYEE, owner)).accessToken();
     mvc.perform(get("/public/exams/attempts/" + attempt + "/result").header("Authorization", foreign)).andExpect(status().isUnauthorized());
+  }
+
+  @Test void duplicateHistoricalParticipantRowsShareResumeReviewAndRetakeQuota() throws Exception {
+    long exam = createExam();
+    long question = examQuestion(exam);
+    jdbc.update("UPDATE assessment_task SET allow_retake=TRUE,max_attempts=2 WHERE id=?",exam);
+    long first = startAttempt(exam, "测试学员", phone);
+    long duplicate = insert("INSERT INTO assessment_participant(task_id,employee_id,candidate_name,phone) VALUES(?,?,'历史姓名','13999999999')",exam,employee);
+    assertEquals(first,startAttempt(exam,"测试学员",phone));
+    assertEquals(1,((Number)publicExams.eligibility(exam,employee).data().get("attemptCount")).intValue());
+    publicExams.answer(first,question,new com.aiquestion.controller.PublicExamController.AnswerCommand("A"));
+    publicExams.submit(first);
+    jdbc.update("UPDATE assessment_attempt SET status='PENDING_REVIEW' WHERE id=?",first);
+    assertEquals(first,startAttempt(exam,"测试学员",phone));
+    assertEquals(true,publicExams.eligibility(exam,employee).data().get("pendingReview"));
+    jdbc.update("UPDATE assessment_attempt SET status='SUBMITTED' WHERE id=?",first);
+    long second = startAttempt(exam,"测试学员",phone);
+    assertNotEquals(first,second);
+    assertEquals(duplicate,jdbc.queryForObject("SELECT participant_id FROM assessment_attempt WHERE id=?",Long.class,second));
+    jdbc.update("UPDATE assessment_attempt SET attempt_no=1 WHERE id=?",second);
+    publicExams.answer(second,question,new com.aiquestion.controller.PublicExamController.AnswerCommand("A"));
+    var result = publicExams.submit(second).data();
+    assertEquals(2,((Number) result.get("attemptNo")).intValue());
+    assertEquals(0,((Number) result.get("remainingAttempts")).intValue());
+    assertEquals(second,startAttempt(exam,"测试学员",phone));
+    assertEquals(false,publicExams.eligibility(exam,employee).data().get("canStart"));
+    assertEquals(0,((Number)publicExams.result(first).data().get("remainingAttempts")).intValue());
+    assertEquals(2,publicExams.records(exam,employee).data().size());
+  }
+
+  @Test void examAttemptsFollowEmployeeWhenAnotherLearnerTakesTheirOldContactDetails() throws Exception {
+    String otherPhone = createConcurrentExamEmployee();
+    long otherEmployee = jdbc.queryForObject("SELECT id FROM organization_employee WHERE created_by=? AND phone=?", Long.class, owner, otherPhone);
+    long exam = createExam();
+    long question = examQuestion(exam);
+    createTraining(exam, false);
+    String path = "/public/exams/" + exam;
+    String learner = "Bearer " + tokens.issue(new AccountIdentity(employee, AccountType.EMPLOYEE, owner)).accessToken();
+    long attempt = request(post(path + "/start").header("Authorization", learner), Map.of("name","测试学员","phone",phone)).path("attemptId").asLong();
+    String newPhone = "135" + String.format("%08d", SEQUENCE.incrementAndGet());
+    jdbc.update("UPDATE organization_employee SET name=?,phone=? WHERE id=?", "改名学员",newPhone,employee);
+    jdbc.update("UPDATE organization_employee SET name=?,phone=? WHERE id=?", "测试学员",phone,otherEmployee);
+    var updated = Map.of("name","改名学员","phone",newPhone);
+    assertEquals(attempt, request(post(path + "/start").header("Authorization", learner), updated).path("attemptId").asLong());
+    assertEquals(attempt, request(get(path + "/progress").header("Authorization", learner)
+        .param("name","改名学员").param("phone",newPhone), Map.of()).path("attemptId").asLong());
+    request(put("/public/exams/attempts/" + attempt + "/answers/" + question).header("Authorization", learner), Map.of("answer","A"));
+    request(post("/public/exams/attempts/" + attempt + "/submit").header("Authorization", learner), Map.of());
+    assertEquals(1, request(get(path + "/records").header("Authorization", learner).param("phone",newPhone), Map.of()).size());
+    String other = "Bearer " + tokens.issue(new AccountIdentity(otherEmployee,AccountType.EMPLOYEE,owner)).accessToken();
+    assertEquals(0, request(get(path + "/records").header("Authorization", other).param("phone",phone), Map.of()).size());
+    assertEquals(0, request(get(path + "/eligibility").header("Authorization", other)
+        .param("name","测试学员").param("phone",phone), Map.of()).path("attemptCount").asInt());
+    mvc.perform(get("/public/exams/attempts/" + attempt + "/result").header("Authorization", other)).andExpect(status().isForbidden());
+    long separate = request(post(path + "/start").header("Authorization", other), Map.of("name","测试学员","phone",phone)).path("attemptId").asLong();
+    assertNotEquals(attempt, separate);
+    var roster = assessmentRoster.roster(exam);
+    assertEquals(2, roster.size());
+    for (var row : roster)
+      assertEquals(((Number)row.get("employeeId")).longValue() == employee, row.get("submitted"));
+    request(put("/public/exams/attempts/" + separate + "/answers/" + question).header("Authorization", other), Map.of("answer","B"));
+    request(post("/public/exams/attempts/" + separate + "/submit").header("Authorization", other), Map.of());
+    assertTrue(assessmentRoster.roster(exam).stream().allMatch(row -> Boolean.TRUE.equals(row.get("submitted"))));
   }
 
   @Test void dashboardDynamicFiltersAndEmptyResultsKeepMapKeys() throws Exception {
@@ -489,7 +588,7 @@ class MyBatisMigrationIntegrationTest {
     String token = learning.learning(-training, "测试学员", phone).get("token").toString();
     String heartbeat = reading.heartbeat(-training, material, 1, token, null, 0).get("heartbeatToken").toString();
     jdbc.update("UPDATE candidate_material_progress SET last_seen=DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 6 SECOND) WHERE material_id=?", material);
-    jdbc.update("UPDATE learning_clock SET credited_at=DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 6 SECOND) WHERE phone=?", phone);
+    jdbc.update("UPDATE learning_clock SET credited_at=DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 6 SECOND) WHERE employee_id=?", employee);
     var gate = new java.util.concurrent.CyclicBarrier(2);
     var pool = java.util.concurrent.Executors.newFixedThreadPool(2);
     try {
@@ -528,7 +627,7 @@ class MyBatisMigrationIntegrationTest {
     String token=learning.learning(-training,"测试学员",phone).get("token").toString();
     learning.progress(-training,video,token,0,100,false,"start");
     jdbc.update("UPDATE candidate_video_progress SET baseline_at=DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 6 SECOND),updated_at=DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 6 SECOND) WHERE video_id=?",video);
-    jdbc.update("UPDATE learning_clock SET credited_at=DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 6 SECOND) WHERE phone=?",phone);
+    jdbc.update("UPDATE learning_clock SET credited_at=DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 6 SECOND) WHERE employee_id=?",employee);
     var first=learning.progress(-training,video,token,3,100,false,"batch-1");
     var before=jdbc.queryForMap("SELECT studied_seconds,updated_at FROM candidate_video_progress WHERE video_id=?",video);
     assertEquals(3.0,((Number)before.get("studied_seconds")).doubleValue(),0.01);
@@ -727,6 +826,23 @@ class MyBatisMigrationIntegrationTest {
     long otherTask = insert("INSERT INTO assessment_task(name,paper_id,created_by,start_at,end_at) VALUES('另一期',?,?,CURRENT_TIMESTAMP(3),DATE_ADD(CURRENT_TIMESTAMP(3),INTERVAL 1 DAY))", paper, owner);
     assertEquals(0, statisticsDetail(otherTask, true).path("overview").path("participantCount").asInt());
 
+  }
+
+  @Test void completedEmployeeIsExcludedFromOverdueRemindersDespiteDifferentHistoricalContactDetails() throws Exception {
+    long training = createTraining(null, false);
+    learning.learning(-training, "测试学员", phone);
+    learning.requireComplete(-training, employee);
+    jdbc.update("UPDATE candidate_learning_session SET candidate_name='历史姓名' WHERE training_id=? AND employee_id=?", training, employee);
+    jdbc.update("UPDATE training SET end_at=DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 1 HOUR) WHERE id=?", training);
+    assertTrue(trainingLogs.completedParticipants(training, owner).contains(employee));
+    String url = "/management/trainings/" + training + "/reminders";
+    var preview = mvc.perform(get(url).header("Authorization", authorization)).andExpect(status().isOk())
+        .andReturn().getResponse().getContentAsString();
+    assertTrue(json.readTree(preview).path("data").get("recipients").isEmpty());
+    var result = request(post(url).header("Authorization", authorization),
+        Map.of("requestId", UUID.randomUUID().toString(), "employeeIds", List.of(employee)));
+    assertEquals("SKIPPED", result.get(0).path("status").asText());
+    verify(mailer, never()).send(anyString(), anyString(), anyLong(), anyString(), anyList(), any(), any());
   }
 
   @Test void reminderDeliveryIsIdempotentAndStoresFailureWithoutSendingRealMail() throws Exception {
@@ -1314,10 +1430,10 @@ class MyBatisMigrationIntegrationTest {
     assertEquals(1, rows.size());
     assertEquals(225.0, ((Number) rows.get(0).get("studiedSeconds")).doubleValue(), 0.001);
     assertEquals(false, rows.get(0).get("completed"));
-    assertFalse(trainingLogs.completedParticipants(first, owner).contains(phone + "|测试学员"));
+    assertFalse(trainingLogs.completedParticipants(first, owner).contains(employee));
     jdbc.update("UPDATE candidate_material_progress SET completed=TRUE WHERE session_id=?", session);
     assertEquals(true, trainingLogs.list(first, owner).get(0).get("completed"));
-    assertTrue(trainingLogs.completedParticipants(first, owner).contains(phone + "|测试学员"));
+    assertTrue(trainingLogs.completedParticipants(first, owner).contains(employee));
     jdbc.update("UPDATE candidate_video_progress SET studied_seconds=NULL WHERE session_id=?", session);
     assertEquals(180.0, ((Number) trainingLogs.list(first, owner).get(0).get("studiedSeconds")).doubleValue(), 0.001);
     long empty = createTraining(null, false);

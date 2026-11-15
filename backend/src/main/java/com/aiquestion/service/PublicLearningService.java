@@ -1,8 +1,6 @@
 package com.aiquestion.service;
 
-import com.aiquestion.controller.PublicExamController;
 import com.aiquestion.common.*;
-import com.aiquestion.service.CandidateLearningService;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.*;
 import org.springframework.core.io.*;
@@ -35,14 +33,14 @@ public class PublicLearningService {
         if (id <= 0)
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         var identity = reading.session(-id, command.get("token"));
-        service.requireComplete(-id, identity.get("candidate_name").toString(), identity.get("phone").toString());
+        service.requireComplete(-id, ((Number) identity.get("employee_id")).longValue());
         return ApiResponse.ok(Map.of("completed", true));
     }
 
-    public ApiResponse<Map<String, Object>> courseLearning(long id, PublicExamController.CandidateCommand command) {
+    public ApiResponse<Map<String, Object>> courseLearning(long id, AccountService.Profile employee) {
         if (id <= 0)
             throw new BusinessException(ErrorCode.BAD_REQUEST);
-        return ApiResponse.ok(service.learning(-id, command.name(), command.phone()));
+        return ApiResponse.ok(service.learning(-id, employee.userId(), employee.name(), employee.phone()));
     }
 
     public ResponseEntity<Resource> courseVideo(long id, long video, String token) {
@@ -81,8 +79,8 @@ public class PublicLearningService {
         return ApiResponse.ok(rows.get(0));
     }
 
-    public ApiResponse<Map<String, Object>> learning(long id, PublicExamController.CandidateCommand command) {
-        return ApiResponse.ok(service.learning(id, command.name(), command.phone()));
+    public ApiResponse<Map<String, Object>> learning(long id, AccountService.Profile employee) {
+        return ApiResponse.ok(service.learning(id, employee.userId(), employee.name(), employee.phone()));
     }
 
     public ResponseEntity<Resource> content(long id, long video, String token) {

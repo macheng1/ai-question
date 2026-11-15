@@ -68,7 +68,7 @@ public class TrainingReminderService {
         // 从已分配名单开始查询，不能仅查学习日志，否则完全未开始的员工会漏掉。
         for (var row : persistence.findReminderCandidates(id, owner)) {
             long employee = ((Number) row.get("id")).longValue();
-            var reasons = TrainingReminderRules.reasons(time(course.get("end_at")), completed.contains(row.get("phone") + "|" + row.get("candidate_name")), time(course.get("exam_end_at")), withoutExamReminder.contains(employee), now);
+            var reasons = TrainingReminderRules.reasons(time(course.get("end_at")), completed.contains(employee), time(course.get("exam_end_at")), withoutExamReminder.contains(employee), now);
             if (reasons.isEmpty())
                 continue;
             String email = Objects.toString(row.get("email"), "");

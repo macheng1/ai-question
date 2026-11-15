@@ -7,12 +7,15 @@
   <select id="findParticipantsWithoutExamReminder" resultType="java.util.LinkedHashMap">
     SELECT p.employee_id FROM assessment_participant p
 JOIN assessment_attempt a ON a.participant_id=p.id
-WHERE p.task_id=#{taskId} AND a.id=(SELECT MAX(last.id) FROM assessment_attempt last WHERE last.participant_id=p.id)
+WHERE p.task_id=#{taskId} AND p.employee_id IS NOT NULL
+AND a.id=(SELECT MAX(latest.id) FROM assessment_attempt latest
+          JOIN assessment_participant learner ON learner.id=latest.participant_id
+          WHERE learner.task_id=p.task_id AND learner.employee_id=p.employee_id)
 AND (a.status='PENDING_REVIEW' OR (a.status='SUBMITTED' AND a.passed=TRUE))
 
   </select>
   <select id="findReminderCandidates" resultType="java.util.LinkedHashMap">
-    SELECT e.id,e.name,e.email,a.phone,a.candidate_name,a.department_name,
+    SELECT e.id,e.name,e.email,a.department_name,
 (SELECT MAX(r.sent_at) FROM training_reminder_delivery r WHERE r.training_id=a.training_id AND r.employee_id=e.id AND r.status='SENT') last_sent_at
 FROM training_audience a JOIN organization_employee e ON e.id=a.employee_id
 WHERE a.training_id=#{trainingId} AND e.created_by=#{ownerId} AND e.status='ACTIVE'

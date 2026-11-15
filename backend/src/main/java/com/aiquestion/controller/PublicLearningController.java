@@ -1,7 +1,8 @@
 package com.aiquestion.controller;
 
 import com.aiquestion.common.*;
-import com.aiquestion.service.CandidateLearningService;
+import com.aiquestion.security.LearnerAccess;
+import com.aiquestion.service.AccountService;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.*;
 import org.springframework.core.io.*;
@@ -17,8 +18,9 @@ public class PublicLearningController {
     }
 
     @PostMapping("/courses/{id}/learning")
-    public ApiResponse<Map<String, Object>> courseLearning(@PathVariable long id, @RequestBody PublicExamController.CandidateCommand command) {
-        return service.courseLearning(id, command);
+    public ApiResponse<Map<String, Object>> courseLearning(@PathVariable long id, @RequestBody PublicExamController.CandidateCommand command,
+            @RequestAttribute(LearnerAccess.PROFILE) AccountService.Profile employee) {
+        return service.courseLearning(id, employee);
     }
 
     @GetMapping("/courses/{id}/learning/videos/{video}/content")
@@ -52,8 +54,9 @@ public class PublicLearningController {
     }
 
     @PostMapping("/exams/{id}/learning")
-    public ApiResponse<Map<String, Object>> learning(@PathVariable long id, @RequestBody PublicExamController.CandidateCommand command) {
-        return service.learning(id, command);
+    public ApiResponse<Map<String, Object>> learning(@PathVariable long id, @RequestBody PublicExamController.CandidateCommand command,
+            @RequestAttribute(LearnerAccess.PROFILE) AccountService.Profile employee) {
+        return service.learning(id, employee);
     }
 
     @GetMapping("/exams/{id}/learning/videos/{video}/content")
