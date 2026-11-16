@@ -32,6 +32,7 @@ services:
       ALIYUN_SMS_SIGN_NAME: ${ALIYUN_SMS_SIGN_NAME:-}
       ALIYUN_SMS_TEMPLATE_CODE: ${ALIYUN_SMS_TEMPLATE_CODE:-}
       STORAGE_PUBLIC_BASE_URL: ${STORAGE_PUBLIC_BASE_URL:-}
+      TRAINING_VIDEO_CACHE_DIRECTORY: &video_cache_directory /app/data/training-video-cache
       TRAINING_VIDEO_CACHE_MAX_BYTES: ${TRAINING_VIDEO_CACHE_MAX_BYTES:-8589934592}
       TRAINING_VIDEO_CACHE_RESERVE_BYTES: ${TRAINING_VIDEO_CACHE_RESERVE_BYTES:-2147483648}
       STORAGE_PROVIDER: ${STORAGE_PROVIDER:-eds}
@@ -46,7 +47,10 @@ services:
       ALIYUN_OSS_BUCKET: ${ALIYUN_OSS_BUCKET:-}
       ALIYUN_OSS_REGION: ${ALIYUN_OSS_REGION:-oss-cn-hangzhou}
     volumes:
-      - training-video-cache:/app/data/training-video-cache
+      # 同一个 Compose 项目重建后端容器时复用此卷。
+      - type: volume
+        source: training-video-cache
+        target: *video_cache_directory
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
