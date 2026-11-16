@@ -11,9 +11,11 @@ import com.aiquestion.repository.TrainingAccessRepository;
 
 @org.springframework.stereotype.Service()
 public class TrainingEndpointService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(TrainingEndpointService.class);
 
     private final TrainingService service;
     private final TrainingVideoUploads videoUploads;
+    private final PreparedTrainingVideos preparedVideos;
 
     private final com.aiquestion.service.AccountService accounts;
 
@@ -27,7 +29,8 @@ public class TrainingEndpointService {
 
     private final com.aiquestion.service.TrainingVideoStorage storage;
 
-    public TrainingEndpointService(com.aiquestion.service.AccountService accounts, TrainingService service, JwtTokenService tokens, TrainingAccessRepository persistence, com.aiquestion.service.TrainingVideoStorage storage, com.aiquestion.service.TrainingMaterialService materials, com.aiquestion.service.TrainingLogService logs, TrainingVideoUploads videoUploads) {
+    public TrainingEndpointService(com.aiquestion.service.AccountService accounts, TrainingService service, JwtTokenService tokens, TrainingAccessRepository persistence, com.aiquestion.service.TrainingVideoStorage storage, com.aiquestion.service.TrainingMaterialService materials, com.aiquestion.service.TrainingLogService logs, TrainingVideoUploads videoUploads, PreparedTrainingVideos preparedVideos) {
+        this.preparedVideos = preparedVideos;
         this.videoUploads = videoUploads;
         this.accounts = accounts;
         this.logs = logs;
@@ -149,7 +152,7 @@ public class TrainingEndpointService {
         long uid = user(auth);
         var keys = service.videoFiles(id, uid);
         service.delete(id, uid);
-        keys.forEach(this::cleanupVideo);
+        keys.forEach(key -> cleanupVideo(key, "training_deleted"));
         return ApiResponse.ok(null);
     }
 
@@ -184,24 +187,56 @@ public class TrainingEndpointService {
     public ApiResponse<?> upload(long id, org.springframework.web.multipart.MultipartFile file, String auth) throws java.io.IOException {
         long uid = user(auth);
         service.get(id, uid);
+        var prepared = preparedVideos.consume(uid, file);
+        if (prepared != null) {
+            service.addVideo(id, uid, prepared.name(), prepared.key(), TrainingVideoUploads.type(prepared.name(), prepared.size()));
+            log.info("video event=upload_associate training={} upload={} object={} bytes={} result=prepared_linked",
+                    id, VideoLog.id(prepared.id()), VideoLog.id(prepared.key()), prepared.size());
+            return ApiResponse.ok(service.learning(id, uid));
+        }
         file = videoUploads.resolve(uid, file);
-        String name = Objects.toString(file.getOriginalFilename(), "");
-        String type = TrainingVideoUploads.type(name, file.getSize());
-        try (var stream = file.getInputStream()) {
-            TrainingVideoUploads.verifyHeader(type, stream.readNBytes(12));
-        }
-        String key = storage.upload(file, type);
-        if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive())
-            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {
-                public void afterCompletion(int status) { if (status != STATUS_COMMITTED) cleanupVideo(key); }
-            });
+        long start = System.nanoTime();
+        String upload = TrainingVideoUploads.uploadRef(file);
+        long bytes = file.getSize();
+        String stage = "validate";
         try {
-            service.addVideo(id, uid, name.substring(0, Math.min(name.length(), 255)), key, type);
-        } catch (RuntimeException e) {
-            cleanupVideo(key);
-            throw e;
+            String name = Objects.toString(file.getOriginalFilename(), "");
+            String type = TrainingVideoUploads.type(name, bytes);
+            try (var stream = file.getInputStream()) {
+                TrainingVideoUploads.verifyHeader(type, stream.readNBytes(12));
+            }
+            stage = "store";
+            log.info("video event=upload_store training={} upload={} bytes={} mime={} result=start", id, upload, bytes, type);
+            String key = storage.upload(file, type);
+            String object = VideoLog.id(key);
+            log.info("video event=upload_store training={} upload={} object={} bytes={} result=ok elapsedMs={}",
+                    id, upload, object, bytes, VideoLog.elapsedMs(start));
+            boolean transactional = org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive();
+            if (transactional) {
+                org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {
+                    public void afterCompletion(int status) {
+                        log.info("video event=upload_transaction training={} upload={} object={} bytes={} txStatus={} result={} elapsedMs={}",
+                                id, upload, object, bytes, status, status == STATUS_COMMITTED ? "committed" : "uncommitted", VideoLog.elapsedMs(start));
+                        if (status != STATUS_COMMITTED) cleanupVideo(key, "rollback");
+                    }
+                });
+            }
+            stage = "associate";
+            try {
+                service.addVideo(id, uid, name.substring(0, Math.min(name.length(), 255)), key, type);
+            } catch (RuntimeException error) {
+                if (!transactional) cleanupVideo(key, "association_failed");
+                throw error;
+            }
+            log.info("video event=upload_associate training={} upload={} object={} bytes={} result=linked elapsedMs={}",
+                    id, upload, object, bytes, VideoLog.elapsedMs(start));
+            stage = "load_training";
+            return ApiResponse.ok(service.learning(id, uid));
+        } catch (java.io.IOException | RuntimeException error) {
+            log.warn("video event=upload_save training={} upload={} bytes={} stage={} result=failed error={} elapsedMs={}",
+                    id, upload, bytes, stage, VideoLog.error(error), VideoLog.elapsedMs(start));
+            throw error;
         }
-        return ApiResponse.ok(service.learning(id, uid));
     }
 
     public org.springframework.http.ResponseEntity<org.springframework.core.io.Resource> content(long id, long video, String auth) {
@@ -211,7 +246,7 @@ public class TrainingEndpointService {
 
     public ApiResponse<?> removeVideo(long id, long video, String auth) {
         String key = service.removeVideo(id, video, user(auth));
-        cleanupVideo(key);
+        cleanupVideo(key, "video_removed");
         return ApiResponse.ok(null);
     }
 
@@ -220,11 +255,15 @@ public class TrainingEndpointService {
         return ApiResponse.ok(null);
     }
 
-    private void cleanupVideo(String key) {
+    private void cleanupVideo(String key, String reason) {
+        long start = System.nanoTime();
         try {
             storage.delete(key);
+            log.info("video event=object_cleanup object={} reason={} result=ok elapsedMs={}",
+                    VideoLog.id(key), reason, VideoLog.elapsedMs(start));
         } catch (RuntimeException error) {
-            org.slf4j.LoggerFactory.getLogger(TrainingController.class).warn("Training video cleanup failed for storage key {}", key, error);
+            log.warn("video event=object_cleanup object={} reason={} result=failed error={} elapsedMs={}",
+                    VideoLog.id(key), reason, VideoLog.error(error), VideoLog.elapsedMs(start));
         }
     }
 }

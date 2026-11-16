@@ -2,6 +2,9 @@ package com.aiquestion.service;
 
 import com.aiquestion.common.BusinessException;
 import com.aiquestion.common.ErrorCode;
+import com.aiquestion.common.VideoLog;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -19,6 +22,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class TrainingVideoUploads {
+    private static final Logger log = LoggerFactory.getLogger(TrainingVideoUploads.class);
     public static final String DESCRIPTOR = "application/vnd.aiquestion.video-upload";
     static final long MAX_SIZE = 2L * 1024 * 1024 * 1024;
     static final int PART_SIZE = 8 * 1024 * 1024;
@@ -46,6 +50,7 @@ public class TrainingVideoUploads {
         final byte[][] digests;
         long touched = System.currentTimeMillis();
         boolean claimed;
+        volatile long storedBytes;
 
         Upload(long owner, String name, long size, Path path) {
             this.owner = owner;
@@ -56,7 +61,21 @@ public class TrainingVideoUploads {
         }
     }
 
-    public synchronized String create(long owner, String name, long size) throws IOException {
+    public String create(long owner, String name, long size) throws IOException {
+        long start = System.nanoTime();
+        try {
+            String id = reserveUpload(owner, name, size);
+            log.info("video event=upload_create upload={} bytes={} parts={} result=ok elapsedMs={}",
+                    VideoLog.id(id), size, (size + PART_SIZE - 1) / PART_SIZE, VideoLog.elapsedMs(start));
+            return id;
+        } catch (IOException | RuntimeException error) {
+            log.warn("video event=upload_create bytes={} result=failed error={} elapsedMs={}",
+                    size, VideoLog.error(error), VideoLog.elapsedMs(start));
+            throw error;
+        }
+    }
+
+    private synchronized String reserveUpload(long owner, String name, long size) throws IOException {
         if (name == null || name.isBlank() || name.length() > 255 || name.contains("/") || name.contains("\\")
                 || name.chars().anyMatch(Character::isISOControl))
             throw bad("视频文件名无效");
@@ -83,6 +102,17 @@ public class TrainingVideoUploads {
     }
 
     public void put(long owner, String id, int index, InputStream input) throws IOException {
+        long start = System.nanoTime();
+        try {
+            storePart(owner, id, index, input, start);
+        } catch (IOException | RuntimeException error) {
+            log.warn("video event=upload_part upload={} index={} result=failed error={} elapsedMs={}",
+                    VideoLog.id(id), index, VideoLog.error(error), VideoLog.elapsedMs(start));
+            throw error;
+        }
+    }
+
+    private void storePart(long owner, String id, int index, InputStream input, long start) throws IOException {
         Upload upload = owned(owner, id);
         synchronized (upload) {
             checkAvailable(id, upload);
@@ -112,6 +142,9 @@ public class TrainingVideoUploads {
                     output.readFully(head);
                     verifyHeader(type(upload.name, upload.size), head);
                 }
+                log.info("video event=upload_part upload={} index={} parts={} bytes={} result={} elapsedMs={}",
+                        VideoLog.id(id), index, upload.digests.length, Math.min(PART_SIZE, upload.size - offset),
+                        previous == null ? "stored" : "duplicate", VideoLog.elapsedMs(start));
                 upload.digests[index] = hash;
                 upload.touched = System.currentTimeMillis();
             } finally {
@@ -133,9 +166,44 @@ public class TrainingVideoUploads {
     }
 
     public MultipartFile resolve(long owner, MultipartFile descriptor) throws IOException {
-        if (!DESCRIPTOR.equalsIgnoreCase(descriptor.getContentType())) return descriptor;
+        String id = descriptorId(descriptor);
+        if (id == null) return descriptor;
+        String ref = VideoLog.id(id);
+        try {
+            return claim(owner, id, ref);
+        } catch (RuntimeException error) {
+            log.warn("video event=upload_claim upload={} result=failed error={}", ref, VideoLog.error(error));
+            throw error;
+        }
+    }
+
+    static String descriptorId(MultipartFile descriptor) throws IOException {
+        if (!DESCRIPTOR.equalsIgnoreCase(descriptor.getContentType())) return null;
         if (descriptor.getSize() != 36) throw bad("无效的视频暂存标识");
-        String id = new String(descriptor.getBytes(), StandardCharsets.US_ASCII);
+        return new String(descriptor.getBytes(), StandardCharsets.US_ASCII);
+    }
+
+    record Progress(long storedBytes, long totalBytes) {}
+
+    Progress progress(long owner, String id) {
+        Upload upload = uploads.get(id);
+        if (upload == null) return null;
+        if (upload.owner != owner) throw new BusinessException(ErrorCode.VIDEO_UPLOAD_EXPIRED);
+        return new Progress(upload.storedBytes, upload.size);
+    }
+
+    void prepare(long owner, String id, java.util.function.Consumer<MultipartFile> write) {
+        Upload upload = owned(owner, id);
+        synchronized (upload) {
+            checkAvailable(id, upload);
+            for (byte[] digest : upload.digests) if (digest == null) throw bad("视频尚未上传完成");
+            upload.storedBytes = 0;
+            write.accept(new StagedFile(upload, VideoLog.id(id), true));
+            discard(id, upload, "prepared");
+        }
+    }
+
+    private MultipartFile claim(long owner, String id, String ref) {
         Upload upload = owned(owner, id);
         synchronized (upload) {
             checkAvailable(id, upload);
@@ -143,14 +211,17 @@ public class TrainingVideoUploads {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override public void afterCompletion(int status) {
                     synchronized (upload) {
-                        if (status == STATUS_COMMITTED) discard(id, upload);
+                        if (status == STATUS_COMMITTED) discard(id, upload, "committed");
+                        else log.info("video event=upload_release upload={} bytes={} txStatus={} result=retained",
+                                ref, upload.size, status);
                         upload.claimed = false;
                         upload.touched = System.currentTimeMillis();
                     }
                 }
             });
             upload.claimed = true;
-            return new StagedFile(upload);
+            log.info("video event=upload_claim upload={} bytes={} parts={} result=ok", ref, upload.size, upload.digests.length);
+            return new StagedFile(upload, ref, false);
         }
     }
 
@@ -185,7 +256,7 @@ public class TrainingVideoUploads {
         long cutoff = System.currentTimeMillis() - TTL;
         uploads.forEach((id, upload) -> {
             synchronized (upload) {
-                if (!upload.claimed && upload.touched <= cutoff) discard(id, upload);
+                if (!upload.claimed && upload.touched <= cutoff) discard(id, upload, "expired");
             }
         });
         // A restart loses upload tickets. Reclaim abandoned files when their last write expires.
@@ -194,17 +265,27 @@ public class TrainingVideoUploads {
                 String name = file.getFileName().toString();
                 if (!name.matches("[0-9a-f-]{36}\\.part") || uploads.containsKey(name.substring(0, 36))) continue;
                 try {
-                    if (Files.getLastModifiedTime(file).toMillis() <= cutoff) Files.deleteIfExists(file);
+                    if (Files.getLastModifiedTime(file).toMillis() <= cutoff && Files.deleteIfExists(file))
+                        log.info("video event=upload_cleanup upload={} reason=orphan result=deleted", VideoLog.id(name.substring(0, 36)));
                 } catch (NoSuchFileException ignored) { }
+                catch (IOException error) {
+                    log.warn("video event=upload_cleanup upload={} reason=orphan result=failed error={}",
+                            VideoLog.id(name.substring(0, 36)), VideoLog.error(error));
+                }
             }
         }
     }
 
-    private void discard(String id, Upload upload) {
+    private void discard(String id, Upload upload, String reason) {
         uploads.remove(id, upload);
-        try { Files.deleteIfExists(upload.path); }
+        try {
+            boolean deleted = Files.deleteIfExists(upload.path);
+            log.info("video event=upload_cleanup upload={} bytes={} reason={} result={}",
+                    VideoLog.id(id), upload.size, reason, deleted ? "deleted" : "absent");
+        }
         catch (IOException error) {
-            org.slf4j.LoggerFactory.getLogger(getClass()).warn("无法清理培训视频暂存文件 {}", id, error);
+            log.warn("video event=upload_cleanup upload={} bytes={} reason={} result=failed error={}",
+                    VideoLog.id(id), upload.size, reason, VideoLog.error(error));
         }
     }
 
@@ -215,14 +296,40 @@ public class TrainingVideoUploads {
 
     private static BusinessException bad(String message) { return new BusinessException(ErrorCode.BAD_REQUEST, message); }
 
-    private record StagedFile(Upload upload) implements MultipartFile {
+    static String uploadRef(MultipartFile file) {
+        return file instanceof StagedFile staged ? staged.ref() : "multipart";
+    }
+
+    private record StagedFile(Upload upload, String ref, boolean track) implements MultipartFile {
         public String getName() { return "file"; }
         public String getOriginalFilename() { return upload.name; }
         public String getContentType() { return type(upload.name, upload.size); }
         public boolean isEmpty() { return false; }
         public long getSize() { return upload.size; }
         public byte[] getBytes() throws IOException { throw new IOException("培训视频应使用流式读取"); }
-        public InputStream getInputStream() throws IOException { return Files.newInputStream(upload.path); }
+        public InputStream getInputStream() throws IOException {
+            InputStream file = Files.newInputStream(upload.path);
+            if (!track) return file;
+            return new FilterInputStream(file) {
+                long position;
+                private void readBytes(int count) {
+                    if (count > 0) {
+                        position += count;
+                        upload.storedBytes = Math.max(upload.storedBytes, position);
+                    }
+                }
+                @Override public int read() throws IOException {
+                    int value = super.read();
+                    if (value >= 0) readBytes(1);
+                    return value;
+                }
+                @Override public int read(byte[] bytes, int offset, int length) throws IOException {
+                    int count = super.read(bytes, offset, length);
+                    readBytes(count);
+                    return count;
+                }
+            };
+        }
         public void transferTo(File target) throws IOException { Files.copy(upload.path, target.toPath(), StandardCopyOption.REPLACE_EXISTING); }
     }
 }

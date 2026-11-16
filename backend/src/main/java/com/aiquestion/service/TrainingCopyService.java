@@ -2,6 +2,7 @@ package com.aiquestion.service;
 
 import com.aiquestion.common.BusinessException;
 import com.aiquestion.common.ErrorCode;
+import com.aiquestion.common.VideoLog;
 import com.aiquestion.storage.FileStorageService;
 import java.util.ArrayList;
 import java.util.List;
@@ -19,6 +20,7 @@ import com.aiquestion.repository.TrainingCopyRepository;
  */
 @Service
 public class TrainingCopyService {
+    private static final org.slf4j.Logger log = LoggerFactory.getLogger(TrainingCopyService.class);
 
     private final TrainingCopyRepository persistence;
 
@@ -57,10 +59,10 @@ public class TrainingCopyService {
         if (!Objects.equals(originalExam, currentExam))
             throw new BusinessException(ErrorCode.BAD_REQUEST, "培训关联考试已变更，请刷新后再复制");
         List<String> copiedObjects = new ArrayList<>();
-        registerRollbackCleanup(copiedObjects);
         var inserted1 = new com.aiquestion.repository.GeneratedId();
         persistence.copyTraining(copyName(locked.get("name").toString()), sourceId, inserted1);
         long newId = inserted1.getId();
+        registerRollbackCleanup(copiedObjects, newId);
         // 空的指定人员范围使副本在重新选人前不可学习，也不会自动分配。
         persistence.resetAudience(newId);
         copyVideos(sourceId, newId, copiedObjects);
@@ -100,7 +102,7 @@ public class TrainingCopyService {
         var created = trainings.save(null, request.training(), userId);
         long newId = ((Number) created.get("id")).longValue();
         List<String> copiedObjects = new ArrayList<>();
-        registerRollbackCleanup(copiedObjects);
+        registerRollbackCleanup(copiedObjects, newId);
         if (selection == null) {
             copyVideos(sourceId, newId, copiedObjects);
             copyMaterials(sourceId, newId, copiedObjects);
@@ -131,6 +133,7 @@ public class TrainingCopyService {
                 keys.add(key);
                 if (video) {
                     persistence.insertVideo(newId, (String) source.get("title"), key, (String) source.get("content_type"), 0);
+                    log.info("video event=copy_associate training={} sourceTraining={} object={} result=linked", newId, sourceId, VideoLog.id(key));
                     addedId = persistence.findSourceVideos(newId).stream().mapToLong(row -> ((Number) row.get("id")).longValue()).max().orElseThrow();
                 } else {
                     var generated = new com.aiquestion.repository.GeneratedId();
@@ -163,6 +166,7 @@ public class TrainingCopyService {
             String key = files.copyVideo(video);
             keys.add(key);
             persistence.insertVideo(newId, (String) video.get("title"), key, (String) video.get("content_type"), ((Number) video.get("sort_order")).intValue());
+            log.info("video event=copy_associate training={} sourceTraining={} object={} result=linked", newId, sourceId, VideoLog.id(key));
         }
     }
 
@@ -177,18 +181,24 @@ public class TrainingCopyService {
         }
     }
 
-    private void registerRollbackCleanup(List<String> keys) {
+    private void registerRollbackCleanup(List<String> keys, long training) {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-
             @Override
             public void afterCompletion(int status) {
-                if (status == STATUS_COMMITTED)
-                    return;
                 for (String key : keys) {
+                    boolean video = key.contains("training-videos/");
+                    if (video) log.info("video event=copy_transaction training={} object={} txStatus={} result={}",
+                            training, VideoLog.id(key), status, status == STATUS_COMMITTED ? "committed" : "uncommitted");
+                    if (status == STATUS_COMMITTED) continue;
+                    long start = System.nanoTime();
                     try {
                         storage.delete(key);
+                        if (video) log.info("video event=object_cleanup training={} object={} reason=copy_rollback result=ok elapsedMs={}",
+                                training, VideoLog.id(key), VideoLog.elapsedMs(start));
                     } catch (RuntimeException ex) {
-                        LoggerFactory.getLogger(TrainingCopyService.class).warn("培训复制回滚后清理对象失败: {}", key, ex);
+                        if (video) log.warn("video event=object_cleanup training={} object={} reason=copy_rollback result=failed error={} elapsedMs={}",
+                                training, VideoLog.id(key), VideoLog.error(ex), VideoLog.elapsedMs(start));
+                        else log.warn("培训材料复制回滚后清理对象失败 object={} error={}", VideoLog.id(key), VideoLog.error(ex));
                     }
                 }
             }

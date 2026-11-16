@@ -28,6 +28,7 @@ public class FileStorageService {
     this.active = requireProvider(provider);
     // 历史阿里云部署允许不配置上传。显式启用 EDS 时必须具备完整连接配置。
     if ("eds".equals(provider)) active.validateConfiguration();
+    org.slf4j.LoggerFactory.getLogger(FileStorageService.class).info("video event=storage_configured uploadProvider={}", active.provider());
   }
 
   public String uploadMaterial(MultipartFile file, String mime, String suffix, String folder) {
@@ -38,6 +39,15 @@ public class FileStorageService {
     String key = folder + "/" + UUID.randomUUID() + "." + suffix;
     active.put(file, mime, key);
     return ("aliyun".equals(active.provider()) ? "oss:" : "eds:") + key;
+  }
+
+  public String reserveVideo(String mime) {
+    String key = "training-videos/" + UUID.randomUUID() + ("video/mp4".equals(mime) ? ".mp4" : ".webm");
+    return ("aliyun".equals(active.provider()) ? "oss:" : "eds:") + key;
+  }
+
+  public void putReservedVideo(String reference, MultipartFile file) {
+    providerFor(reference).put(file, file.getContentType(), objectKey(reference));
   }
 
   public String reservePreview(String original) {

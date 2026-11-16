@@ -3,6 +3,7 @@ package com.aiquestion.security;
 import com.aiquestion.common.BusinessException;
 import com.aiquestion.config.JwtProperties;
 import java.time.Clock;
+import static com.aiquestion.security.VideoPlaybackTickets.Source.COURSE_LEARNING;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
@@ -13,8 +14,9 @@ class VideoPlaybackTicketsTest {
 
     @Test void ticketOnlyGrantsAccessToTheIssuedVideo() throws Exception {
         var tickets = new VideoPlaybackTickets(properties);
-        String ticket = tickets.issue(12, 23);
-        assertEquals(12, tickets.verify(23, ticket));
+        String ticket = tickets.issue(12, 23, COURSE_LEARNING);
+        assertEquals(new VideoPlaybackTickets.Grant(12, COURSE_LEARNING), tickets.verify(23, ticket));
+        assertNotEquals(ticket, tickets.issue(12, 23, COURSE_LEARNING));
         assertThrows(BusinessException.class, () -> tickets.verify(24, ticket));
         assertThrows(BusinessException.class, () -> tickets.verify(23, "invalid"));
         var accounts = new JwtTokenService(properties);
@@ -24,7 +26,7 @@ class VideoPlaybackTicketsTest {
 
     @Test void expiredTicketCannotOpenVideo() throws Exception {
         var tickets = new VideoPlaybackTickets(properties);
-        String expired = tickets.issue(12, 23, Clock.offset(Clock.systemUTC(), Duration.ofHours(-3)));
+        String expired = tickets.issue(12, 23, COURSE_LEARNING, Clock.offset(Clock.systemUTC(), Duration.ofHours(-3)));
         assertThrows(BusinessException.class, () -> tickets.verify(23, expired));
     }
 }

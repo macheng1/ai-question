@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiquestion.repository.PreparedVideoRepository">
+  <sql id="columns">id, owner_id AS owner, original_name AS name, byte_size AS size, object_key AS `key`, phase, expires_at AS expires</sql>
+  <insert id="reserve">
+    INSERT INTO training_video_upload(id, owner_id, original_name, byte_size, object_key, phase, expires_at)
+    VALUES(#{id}, #{owner}, #{name}, #{size}, #{key}, #{phase}, #{expires})
+  </insert>
+  <select id="find" resultType="com.aiquestion.repository.PreparedVideoRepository$Ticket">
+    SELECT <include refid="columns"/> FROM training_video_upload WHERE id=#{id}
+  </select>
+  <select id="lock" resultType="com.aiquestion.repository.PreparedVideoRepository$Ticket">
+    SELECT <include refid="columns"/> FROM training_video_upload WHERE id=#{id} FOR UPDATE
+  </select>
+  <update id="advance">UPDATE training_video_upload SET phase=#{phase}, expires_at=#{expires} WHERE id=#{id}</update>
+  <delete id="remove">DELETE FROM training_video_upload WHERE id=#{id}</delete>
+  <select id="expired" resultType="string">
+    SELECT id FROM training_video_upload WHERE expires_at &lt;= #{now} ORDER BY expires_at LIMIT 100
+  </select>
+</mapper>

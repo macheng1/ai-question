@@ -2,6 +2,8 @@ package com.aiquestion.service;
 
 import com.aiquestion.common.*;
 import com.aiquestion.storage.FileStorageService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.*;
 import org.springframework.http.*;
@@ -13,6 +15,7 @@ import java.util.Map;
 /** 按对象来源路由存储；无前缀的历史视频仍读取本地文件。 */
 @Service
 public class TrainingVideoStorage {
+    private static final Logger log = LoggerFactory.getLogger(TrainingVideoStorage.class);
     private final FileStorageService oss;
     private final Path legacyRoot;
     private final TrainingVideoCache cache;
@@ -23,10 +26,29 @@ public class TrainingVideoStorage {
         this.legacyRoot = Path.of(legacyDirectory).toAbsolutePath().normalize();
     }
     public String upload(MultipartFile file, String contentType) {
-        String key = oss.uploadMaterial(file, contentType, "video/mp4".equals(contentType) ? "mp4" : "webm", "training-videos");
-        cache.warm(validatedKey(key), file);
+        long started = System.nanoTime();
+        log.info("video event=storage_upload_start bytes={}", file.getSize());
+        String key;
+        try {
+            key = validatedKey(oss.uploadMaterial(file, contentType, "video/mp4".equals(contentType) ? "mp4" : "webm", "training-videos"));
+        } catch (RuntimeException ex) {
+            log.warn("video event=storage_upload_failed bytes={} elapsedMs={} errorType={}",
+                    file.getSize(), VideoLog.elapsedMs(started), ex.getClass().getSimpleName());
+            throw ex;
+        }
+        log.info("video event=storage_uploaded key={} bytes={} elapsedMs={}", key, file.getSize(), VideoLog.elapsedMs(started));
+        cache.warm(key, file);
         return key;
     }
+    String reserve(String type) { return oss.reserveVideo(type); }
+
+    void putReserved(String key, MultipartFile file) { oss.putReservedVideo(validatedKey(key), file); }
+
+    void warmReserved(String key, MultipartFile file) {
+        if (!cache.warm(validatedKey(key), file))
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "视频已存储，播放缓存暂不可用，请稍后重试");
+    }
+
     public ResponseEntity<Resource> content(Map<String, Object> row) {
         String key = row.get("storage_path").toString();
         var response = ResponseEntity.ok().contentType(MediaType.parseMediaType(row.get("content_type").toString()))
@@ -36,11 +58,16 @@ public class TrainingVideoStorage {
             try {
                 return response.body(cache.resource(key, () -> oss.open(key)));
             } catch (java.io.IOException ex) {
+                log.warn("video event=playback_resource_failed key={} errorType={}", key, ex.getClass().getSimpleName());
                 throw new BusinessException(ErrorCode.SYSTEM_ERROR, "视频读取失败，请重试");
             }
         }
         Path file = legacyFile(key);
-        if (!Files.isRegularFile(file)) throw new BusinessException(ErrorCode.NOT_FOUND, "历史视频文件不存在，请重新上传至 OSS");
+        if (!Files.isRegularFile(file)) {
+            log.info("video event=legacy_video_missing");
+            throw new BusinessException(ErrorCode.NOT_FOUND, "历史视频文件不存在，请重新上传至 OSS");
+        }
+        log.info("video event=playback_resource source=legacy");
         return response.body(new FileSystemResource(file));
     }
     public void delete(String key) {
@@ -49,9 +76,15 @@ public class TrainingVideoStorage {
             cache.delete(key, () -> oss.delete(key));
             return;
         }
-        try { Files.deleteIfExists(legacyFile(key)); }
-        catch (java.io.IOException ex) { throw new BusinessException(ErrorCode.SYSTEM_ERROR, "历史视频清理失败"); }
+        try {
+            boolean removed = Files.deleteIfExists(legacyFile(key));
+            log.info("video event=legacy_delete removed={}", removed);
+        } catch (java.io.IOException ex) {
+            log.warn("video event=legacy_delete_failed errorType={}", ex.getClass().getSimpleName());
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "历史视频清理失败");
+        }
     }
+
     private String validatedKey(String storedKey) {
         String key = storedKey.substring(4);
         if (!key.matches("training-videos/[a-f0-9-]{36}\\.(mp4|webm)")) throw new BusinessException(ErrorCode.BAD_REQUEST, "视频存储键无效");

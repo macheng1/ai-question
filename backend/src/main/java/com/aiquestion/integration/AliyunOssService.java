@@ -1,6 +1,7 @@
 package com.aiquestion.integration;
 
 import com.aiquestion.common.BusinessException;
+import com.aiquestion.common.VideoLog;
 import com.aiquestion.common.ErrorCode;
 import com.aiquestion.config.AliyunOssProperties;
 import com.aiquestion.storage.ObjectStorage;
@@ -18,6 +19,7 @@ import org.springframework.web.multipart.MultipartFile;
 /** 阿里云 OSS 适配层，负责私有对象操作和连接释放。 */
 @Service
 public class AliyunOssService implements ObjectStorage, AutoCloseable {
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AliyunOssService.class);
   private final AliyunOssProperties properties;
 
   public AliyunOssService(AliyunOssProperties properties) { this.properties = properties; }
@@ -48,18 +50,24 @@ public class AliyunOssService implements ObjectStorage, AutoCloseable {
   }
 
   @Override public void put(MultipartFile file, String contentType, String key) {
+    long start = System.nanoTime();
+    boolean video = VideoObjectLog.applies(key);
+    boolean multipart = VideoUploadParts.required(key, file.getSize());
+    if (video) log.info("video event=origin_upload_start provider={} bucket={} key={} bytes={} multipart={}", provider(), properties.bucket(), key, file.getSize(), multipart);
     OSS client = client();
     try (var input = file.getInputStream()) {
       ObjectMetadata metadata = new ObjectMetadata();
       metadata.setContentType(contentType);
       metadata.setHeader("x-oss-object-acl", "private");
-      if (VideoUploadParts.required(key, file.getSize())) {
+      if (multipart) {
         putVideoParts(client, key, metadata, input, file.getSize());
-        return;
+      } else {
+        metadata.setContentLength(file.getSize());
+        client.putObject(new PutObjectRequest(properties.bucket(), key, input, metadata));
       }
-      metadata.setContentLength(file.getSize());
-      client.putObject(new PutObjectRequest(properties.bucket(), key, input, metadata));
+      if (video) log.info("video event=origin_upload_done provider={} key={} bytes={} elapsedMs={}", provider(), key, file.getSize(), VideoLog.elapsedMs(start));
     } catch (Exception ex) {
+      if (video) VideoObjectLog.failure(provider(), "upload", key, start, ex);
       throw new BusinessException(ErrorCode.SYSTEM_ERROR, "文件上传 OSS 失败");
     }
   }
@@ -67,25 +75,44 @@ public class AliyunOssService implements ObjectStorage, AutoCloseable {
   private void putVideoParts(OSS client, String key, ObjectMetadata metadata,
       java.io.InputStream input, long size) throws java.io.IOException {
     String bucket = properties.bucket();
+    long start = System.nanoTime();
+    log.info("video event=origin_multipart_start provider={} key={} bytes={}", provider(), key, size);
     String uploadId = client.initiateMultipartUpload(new InitiateMultipartUploadRequest(bucket, key, metadata)).getUploadId();
     try {
-      var tags = VideoUploadParts.send(input, size, (number, part, length) ->
-          client.uploadPart(new UploadPartRequest(bucket, key, uploadId, number, part, length)).getPartETag());
+      var tags = VideoUploadParts.send(input, size, (number, part, length) -> {
+        long partStart = System.nanoTime();
+        try {
+          var tag = client.uploadPart(new UploadPartRequest(bucket, key, uploadId, number, part, length)).getPartETag();
+          log.info("video event=origin_part_done provider={} key={} part={} bytes={} elapsedMs={}", provider(), key, number, length, VideoLog.elapsedMs(partStart));
+          return tag;
+        } catch (RuntimeException ex) {
+          log.warn("video event=origin_part_failed provider={} key={} part={} bytes={} elapsedMs={}", provider(), key, number, length, VideoLog.elapsedMs(partStart));
+          throw ex;
+        }
+      });
+      log.info("video event=origin_multipart_completing provider={} key={} parts={} elapsedMs={}", provider(), key, tags.size(), VideoLog.elapsedMs(start));
       client.completeMultipartUpload(new CompleteMultipartUploadRequest(bucket, key, uploadId, tags));
     } catch (java.io.IOException | RuntimeException failure) {
-      try { client.abortMultipartUpload(new AbortMultipartUploadRequest(bucket, key, uploadId)); }
-      catch (RuntimeException cleanup) { failure.addSuppressed(cleanup); }
+      try {
+        client.abortMultipartUpload(new AbortMultipartUploadRequest(bucket, key, uploadId));
+        log.warn("video event=origin_multipart_aborted provider={} key={} elapsedMs={}", provider(), key, VideoLog.elapsedMs(start));
+      } catch (RuntimeException cleanup) {
+        VideoObjectLog.failure(provider(), "abort", key, start, cleanup);
+        failure.addSuppressed(cleanup);
+      }
       throw failure;
     }
   }
 
   @Override public StoredObject open(String key) {
+    long start = System.nanoTime();
     OSS client = client();
     try {
       var object = client.getObject(properties.bucket(), key);
       var stream = object.getObjectContent();
       try {
-        return new StoredObject(stream, object.getObjectMetadata().getContentLength(),
+        long length = object.getObjectMetadata().getContentLength();
+        return new StoredObject(VideoObjectLog.observe(provider(), key, length, start, stream), length,
             object.getObjectMetadata().getContentType());
       } catch (RuntimeException failure) {
         // Ownership transfers to the caller only after a StoredObject was successfully built.
@@ -93,6 +120,7 @@ public class AliyunOssService implements ObjectStorage, AutoCloseable {
         throw failure;
       }
     } catch (Exception ex) {
+      if (VideoObjectLog.applies(key)) VideoObjectLog.failure(provider(), "open", key, start, ex);
       throw new BusinessException(ErrorCode.SYSTEM_ERROR, "文件读取失败，请稍后重试");
     }
   }
@@ -108,9 +136,15 @@ public class AliyunOssService implements ObjectStorage, AutoCloseable {
   }
 
   @Override public void delete(String key) {
+    long start = System.nanoTime();
     OSS client = client();
-    try { client.deleteObject(properties.bucket(), key); }
-    catch (Exception ex) { throw new BusinessException(ErrorCode.SYSTEM_ERROR, "文件删除失败"); }
+    try {
+      client.deleteObject(properties.bucket(), key);
+      if (VideoObjectLog.applies(key)) log.info("video event=origin_deleted provider={} key={} elapsedMs={}", provider(), key, VideoLog.elapsedMs(start));
+    } catch (Exception ex) {
+      if (VideoObjectLog.applies(key)) VideoObjectLog.failure(provider(), "delete", key, start, ex);
+      throw new BusinessException(ErrorCode.SYSTEM_ERROR, "文件删除失败");
+    }
   }
 
   protected OSS createClient() {

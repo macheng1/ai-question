@@ -2,6 +2,9 @@ package com.aiquestion.service;
 
 import com.aiquestion.common.BusinessException;
 import com.aiquestion.common.ErrorCode;
+import com.aiquestion.common.VideoLog;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.aiquestion.storage.FileStorageService;
 import java.io.File;
 import java.io.IOException;
@@ -17,6 +20,7 @@ import org.springframework.web.multipart.MultipartFile;
 /** 为副本创建独立存储对象，临时文件避免大视频在内存中重复缓冲。 */
 @Service
 public class TrainingFileCopyService {
+  private static final Logger log = LoggerFactory.getLogger(TrainingFileCopyService.class);
   private final FileStorageService storage;
   private final TrainingVideoStorage videos;
 
@@ -27,9 +31,15 @@ public class TrainingFileCopyService {
 
   public String copyVideo(Map<String, Object> video) {
     String mime = video.get("content_type").toString();
+    String source = VideoLog.id((String) video.get("storage_path"));
+    long start = System.nanoTime();
+    log.info("video event=copy_video source={} result=start", source);
     try (InputStream input = videos.content(video).getBody().getInputStream()) {
-      return copy(input, mime, "video/mp4".equals(mime) ? "mp4" : "webm", "training-videos");
-    } catch (IOException ex) {
+      return copy(input, mime, "video/mp4".equals(mime) ? "mp4" : "webm", "training-videos", source);
+    } catch (IOException | RuntimeException ex) {
+      log.warn("video event=copy_video source={} result=failed error={} elapsedMs={}",
+          source, VideoLog.error(ex), VideoLog.elapsedMs(start));
+      if (ex instanceof RuntimeException runtime) throw runtime;
       throw new BusinessException(ErrorCode.SYSTEM_ERROR, "视频复制失败，请重试");
     }
   }
@@ -41,21 +51,28 @@ public class TrainingFileCopyService {
         : "png".equals(suffix) ? "image/png" : "image/jpeg";
     var object = storage.open(key);
     try (InputStream input = object.stream()) {
-      return copy(input, mime, suffix, "training-materials");
+      return copy(input, mime, suffix, "training-materials", null);
     } catch (IOException ex) {
       throw new BusinessException(ErrorCode.SYSTEM_ERROR, "培训材料复制失败，请重试");
     }
   }
 
-  private String copy(InputStream input, String mime, String suffix, String folder) throws IOException {
+  private String copy(InputStream input, String mime, String suffix, String folder, String source) throws IOException {
     Path temp = Files.createTempFile("training-copy-", "." + suffix);
     try {
-      Files.copy(input, temp, StandardCopyOption.REPLACE_EXISTING);
-      return storage.uploadMaterial(new TemporaryUpload(temp, mime, Files.size(temp)), mime, suffix, folder);
+      long start = System.nanoTime();
+      long bytes = Files.copy(input, temp, StandardCopyOption.REPLACE_EXISTING);
+      if (source != null) log.info("video event=copy_stage source={} bytes={} result=ok elapsedMs={}",
+          source, bytes, VideoLog.elapsedMs(start));
+      String target = storage.uploadMaterial(new TemporaryUpload(temp, mime, bytes), mime, suffix, folder);
+      if (source != null) log.info("video event=copy_video source={} object={} bytes={} result=stored elapsedMs={}",
+          source, VideoLog.id(target), bytes, VideoLog.elapsedMs(start));
+      return target;
     } finally {
       try { Files.deleteIfExists(temp); }
       catch (IOException ex) {
-        org.slf4j.LoggerFactory.getLogger(TrainingFileCopyService.class).warn("培训复制临时文件清理失败", ex);
+        if (source != null) log.warn("video event=copy_temp_cleanup source={} result=failed error={}", source, VideoLog.error(ex));
+        else log.warn("培训材料复制临时文件清理失败 error={}", VideoLog.error(ex));
       }
     }
   }

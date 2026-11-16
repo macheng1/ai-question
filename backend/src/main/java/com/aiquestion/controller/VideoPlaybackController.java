@@ -5,6 +5,8 @@ import com.aiquestion.common.BusinessException;
 import com.aiquestion.common.ErrorCode;
 import com.aiquestion.security.LearnerAccess;
 import com.aiquestion.security.VideoPlaybackTickets;
+import com.aiquestion.security.VideoPlaybackTickets.Source;
+import jakarta.servlet.http.HttpServletRequest;
 import com.aiquestion.service.*;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ResponseEntity;
@@ -34,14 +36,14 @@ public class VideoPlaybackController {
             @RequestHeader("Authorization") String auth) {
         trainings.get(id, accounts.requireAdministrator(auth).accountId());
         trainings.video(id, video);
-        return ApiResponse.ok(tickets.issue(id, video));
+        return ApiResponse.ok(tickets.issue(id, video, Source.ADMIN_PREVIEW));
     }
 
     @PostMapping("/learner/trainings/{id}/review/videos/{video}/playback")
     public ApiResponse<String> review(@PathVariable long id, @PathVariable long video,
             @RequestHeader("Authorization") String auth) {
         review.video(accounts.requireEmployee(auth), id, video);
-        return ApiResponse.ok(tickets.issue(id, video));
+        return ApiResponse.ok(tickets.issue(id, video, Source.LEARNER_REVIEW));
     }
 
     public record Session(String token) {}
@@ -53,12 +55,14 @@ public class VideoPlaybackController {
         var row = learning.video(kind.equals("courses") ? -id : id, video, session.token());
         if (((Number) row.get("employee_id")).longValue() != employee.userId())
             throw new BusinessException(ErrorCode.FORBIDDEN);
-        return ApiResponse.ok(tickets.issue(((Number) row.get("training_id")).longValue(), video));
+        return ApiResponse.ok(tickets.issue(((Number) row.get("training_id")).longValue(), video,
+            kind.equals("courses") ? Source.COURSE_LEARNING : Source.EXAM_LEARNING));
     }
 
     @GetMapping("/video-playback/{video}")
-    public ResponseEntity<Resource> content(@PathVariable long video, @RequestParam String ticket) {
-        long training = tickets.verify(video, ticket);
-        return storage.content(trainings.video(training, video));
+    public ResponseEntity<Resource> content(@PathVariable long video, @RequestParam String ticket, HttpServletRequest request) {
+        var grant = tickets.verify(video, ticket);
+        request.setAttribute("videoPlaybackSource", grant.source());
+        return storage.content(trainings.video(grant.training(), video));
     }
 }

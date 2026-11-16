@@ -100,3 +100,7 @@ storage:
     access-key-id: ${EDS_ACCESS_KEY_ID:}
     secret-key: ${EDS_SECRET_KEY:}
     region: ${EDS_REGION:}
+
+logging:
+  pattern:
+    level: "%5p [traceId=%X{traceId:-}]"

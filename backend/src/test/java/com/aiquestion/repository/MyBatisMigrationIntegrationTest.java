@@ -52,6 +52,8 @@ class MyBatisMigrationIntegrationTest {
   @Autowired DataSource dataSource;
   @Autowired JwtTokenService tokens;
   @Autowired TrainingService trainings;
+  @Autowired PreparedVideoRepository preparedRepo;
+  @Autowired PreparedTrainingVideos preparedVideos;
   @Autowired TrainingCopyService copies;
   @Autowired RequiredTrainingAssignmentService automaticAssignments;
   @Autowired CandidateLearningService learning;
@@ -1372,6 +1374,39 @@ class MyBatisMigrationIntegrationTest {
     var body = trainingCommand(null, false); body.put("exam", examSettings(paper));
     mvc.perform(post("/management/trainings").header("Authorization", authorization).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body))).andExpect(status().isBadRequest());
     assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM assessment_task WHERE created_by=?", Integer.class, owner));
+  }
+
+  @Test void preparedVideoSurvivesRollbackAndRestartAndIsConsumedOnlyOnce() throws Exception {
+    String id = UUID.randomUUID().toString();
+    String key = "eds:training-videos/" + UUID.randomUUID() + ".mp4";
+    preparedRepo.reserve(new PreparedVideoRepository.Ticket(id, owner, "intro.mp4", 12, key, "READY", System.currentTimeMillis() + 60000));
+    String upload = "/management/video-uploads/" + id;
+    assertThrows(BusinessException.class, () -> preparedVideos.prepare(owner + 1, id));
+    mvc.perform(post(upload + "/prepare").header("Authorization", authorization)).andExpect(status().isOk());
+    var progress = mvc.perform(get(upload + "/progress").header("Authorization", authorization)).andExpect(status().isOk()).andReturn();
+    assertEquals(12, json.readTree(progress.getResponse().getContentAsString()).path("data").path("storedBytes").asInt());
+    var command = new org.springframework.mock.web.MockMultipartFile("training", "training.json", "application/json",
+            json.writeValueAsBytes(trainingCommand(null, false)));
+    var descriptor = new org.springframework.mock.web.MockMultipartFile("videos", "ticket", TrainingVideoUploads.DESCRIPTOR,
+            id.getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+    var invalid = new org.springframework.mock.web.MockMultipartFile("materials", "bad.exe", "application/octet-stream", new byte[]{1});
+    mvc.perform(multipart("/management/trainings/with-materials").file(command).file(descriptor).file(invalid)
+            .header("Authorization", authorization)).andExpect(status().isBadRequest());
+    assertEquals("READY", preparedRepo.find(id).phase());
+    mvc.perform(multipart("/management/trainings/with-materials").file(command).file(descriptor)
+            .header("Authorization", authorization)).andExpect(status().isOk());
+    assertNull(preparedRepo.find(id));
+    assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM training_video WHERE storage_path=?", Integer.class, key));
+    mvc.perform(multipart("/management/trainings/with-materials").file(command).file(descriptor)
+            .header("Authorization", authorization)).andExpect(status().isNotFound());
+    verify(storage, never()).uploadMaterial(any(), any(), any(), any());
+    verify(storage, never()).delete(key);
+    String orphan = "eds:training-videos/" + UUID.randomUUID() + ".mp4";
+    preparedRepo.reserve(new PreparedVideoRepository.Ticket(id, owner, "orphan.mp4", 12, orphan, "NEW", 1));
+    preparedVideos.expire();
+    verify(storage).delete(orphan);
+    verify(storage, never()).delete(key);
+    assertNull(preparedRepo.find(id));
   }
 
   @Test void createTrainingWithFilesIsAtomic() throws Exception {

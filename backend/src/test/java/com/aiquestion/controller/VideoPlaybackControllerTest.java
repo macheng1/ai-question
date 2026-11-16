@@ -30,13 +30,13 @@ class VideoPlaybackControllerTest {
         assertThrows(BusinessException.class, () -> controller.learning("courses", 4, 7, session, employee));
         verifyNoInteractions(tickets);
         when(learning.video(5, 7, "session")).thenReturn(Map.of("employee_id", 42, "training_id", 4));
-        when(tickets.issue(4, 7)).thenReturn("ticket");
+        when(tickets.issue(4, 7, VideoPlaybackTickets.Source.EXAM_LEARNING)).thenReturn("ticket");
         assertEquals("ticket", controller.learning("exams", 5, 7, session, employee).data());
     }
 
     @Test void browserCanReadOnlyTheRequestedRangeWithATicket() throws Exception {
         var row = Map.<String, Object>of("storage_path", "example.mp4");
-        when(tickets.verify(7, "ticket")).thenReturn(4L);
+        when(tickets.verify(7, "ticket")).thenReturn(new VideoPlaybackTickets.Grant(4, VideoPlaybackTickets.Source.COURSE_LEARNING));
         when(trainings.video(4, 7)).thenReturn(row);
         var resource = new ByteArrayResource(new byte[]{0, 1, 2, 3, 4});
         when(storage.content(row)).thenReturn(ResponseEntity.ok().contentType(MediaType.parseMediaType("video/mp4")).body(resource));

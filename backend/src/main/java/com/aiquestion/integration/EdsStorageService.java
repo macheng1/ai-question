@@ -1,6 +1,7 @@
 package com.aiquestion.integration;
 
 import com.aiquestion.common.BusinessException;
+import com.aiquestion.common.VideoLog;
 import com.aiquestion.common.ErrorCode;
 import com.aiquestion.config.EdsProperties;
 import com.aiquestion.storage.ObjectStorage;
@@ -32,7 +33,10 @@ public class EdsStorageService implements ObjectStorage, AutoCloseable {
   // Lazy initialization keeps an unused, unconfigured provider from blocking application startup.
   private synchronized AmazonS3 client() {
     if (closed) throw new IllegalStateException("Storage client is closed");
-    if (sharedClient == null) sharedClient = createClient();
+    if (sharedClient == null) {
+      sharedClient = createClient();
+      log.info("video event=storage_client_ready provider=eds bucket={} region={}", properties.bucket(), properties.region());
+    }
     return sharedClient;
   }
 
@@ -62,6 +66,9 @@ public class EdsStorageService implements ObjectStorage, AutoCloseable {
 
   protected AmazonS3 createClient() {
     validateConfiguration();
+    URI endpoint = URI.create(properties.endpoint());
+    log.info("video event=storage_client_init provider=eds host={} port={} scheme={} bucket={} region={}",
+        endpoint.getHost(), endpoint.getPort(), endpoint.getScheme(), properties.bucket(), properties.region());
     ClientConfiguration config = new ClientConfiguration();
     // Initial bounded pool; size must be validated against storage latency and video traffic.
     config.setMaxConnections(128);
@@ -93,18 +100,24 @@ public class EdsStorageService implements ObjectStorage, AutoCloseable {
   }
 
   @Override public void put(MultipartFile file, String mime, String key) {
+    long start = System.nanoTime();
+    boolean video = VideoObjectLog.applies(key);
+    boolean multipart = VideoUploadParts.required(key, file.getSize());
+    if (video) log.info("video event=origin_upload_start provider={} bucket={} key={} bytes={} multipart={}", provider(), properties.bucket(), key, file.getSize(), multipart);
     AmazonS3 client = client();
     try (var input = file.getInputStream()) {
       ObjectMetadata metadata = new ObjectMetadata();
       metadata.setContentType(mime);
-      if (VideoUploadParts.required(key, file.getSize())) {
+      if (multipart) {
         putVideoParts(client, key, metadata, input, file.getSize());
-        return;
+      } else {
+        metadata.setContentLength(file.getSize());
+        client.putObject(new PutObjectRequest(properties.bucket(), key, input, metadata));
       }
-      metadata.setContentLength(file.getSize());
-      client.putObject(new PutObjectRequest(properties.bucket(), key, input, metadata));
+      if (video) log.info("video event=origin_upload_done provider={} key={} bytes={} elapsedMs={}", provider(), key, file.getSize(), VideoLog.elapsedMs(start));
     } catch (Exception ex) {
-      logUploadFailure(ex, key, mime, file.getSize());
+      if (video) VideoObjectLog.failure(provider(), "upload", key, start, ex);
+      else logUploadFailure(ex, key, mime, file.getSize());
       throw new BusinessException(ErrorCode.SYSTEM_ERROR, "EDS 文件上传失败，请检查存储连接和权限");
     }
   }
@@ -112,26 +125,45 @@ public class EdsStorageService implements ObjectStorage, AutoCloseable {
   private void putVideoParts(AmazonS3 client, String key, ObjectMetadata metadata,
       java.io.InputStream input, long size) throws java.io.IOException {
     String bucket = properties.bucket();
+    long start = System.nanoTime();
+    log.info("video event=origin_multipart_start provider={} key={} bytes={}", provider(), key, size);
     String uploadId = client.initiateMultipartUpload(new InitiateMultipartUploadRequest(bucket, key, metadata)).getUploadId();
     try {
-      var tags = VideoUploadParts.send(input, size, (number, part, length) ->
-          client.uploadPart(new UploadPartRequest().withBucketName(bucket).withKey(key)
-                .withUploadId(uploadId).withPartNumber(number).withInputStream(part).withPartSize(length)).getPartETag());
+      var tags = VideoUploadParts.send(input, size, (number, part, length) -> {
+        long partStart = System.nanoTime();
+        try {
+          var tag = client.uploadPart(new UploadPartRequest().withBucketName(bucket).withKey(key)
+                .withUploadId(uploadId).withPartNumber(number).withInputStream(part).withPartSize(length)).getPartETag();
+          log.info("video event=origin_part_done provider={} key={} part={} bytes={} elapsedMs={}", provider(), key, number, length, VideoLog.elapsedMs(partStart));
+          return tag;
+        } catch (RuntimeException ex) {
+          log.warn("video event=origin_part_failed provider={} key={} part={} bytes={} elapsedMs={}", provider(), key, number, length, VideoLog.elapsedMs(partStart));
+          throw ex;
+        }
+      });
+      log.info("video event=origin_multipart_completing provider={} key={} parts={} elapsedMs={}", provider(), key, tags.size(), VideoLog.elapsedMs(start));
       client.completeMultipartUpload(new CompleteMultipartUploadRequest(bucket, key, uploadId, tags));
     } catch (java.io.IOException | RuntimeException failure) {
-      try { client.abortMultipartUpload(new AbortMultipartUploadRequest(bucket, key, uploadId)); }
-      catch (RuntimeException cleanup) { failure.addSuppressed(cleanup); }
+      try {
+        client.abortMultipartUpload(new AbortMultipartUploadRequest(bucket, key, uploadId));
+        log.warn("video event=origin_multipart_aborted provider={} key={} elapsedMs={}", provider(), key, VideoLog.elapsedMs(start));
+      } catch (RuntimeException cleanup) {
+        VideoObjectLog.failure(provider(), "abort", key, start, cleanup);
+        failure.addSuppressed(cleanup);
+      }
       throw failure;
     }
   }
 
   @Override public StoredObject open(String key) {
+    long start = System.nanoTime();
     AmazonS3 client = client();
     try {
       var object = client.getObject(properties.bucket(), key);
       var stream = object.getObjectContent();
       try {
-        return new StoredObject(stream, object.getObjectMetadata().getContentLength(),
+        long length = object.getObjectMetadata().getContentLength();
+        return new StoredObject(VideoObjectLog.observe(provider(), key, length, start, stream), length,
             object.getObjectMetadata().getContentType());
       } catch (RuntimeException failure) {
         // Ownership transfers to the caller only after a StoredObject was successfully built.
@@ -139,14 +171,21 @@ public class EdsStorageService implements ObjectStorage, AutoCloseable {
         throw failure;
       }
     } catch (Exception ex) {
+      if (VideoObjectLog.applies(key)) VideoObjectLog.failure(provider(), "open", key, start, ex);
       throw new BusinessException(ErrorCode.SYSTEM_ERROR, "EDS 文件读取失败，请检查存储连接和权限");
     }
   }
 
   @Override public void delete(String key) {
+    long start = System.nanoTime();
     AmazonS3 client = client();
-    try { client.deleteObject(properties.bucket(), key); }
-    catch (Exception ex) { throw new BusinessException(ErrorCode.SYSTEM_ERROR, "EDS 文件删除失败"); }
+    try {
+      client.deleteObject(properties.bucket(), key);
+      if (VideoObjectLog.applies(key)) log.info("video event=origin_deleted provider={} key={} elapsedMs={}", provider(), key, VideoLog.elapsedMs(start));
+    } catch (Exception ex) {
+      if (VideoObjectLog.applies(key)) VideoObjectLog.failure(provider(), "delete", key, start, ex);
+      throw new BusinessException(ErrorCode.SYSTEM_ERROR, "EDS 文件删除失败");
+    }
   }
 
   private void logUploadFailure(Exception failure, String key, String mime, long size) {
