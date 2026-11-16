@@ -3,6 +3,7 @@ package com.aiquestion.integration;
 import com.aiquestion.config.AliyunOssProperties;
 import com.aiquestion.storage.FileStorageService;
 import com.aiquestion.service.TrainingVideoStorage;
+import com.aiquestion.service.TrainingVideoCache;
 import com.aiquestion.common.BusinessException;
 import com.aliyun.oss.OSS;
 import com.aliyun.oss.model.*;
@@ -46,14 +47,14 @@ class TrainingOssTest {
   assertThrows(BusinessException.class,()->service().open("missing"));verify(client,never()).shutdown();
  }
  @Test void legacyVideosRemainReadableAndCannotEscapeDirectory() throws Exception {
-  var oss=mock(FileStorageService.class);var storage=new TrainingVideoStorage(oss,directory.toString());
+  var oss=mock(FileStorageService.class);var storage=new TrainingVideoStorage(oss,directory.toString(),new TrainingVideoCache(directory.toString(),0,0));
   Files.write(directory.resolve("old.mp4"),new byte[]{1,2,3});
   var response=storage.content(Map.of("storage_path","old.mp4","content_type","video/mp4"));
   assertArrayEquals(new byte[]{1,2,3},response.getBody().getInputStream().readAllBytes());
   assertThrows(BusinessException.class,()->storage.delete("../outside.mp4"));verifyNoInteractions(oss);
  }
  @Test void deletionUsesOssOnlyForValidTrainingObjects() {
-  var oss=mock(FileStorageService.class);var storage=new TrainingVideoStorage(oss,directory.toString());
+  var oss=mock(FileStorageService.class);var storage=new TrainingVideoStorage(oss,directory.toString(),new TrainingVideoCache(directory.toString(),0,0));
   var key="training-videos/12345678-1234-1234-1234-123456789abc.mp4";
   storage.delete("oss:"+key);verify(oss).delete("oss:"+key);
   assertThrows(BusinessException.class,()->storage.delete("oss:other/file"));

@@ -11,7 +11,11 @@ import com.amazonaws.client.builder.AwsClientBuilder;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.ObjectMetadata;
+import com.amazonaws.services.s3.model.AbortMultipartUploadRequest;
+import com.amazonaws.services.s3.model.CompleteMultipartUploadRequest;
+import com.amazonaws.services.s3.model.InitiateMultipartUploadRequest;
 import com.amazonaws.services.s3.model.PutObjectRequest;
+import com.amazonaws.services.s3.model.UploadPartRequest;
 import java.net.URI;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -92,12 +96,32 @@ public class EdsStorageService implements ObjectStorage, AutoCloseable {
     AmazonS3 client = client();
     try (var input = file.getInputStream()) {
       ObjectMetadata metadata = new ObjectMetadata();
-      metadata.setContentLength(file.getSize());
       metadata.setContentType(mime);
+      if (VideoUploadParts.required(key, file.getSize())) {
+        putVideoParts(client, key, metadata, input, file.getSize());
+        return;
+      }
+      metadata.setContentLength(file.getSize());
       client.putObject(new PutObjectRequest(properties.bucket(), key, input, metadata));
     } catch (Exception ex) {
       logUploadFailure(ex, key, mime, file.getSize());
       throw new BusinessException(ErrorCode.SYSTEM_ERROR, "EDS 文件上传失败，请检查存储连接和权限");
+    }
+  }
+
+  private void putVideoParts(AmazonS3 client, String key, ObjectMetadata metadata,
+      java.io.InputStream input, long size) throws java.io.IOException {
+    String bucket = properties.bucket();
+    String uploadId = client.initiateMultipartUpload(new InitiateMultipartUploadRequest(bucket, key, metadata)).getUploadId();
+    try {
+      var tags = VideoUploadParts.send(input, size, (number, part, length) ->
+          client.uploadPart(new UploadPartRequest().withBucketName(bucket).withKey(key)
+                .withUploadId(uploadId).withPartNumber(number).withInputStream(part).withPartSize(length)).getPartETag());
+      client.completeMultipartUpload(new CompleteMultipartUploadRequest(bucket, key, uploadId, tags));
+    } catch (java.io.IOException | RuntimeException failure) {
+      try { client.abortMultipartUpload(new AbortMultipartUploadRequest(bucket, key, uploadId)); }
+      catch (RuntimeException cleanup) { failure.addSuppressed(cleanup); }
+      throw failure;
     }
   }
 

@@ -13,6 +13,7 @@ import com.aiquestion.repository.TrainingAccessRepository;
 public class TrainingEndpointService {
 
     private final TrainingService service;
+    private final TrainingVideoUploads videoUploads;
 
     private final com.aiquestion.service.AccountService accounts;
 
@@ -26,7 +27,8 @@ public class TrainingEndpointService {
 
     private final com.aiquestion.service.TrainingVideoStorage storage;
 
-    public TrainingEndpointService(com.aiquestion.service.AccountService accounts, TrainingService service, JwtTokenService tokens, TrainingAccessRepository persistence, com.aiquestion.service.TrainingVideoStorage storage, com.aiquestion.service.TrainingMaterialService materials, com.aiquestion.service.TrainingLogService logs) {
+    public TrainingEndpointService(com.aiquestion.service.AccountService accounts, TrainingService service, JwtTokenService tokens, TrainingAccessRepository persistence, com.aiquestion.service.TrainingVideoStorage storage, com.aiquestion.service.TrainingMaterialService materials, com.aiquestion.service.TrainingLogService logs, TrainingVideoUploads videoUploads) {
+        this.videoUploads = videoUploads;
         this.accounts = accounts;
         this.logs = logs;
         this.materials = materials;
@@ -178,21 +180,16 @@ public class TrainingEndpointService {
         return ApiResponse.ok(null);
     }
 
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
     public ApiResponse<?> upload(long id, org.springframework.web.multipart.MultipartFile file, String auth) throws java.io.IOException {
         long uid = user(auth);
         service.get(id, uid);
+        file = videoUploads.resolve(uid, file);
         String name = Objects.toString(file.getOriginalFilename(), "");
-        boolean mp4 = name.toLowerCase(Locale.ROOT).endsWith(".mp4"), webm = name.toLowerCase(Locale.ROOT).endsWith(".webm");
-        if ((!mp4 && !webm) || file.getSize() < 12 || file.getSize() > 100L * 1024 * 1024)
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "仅支持100MB以内的MP4或WebM视频");
-        byte[] head;
+        String type = TrainingVideoUploads.type(name, file.getSize());
         try (var stream = file.getInputStream()) {
-            head = stream.readNBytes(12);
+            TrainingVideoUploads.verifyHeader(type, stream.readNBytes(12));
         }
-        boolean valid = mp4 ? head[4] == 'f' && head[5] == 't' && head[6] == 'y' && head[7] == 'p' : (head[0] & 255) == 0x1a && (head[1] & 255) == 0x45 && (head[2] & 255) == 0xdf && (head[3] & 255) == 0xa3;
-        if (!valid)
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "视频文件内容与扩展名不匹配");
-        String type = mp4 ? "video/mp4" : "video/webm";
         String key = storage.upload(file, type);
         if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive())
             org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {

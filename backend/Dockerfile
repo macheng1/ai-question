@@ -24,6 +24,7 @@ ENV TZ=Asia/Shanghai
 # Do not run the application as root inside the container.
 RUN groupadd --system --gid 10001 app && \
     useradd --system --uid 10001 --gid app --home-dir /app --no-create-home app
+RUN mkdir -p /app/data/training-video-cache && chown app:app /app/data/training-video-cache
 COPY --from=builder --chown=app:app /build/target/app.jar ./app.jar
 
 USER 10001:10001

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Banner, Button, Image, InputNumber, Modal, Space, Table, Toast, Upload, VideoPlayer } from "@douyinfe/semi-ui";
 
+import { videoPlaybackUrl } from "../video-playback";
 import { apiClient } from "@/lib/api/client";
 export type DraftMaterial = { file: File; sourceId?: number; sourceTrainingId?: string; kind: "videos" | "materials"; pageCount?: number; pages?: { pageNumber: number; requiredSeconds: number }[] };
 
@@ -34,7 +35,13 @@ export function TrainingDraftMaterials({ items, onChange, disabled, onBusyChange
     if (sourceId && sourceTrainingId) {
       const controller = new AbortController();
       let url = "";
-      const path = previewKind === "videos" ? `/trainings/${sourceTrainingId}/videos/${sourceId}/content` : `/management/trainings/${sourceTrainingId}/materials/${sourceId}/pages/${page}`;
+      if (previewKind === "videos") {
+        videoPlaybackUrl(`/trainings/${sourceTrainingId}/videos/${sourceId}`, sourceId, controller.signal)
+          .then(src => { if (!controller.signal.aborted) setPreviewUrl(src); })
+          .catch(e => { if (!controller.signal.aborted) setPreviewError(e instanceof Error ? e.message : "视频预览加载失败"); });
+        return () => controller.abort();
+      }
+      const path = `/management/trainings/${sourceTrainingId}/materials/${sourceId}/pages/${page}`;
       apiClient.get<Blob>(path, undefined, { responseType: "blob", signal: controller.signal, timeout: 300000 }).then(blob => {
         if (!controller.signal.aborted) { url = URL.createObjectURL(blob); setPreviewUrl(url); }
       }).catch(e => { if (!controller.signal.aborted) setPreviewError(e instanceof Error ? e.message : "预览加载失败"); });
@@ -68,15 +75,15 @@ export function TrainingDraftMaterials({ items, onChange, disabled, onBusyChange
     const added: DraftMaterial[] = [];
     for (const file of Array.from(files || [])) {
       const valid = kind === "videos" ? /\.(mp4|webm)$/i.test(file.name) : /\.(pdf|png|jpe?g)$/i.test(file.name);
-      const limit = kind === "videos" ? 100 : 20;
+      const limit = kind === "videos" ? 2048 : 20;
       if (!valid || !file.size || file.size > limit * 1024 * 1024) {
         Toast.error(`${file.name}：请选择支持的格式，单个文件不超过 ${limit}MB`); continue;
       }
       if (items.concat(added).some(item => item.file.name === file.name && item.file.size === file.size && item.file.lastModified === file.lastModified)) continue;
       added.push({ file, kind });
     }
-    if (items.concat(added).reduce((sum, item) => sum + item.file.size, 0) > 190 * 1024 * 1024) {
-      Toast.error("本次创建的材料总大小不能超过 190MB，请减少文件后重试"); return;
+    if (items.concat(added).filter(item => item.kind === "materials").reduce((sum, item) => sum + item.file.size, 0) > 190 * 1024 * 1024) {
+      Toast.error("本次上传的 PDF 和图片总大小不能超过 190MB，请减少文件后重试"); return;
     }
     setInspecting(true); onBusyChange(true);
     try {
@@ -103,7 +110,7 @@ export function TrainingDraftMaterials({ items, onChange, disabled, onBusyChange
       return <div key={kind} className="flex flex-col gap-3">
         {kind === "materials" && <strong>PDF / 图片材料</strong>}
         <p className="text-sm text-slate-500">{kind === "videos"
-          ? "上传 MP4 / WebM 视频，单个文件不超过 100MB。最后一步保存时统一上传。"
+          ? "上传 MP4 / WebM 视频，单个视频最大 2 GiB，保存培训时分片上传。"
           : "支持 PDF、PNG、JPG，单个文件不超过20MB，PDF最多200页。默认每页120秒，可统一设置或逐页调整，最后一步保存时统一上传。"}</p>
         {kind === "videos" ? <>
           <ul className="divide-y divide-slate-100">{group.map((item, index) => <li key={`${item.file.name}-${item.file.lastModified}`} className="flex flex-wrap items-center justify-between gap-3 py-3">

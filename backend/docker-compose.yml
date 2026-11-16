@@ -32,6 +32,8 @@ services:
       ALIYUN_SMS_SIGN_NAME: ${ALIYUN_SMS_SIGN_NAME:-}
       ALIYUN_SMS_TEMPLATE_CODE: ${ALIYUN_SMS_TEMPLATE_CODE:-}
       STORAGE_PUBLIC_BASE_URL: ${STORAGE_PUBLIC_BASE_URL:-}
+      TRAINING_VIDEO_CACHE_MAX_BYTES: ${TRAINING_VIDEO_CACHE_MAX_BYTES:-8589934592}
+      TRAINING_VIDEO_CACHE_RESERVE_BYTES: ${TRAINING_VIDEO_CACHE_RESERVE_BYTES:-2147483648}
       STORAGE_PROVIDER: ${STORAGE_PROVIDER:-eds}
       EDS_ENDPOINT: ${EDS_ENDPOINT:-}
       EDS_BUCKET: ${EDS_BUCKET:-}
@@ -43,6 +45,8 @@ services:
       ALIYUN_OSS_ENDPOINT: ${ALIYUN_OSS_ENDPOINT:-oss-cn-hangzhou.aliyuncs.com}
       ALIYUN_OSS_BUCKET: ${ALIYUN_OSS_BUCKET:-}
       ALIYUN_OSS_REGION: ${ALIYUN_OSS_REGION:-oss-cn-hangzhou}
+    volumes:
+      - training-video-cache:/app/data/training-video-cache
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -58,3 +62,6 @@ services:
       - app
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
+
+volumes:
+  training-video-cache:

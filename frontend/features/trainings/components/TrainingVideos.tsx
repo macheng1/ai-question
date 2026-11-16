@@ -1,12 +1,15 @@
 "use client";
 import { Layout } from "@douyinfe/semi-ui";
 import { useEffect, useState } from "react";
+import { videoPlaybackUrl } from "../video-playback";
 import { apiClient } from "@/lib/api/client";
 import { Button, Modal, Spin, Toast, Upload, VideoPlayer } from "@douyinfe/semi-ui";
+import { forgetExpiredUploads, MAX_VIDEO_BYTES, prepareVideoUpload } from "../video-upload";
 type Video = { id: number; title: string };
 export function TrainingVideos({ id, readOnly = false }: { id: number; readOnly?: boolean }) {
   const [videos, setVideos] = useState<Video[]>([]);
   const [busy, setBusy] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState("");
   const [error, setError] = useState("");
   const [preview, setPreview] = useState<Video | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
@@ -17,17 +20,13 @@ export function TrainingVideos({ id, readOnly = false }: { id: number; readOnly?
     setPreviewUrl(""); setPreviewError("");
     if (!preview) { setPreviewLoading(false); return; }
     const controller = new AbortController();
-    let objectUrl = "";
     setPreviewLoading(true);
-    apiClient.get<Blob>(`/trainings/${id}/videos/${preview.id}/content`, undefined, {
-      responseType: "blob", signal: controller.signal, timeout: 300000,
-    }).then(blob => {
-      if (controller.signal.aborted) return;
-      objectUrl = URL.createObjectURL(blob); setPreviewUrl(objectUrl);
+    videoPlaybackUrl(`/trainings/${id}/videos/${preview.id}`, preview.id, controller.signal).then(url => {
+      if (!controller.signal.aborted) setPreviewUrl(url);
     }).catch(e => {
       if (!controller.signal.aborted) setPreviewError(e instanceof Error ? e.message : "视频加载失败");
     }).finally(() => { if (!controller.signal.aborted) setPreviewLoading(false); });
-    return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
+    return () => controller.abort();
   }, [id, preview, previewAttempt]);
   const load = async () => { const data = await apiClient.get<{ videos: Video[] }>(`/trainings/${id}`); setVideos(data.videos); setError(""); };
   useEffect(() => { apiClient.get<{ videos: Video[] }>(`/trainings/${id}`).then(data => setVideos(data.videos)).catch(e => setError(e.message)); }, [id]);
@@ -42,18 +41,18 @@ export function TrainingVideos({ id, readOnly = false }: { id: number; readOnly?
     setBusy(true); try { await apiClient.delete(`/management/trainings/${id}/videos/${video.id}`); await load(); Toast.success("视频已删除"); }
     catch (e) { Toast.error(e instanceof Error ? e.message : "删除失败"); } finally { setBusy(false); }
   }});
-  return <Layout.Content className="flex flex-col gap-3"><p className="text-sm">上传 MP4 / WebM 视频，单个文件不超过 100MB。上传、排序和删除立即生效。</p>
+  return <Layout.Content className="flex flex-col gap-3"><p className="text-sm">上传 MP4 / WebM 视频，单个视频最大 2 GiB。上传、排序和删除立即生效。</p>
     {error && <p role="alert" className="text-red-600">{error}<Button theme="borderless" onClick={() => load().catch(e => setError(e.message))}>重试</Button></p>}
     <ul className="divide-y divide-slate-100">{videos.map((v, i) => <li key={v.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><span className="break-all">{i + 1}. {v.title}</span><span className="flex gap-3"><Button onClick={() => setPreview(v)}>预览</Button><Button disabled={readOnly || busy || i === 0} onClick={() => move(i, -1)}>上移</Button><Button disabled={readOnly || busy || i === videos.length - 1} onClick={() => move(i, 1)}>下移</Button><Button disabled={readOnly || busy} type="danger" onClick={() => remove(v)}>删除</Button></span></li>)}</ul>
     {!videos.length && !error && <p className="text-slate-500">暂无视频。</p>}
     <Upload aria-label="上传培训视频" disabled={readOnly || busy} accept=".mp4,.webm" showUploadList={false} fileList={[]} beforeUpload={({ file }) => {
-      if (Number(file.size || 0) > 100 * 1024 * 1024) { Toast.error("视频不能超过100MB"); return false; }
+      if (Number(file.size || 0) > MAX_VIDEO_BYTES) { Toast.error("视频不能超过 2 GiB"); return false; }
       return true;
     }} customRequest={async ({ fileInstance, onSuccess, onError }) => {
-      setBusy(true); try { const form = new FormData(); form.append("file", fileInstance); await apiClient.post(`/management/trainings/${id}/videos`, form, { timeout: 300000 }); await load(); Toast.success("视频已上传"); onSuccess({}); }
-      catch (error) { Toast.error(error instanceof Error ? error.message : "上传失败"); onError({}); }
-      finally { setBusy(false); }
-    }}><Button disabled={readOnly || busy} loading={busy}>上传培训视频</Button></Upload>{busy && <p>处理中…</p>}
+      setBusy(true); try { const form = new FormData(); form.append("file", await prepareVideoUpload(fileInstance, setUploadStatus)); await apiClient.post(`/management/trainings/${id}/videos`, form, { timeout: 0 }); await load(); Toast.success("视频已上传"); onSuccess({}); }
+      catch (error) { forgetExpiredUploads(error, [fileInstance]); Toast.error(error instanceof Error ? error.message : "上传失败"); onError({}); }
+      finally { setBusy(false); setUploadStatus(""); }
+    }}><Button disabled={readOnly || busy} loading={busy}>上传培训视频</Button></Upload>{busy && <p role="status">{uploadStatus || "处理中…"}</p>}
     <Modal centered bodyStyle={{ maxHeight: "calc(100dvh - 240px)", overflowY: "auto" }} title={preview ? `视频预览：${preview.title}` : "视频预览"} visible={!!preview} onCancel={() => setPreview(null)} footer={null} style={{ width: "min(900px, 94vw)" }}>
       {preview && <div className="flex flex-col gap-3">
         {previewLoading && <div role="status" className="flex items-center gap-2 py-10"><Spin />正在加载视频…</div>}

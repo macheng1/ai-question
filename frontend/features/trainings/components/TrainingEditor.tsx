@@ -1,4 +1,5 @@
 "use client";
+import { forgetExpiredUploads, prepareVideoUpload } from "../video-upload";
 import { Typography, Space, Steps } from "@douyinfe/semi-ui";
 import { Card } from "@douyinfe/semi-ui";
 import {
@@ -71,6 +72,7 @@ export function TrainingEditor({ id, copyFrom, initialPaperId }: { id?: string; 
   });
   const [loading, setLoading] = useState(Boolean(id || copyFrom));
   const [error, setError] = useState("");
+  const [uploadStatus, setUploadStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [audienceError, setAudienceError] = useState("正在检查学员资格，请稍候");
   const savedScope = useRef("");
@@ -250,20 +252,23 @@ export function TrainingEditor({ id, copyFrom, initialPaperId }: { id?: string; 
         }
         const data = new FormData();
         data.append("training", new Blob([JSON.stringify(payload)], { type: "application/json" }));
-        draftMaterials.forEach(item => data.append(item.kind, item.file));
+        for (const item of draftMaterials) {
+          data.append(item.kind, item.kind === "videos" ? await prepareVideoUpload(item.file, setUploadStatus) : item.file);
+        }
         data.append("materialTimings", new Blob([JSON.stringify(draftMaterials.filter(item => item.kind === "materials").map(item => item.pages))], { type: "application/json" }));
-        prepared = await apiClient.post<Training>("/management/trainings/with-materials", data, { timeout: 600000 });
+        prepared = await apiClient.post<Training>("/management/trainings/with-materials", data, { timeout: 0 });
       }
       if (copyFrom && !training.id) {
         const data = new FormData();
         let uploadIndex = 0;
-        const items = draftMaterials.map(item => {
+        const items = [];
+        for (const item of draftMaterials) {
           const reference = item.sourceId ? { sourceId: item.sourceId } : { uploadIndex: uploadIndex++ };
-          if (!item.sourceId) data.append("files", item.file);
-          return { kind: item.kind, ...reference, pages: item.pages };
-        });
+          if (!item.sourceId) data.append("files", item.kind === "videos" ? await prepareVideoUpload(item.file, setUploadStatus) : item.file);
+          items.push({ kind: item.kind, ...reference, pages: item.pages });
+        }
         data.append("draft", new Blob([JSON.stringify({ copy: { sourceVersion: sourceVersion.current, training: payload }, items })], { type: "application/json" }));
-        prepared = await apiClient.post<Training>(`/management/trainings/${copyFrom}/copy-with-materials`, data, { timeout: 600000 });
+        prepared = await apiClient.post<Training>(`/management/trainings/${copyFrom}/copy-with-materials`, data, { timeout: 0 });
       }
       const saved = prepared || await saveTraining(training.id || undefined, payload);
       savedScope.current = scopeKey(saved);
@@ -273,9 +278,11 @@ export function TrainingEditor({ id, copyFrom, initialPaperId }: { id?: string; 
       Toast.success(copyFrom && !training.id ? "培训复制成功" : "培训已保存");
       router.replace("/profile/trainings");
     } catch (e) {
+      forgetExpiredUploads(e, draftMaterials.map(item => item.file));
       Toast.error(e instanceof Error ? e.message : "保存失败");
     } finally {
       savingRef.current = false;
+      setUploadStatus("");
       setBusy(false);
     }
   };
@@ -605,6 +612,7 @@ export function TrainingEditor({ id, copyFrom, initialPaperId }: { id?: string; 
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
             <span className="text-sm text-slate-500">第 {step + 1} 步，共 3 步</span>
             <Space wrap>
+              {busy && uploadStatus && <span role="status">{uploadStatus}</span>}
               {step > 0 && <Button disabled={busy || !!adding} onClick={() => goToStep(step - 1)}>上一步</Button>}
               {step < 2 ? (
                 <Button theme="solid" disabled={busy || !!adding} onClick={() => goToStep(step + 1)}>下一步</Button>

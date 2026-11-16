@@ -7,7 +7,11 @@ import com.aiquestion.storage.ObjectStorage;
 import com.aliyun.oss.OSS;
 import com.aliyun.oss.OSSClientBuilder;
 import com.aliyun.oss.model.ObjectMetadata;
+import com.aliyun.oss.model.AbortMultipartUploadRequest;
+import com.aliyun.oss.model.CompleteMultipartUploadRequest;
+import com.aliyun.oss.model.InitiateMultipartUploadRequest;
 import com.aliyun.oss.model.PutObjectRequest;
+import com.aliyun.oss.model.UploadPartRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -47,12 +51,31 @@ public class AliyunOssService implements ObjectStorage, AutoCloseable {
     OSS client = client();
     try (var input = file.getInputStream()) {
       ObjectMetadata metadata = new ObjectMetadata();
-      metadata.setContentLength(file.getSize());
       metadata.setContentType(contentType);
       metadata.setHeader("x-oss-object-acl", "private");
+      if (VideoUploadParts.required(key, file.getSize())) {
+        putVideoParts(client, key, metadata, input, file.getSize());
+        return;
+      }
+      metadata.setContentLength(file.getSize());
       client.putObject(new PutObjectRequest(properties.bucket(), key, input, metadata));
     } catch (Exception ex) {
       throw new BusinessException(ErrorCode.SYSTEM_ERROR, "文件上传 OSS 失败");
+    }
+  }
+
+  private void putVideoParts(OSS client, String key, ObjectMetadata metadata,
+      java.io.InputStream input, long size) throws java.io.IOException {
+    String bucket = properties.bucket();
+    String uploadId = client.initiateMultipartUpload(new InitiateMultipartUploadRequest(bucket, key, metadata)).getUploadId();
+    try {
+      var tags = VideoUploadParts.send(input, size, (number, part, length) ->
+          client.uploadPart(new UploadPartRequest(bucket, key, uploadId, number, part, length)).getPartETag());
+      client.completeMultipartUpload(new CompleteMultipartUploadRequest(bucket, key, uploadId, tags));
+    } catch (java.io.IOException | RuntimeException failure) {
+      try { client.abortMultipartUpload(new AbortMultipartUploadRequest(bucket, key, uploadId)); }
+      catch (RuntimeException cleanup) { failure.addSuppressed(cleanup); }
+      throw failure;
     }
   }
 

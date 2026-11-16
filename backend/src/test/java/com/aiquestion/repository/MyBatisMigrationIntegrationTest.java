@@ -32,7 +32,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 /** Run only against an explicitly supplied disposable MySQL database; JDBC is used solely for fixtures/assertions. */
-@SpringBootTest(properties = {"storage.provider=aliyun", "spring.mail.host=localhost", "training.preview.enabled=false"})
+@SpringBootTest(properties = {"storage.provider=aliyun", "spring.mail.host=localhost", "training.preview.enabled=false", "training.video-cache-max-bytes=0"})
 @AutoConfigureMockMvc
 @EnabledIfEnvironmentVariable(named = "MYBATIS_TEST_URL", matches = ".+aiquestion_mybatis_test.*")
 class MyBatisMigrationIntegrationTest {
@@ -1171,7 +1171,7 @@ class MyBatisMigrationIntegrationTest {
     trainings.addVideo(source, owner, "original.mp4", "old.mp4", "video/mp4");
     long video = jdbc.queryForObject("SELECT id FROM training_video WHERE training_id=?", Long.class, source);
     when(files.copyVideo(anyMap())).thenReturn("eds:training-videos/copied.mp4");
-    when(storage.uploadMaterial(any(), anyString(), anyString(), anyString())).thenReturn("eds:training-videos/uploaded.mp4");
+    when(storage.uploadMaterial(any(), anyString(), anyString(), anyString())).thenReturn("eds:training-videos/22222222-2222-2222-2222-222222222222.mp4");
     var upload = new org.springframework.mock.web.MockMultipartFile("files", "new.mp4", "video/mp4", new byte[]{0,0,0,12,'f','t','y','p',0,0,0,0});
     var request = new TrainingCopyService.CopyRequest(((Number) trainings.get(source, owner).get("version")).intValue(), json.convertValue(trainingCommand(null, false), TrainingService.SaveTraining.class));
     var result = copies.copyDraft(source, owner, request, List.of(

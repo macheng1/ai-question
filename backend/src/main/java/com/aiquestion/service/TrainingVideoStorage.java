@@ -15,28 +15,40 @@ import java.util.Map;
 public class TrainingVideoStorage {
     private final FileStorageService oss;
     private final Path legacyRoot;
+    private final TrainingVideoCache cache;
     public TrainingVideoStorage(FileStorageService oss,
-            @Value("${training.video-directory:./data/training-videos}") String legacyDirectory) {
+            @Value("${training.video-directory:./data/training-videos}") String legacyDirectory, TrainingVideoCache cache) {
+        this.cache = cache;
         this.oss = oss;
         this.legacyRoot = Path.of(legacyDirectory).toAbsolutePath().normalize();
     }
     public String upload(MultipartFile file, String contentType) {
-        return oss.uploadMaterial(file, contentType, "video/mp4".equals(contentType) ? "mp4" : "webm", "training-videos");
+        String key = oss.uploadMaterial(file, contentType, "video/mp4".equals(contentType) ? "mp4" : "webm", "training-videos");
+        cache.warm(validatedKey(key), file);
+        return key;
     }
     public ResponseEntity<Resource> content(Map<String, Object> row) {
         String key = row.get("storage_path").toString();
         var response = ResponseEntity.ok().contentType(MediaType.parseMediaType(row.get("content_type").toString()))
                 .header("Cache-Control", "private, no-store");
-        if ((key.startsWith("oss:") || key.startsWith("eds:"))) {
-            var object = oss.open(validatedKey(key));
-            return response.contentLength(object.length()).body(new InputStreamResource(object.stream()));
+        if (key.startsWith("oss:") || key.startsWith("eds:")) {
+            validatedKey(key);
+            try {
+                return response.body(cache.resource(key, () -> oss.open(key)));
+            } catch (java.io.IOException ex) {
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "视频读取失败，请重试");
+            }
         }
         Path file = legacyFile(key);
         if (!Files.isRegularFile(file)) throw new BusinessException(ErrorCode.NOT_FOUND, "历史视频文件不存在，请重新上传至 OSS");
         return response.body(new FileSystemResource(file));
     }
     public void delete(String key) {
-        if ((key.startsWith("oss:") || key.startsWith("eds:"))) { oss.delete(validatedKey(key)); return; }
+        if (key.startsWith("oss:") || key.startsWith("eds:")) {
+            validatedKey(key);
+            cache.delete(key, () -> oss.delete(key));
+            return;
+        }
         try { Files.deleteIfExists(legacyFile(key)); }
         catch (java.io.IOException ex) { throw new BusinessException(ErrorCode.SYSTEM_ERROR, "历史视频清理失败"); }
     }

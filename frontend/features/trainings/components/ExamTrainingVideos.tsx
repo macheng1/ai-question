@@ -9,6 +9,7 @@ import { confirmLearner } from "@/features/auth/learner-session";
 import { registerProgressSaver } from "../progress-navigation";
 import { createProgressQueue } from "../progress-queue";
 import { saveLearningProgress, nextProgressRequestId } from "../progress-transport";
+import { videoPlaybackUrl } from "../video-playback";
 import { apiClient } from "@/lib/api/client";
 
 export type ExamVideo = { id: number; trainingId: number; title: string; positionSeconds: number; completed: boolean };
@@ -26,7 +27,8 @@ export function ExamTrainingVideos({ examId, data, onBack, onContinue, starting,
 }) {
   const [videos, setVideos] = useState(data.videos);
   const [selectedId, setSelectedId] = useState(data.videos.find(v => !v.completed)?.id ?? data.videos[0]?.id);
-  const [src, setSrc] = useState("");
+  const [source, setSource] = useState<{ videoId: number; url: string }>();
+  const src = source && source.videoId === selectedId ? source.url : "";
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -37,17 +39,25 @@ export function ExamTrainingVideos({ examId, data, onBack, onContinue, starting,
   const allCompleted = completedCount === videos.length;
 
   useEffect(() => {
-    const controller = new AbortController(); let objectUrl = "";
-    setSrc(""); setError("");
-    apiClient.get<Blob>(reviewTrainingId ? `/learner/trainings/${reviewTrainingId}/review/videos/${selectedId}` : `${learningBase(examId)}/videos/${selectedId}/content`, reviewTrainingId ? undefined : { token: data.token }, { responseType: "blob", signal: controller.signal, timeout: 300000 })
-      .then(blob => { if (!controller.signal.aborted) { objectUrl = URL.createObjectURL(blob); setSrc(objectUrl); } })
+    const controller = new AbortController();
+    setSource(undefined); setError("");
+    if (!selectedId) return;
+    const base = reviewTrainingId ? `/learner/trainings/${reviewTrainingId}/review` : learningBase(examId);
+    videoPlaybackUrl(`${base}/videos/${selectedId}`, selectedId, controller.signal, reviewTrainingId ? undefined : data.token)
+      .then(url => { if (!controller.signal.aborted) setSource({ videoId: selectedId, url }); })
       .catch(e => { if (!controller.signal.aborted) setError(e.message || "视频加载失败，请重试"); });
-    return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
+    return () => controller.abort();
   }, [examId, selectedId, data.token, retry, reviewTrainingId]);
 
   useEffect(() => {
     const element = player.current;
-    if (reviewTrainingId || !element || !src || !video) return;
+    if (!element || !src || !video) return;
+    if (reviewTrainingId) {
+      const failed = () => setError("视频无法播放，请重新加载。");
+      element.addEventListener("error", failed);
+      if (element.error) failed();
+      return () => element.removeEventListener("error", failed);
+    }
     let alive = true, lastSaved = video.positionSeconds, furthest = video.positionSeconds;
     let lastTime = performance.now(), requested = false, finishRequested = false, initialized = false, blocked = false, refreshRequested = false, savedComplete = video.completed;
     const sample = () => {
@@ -129,7 +139,7 @@ export function ExamTrainingVideos({ examId, data, onBack, onContinue, starting,
       {!reviewTrainingId && <><div className="h5-lesson-progress"><Typography.Title heading={2} className="!text-sm">课程完成进度</Typography.Title><span>{completedCount} / {videos.length} 节</span></div>
       <Progress percent={Math.round(completedCount / Math.max(1, videos.length) * 100)} stroke="#53ab8b" showInfo={false} /></>}
       <div className="h5-lesson-list">{videos.map((v, i) => <Button key={v.id} block className={`h5-lesson ${v.id === selectedId ? "selected" : ""}`} theme="borderless" icon={v.completed ? <IconTick /> : <IconPlay />} disabled={saving || starting} onClick={async () => { try { player.current?.pause(); await retrySave.current?.(); setSelectedId(v.id); } catch(e) { Toast.error(e instanceof Error?e.message:"进度保存失败，请重试"); } }}>{i + 1}. {v.title}{!reviewTrainingId && <> · {v.completed ? "已完成" : "待完成"}</>}</Button>)}</div>
-      {error && <Banner type="danger" description={error} closeIcon={null}>{src && <Button theme="borderless" disabled={saving} onClick={() => void retrySave.current?.().catch(()=>{})}>重试保存进度</Button>}<Button theme="borderless" disabled={saving} onClick={async () => { try { await retrySave.current?.(); setRetry(n => n + 1); } catch { /* Keep the unacknowledged batch for another retry. */ } }}>重新加载视频</Button></Banner>}
+      {error && <Banner type="danger" description={error} closeIcon={null}>{src && !reviewTrainingId && <Button theme="borderless" disabled={saving} onClick={() => void retrySave.current?.().catch(()=>{})}>重试保存进度</Button>}<Button theme="borderless" disabled={saving} onClick={async () => { try { await retrySave.current?.(); setRetry(n => n + 1); } catch { /* Keep the unacknowledged batch for another retry. */ } }}>重新加载视频</Button></Banner>}
 
     </div>
     <div className="h5-bottom">{!reviewTrainingId && <><p>{allCompleted ? "全部视频已完成，可以继续" : "请先完成全部视频学习"}</p><Button block theme="solid" className="h5-primary" size="large" disabled={!allCompleted || saving || starting} loading={starting} onClick={onContinue}>{allCompleted ? continueLabel : "请先完成视频学习"}<IconArrowRight /></Button></>}<Button block theme="borderless" className="h5-link" disabled={saving || starting} onClick={async () => { try { player.current?.pause(); await retrySave.current?.(); onBack(); } catch(e) { Toast.error(e instanceof Error?e.message:"进度保存失败，请重试"); } }}>{reviewTrainingId ? "返回" : "返回填写信息"}</Button></div>
