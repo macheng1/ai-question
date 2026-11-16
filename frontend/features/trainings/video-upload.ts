@@ -105,12 +105,6 @@ function descriptor(file: File, id: string) {
   return new File([id], file.name, { type: "application/vnd.aiquestion.video-upload" });
 }
 
-export async function prepareVideoUpload(file: File, report: (message: string) => void) {
-  const id = await uploadParts(file, bytes => report(`正在上传「${file.name}」 ${Math.floor(100 * bytes / file.size)}%`));
-  report("上传完成，正在保存…");
-  return descriptor(file, id);
-}
-
 export async function prepareDraftVideo(
   file: File, onProgress: (progress: DraftVideoProgress) => void, signal?: AbortSignal
 ): Promise<File> {

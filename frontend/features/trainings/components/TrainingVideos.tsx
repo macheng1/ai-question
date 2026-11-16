@@ -1,14 +1,15 @@
 "use client";
-import { Layout } from "@douyinfe/semi-ui";
+import type { FileItem } from "@douyinfe/semi-ui/lib/es/upload";
 import { useEffect, useState } from "react";
 import { videoPlaybackUrl } from "../video-playback";
 import { apiClient } from "@/lib/api/client";
-import { Button, Modal, Spin, Toast, Upload, VideoPlayer } from "@douyinfe/semi-ui";
-import { forgetExpiredUploads, MAX_VIDEO_BYTES, prepareVideoUpload } from "../video-upload";
+import { Button, Layout, Modal, Spin, Toast, Upload, VideoPlayer } from "@douyinfe/semi-ui";
+import { forgetExpiredUploads, MAX_VIDEO_BYTES, prepareDraftVideo } from "../video-upload";
 type Video = { id: number; title: string };
 export function TrainingVideos({ id, readOnly = false }: { id: number; readOnly?: boolean }) {
   const [videos, setVideos] = useState<Video[]>([]);
   const [busy, setBusy] = useState(false);
+  const [uploadFiles, setUploadFiles] = useState<FileItem[]>([]);
   const [uploadStatus, setUploadStatus] = useState("");
   const [error, setError] = useState("");
   const [preview, setPreview] = useState<Video | null>(null);
@@ -44,15 +45,43 @@ export function TrainingVideos({ id, readOnly = false }: { id: number; readOnly?
   return <Layout.Content className="flex flex-col gap-3"><p className="text-sm">上传 MP4 / WebM 视频，单个视频最大 2 GiB。上传、排序和删除立即生效。</p>
     {error && <p role="alert" className="text-red-600">{error}<Button theme="borderless" onClick={() => load().catch(e => setError(e.message))}>重试</Button></p>}
     <ul className="divide-y divide-slate-100">{videos.map((v, i) => <li key={v.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><span className="break-all">{i + 1}. {v.title}</span><span className="flex gap-3"><Button onClick={() => setPreview(v)}>预览</Button><Button disabled={readOnly || busy || i === 0} onClick={() => move(i, -1)}>上移</Button><Button disabled={readOnly || busy || i === videos.length - 1} onClick={() => move(i, 1)}>下移</Button><Button disabled={readOnly || busy} type="danger" onClick={() => remove(v)}>删除</Button></span></li>)}</ul>
-    {!videos.length && !error && <p className="text-slate-500">暂无视频。</p>}
-    <Upload aria-label="上传培训视频" disabled={readOnly || busy} accept=".mp4,.webm" showUploadList={false} fileList={[]} beforeUpload={({ file }) => {
-      if (Number(file.size || 0) > MAX_VIDEO_BYTES) { Toast.error("视频不能超过 2 GiB"); return false; }
-      return true;
-    }} customRequest={async ({ fileInstance, onSuccess, onError }) => {
-      setBusy(true); try { const form = new FormData(); form.append("file", await prepareVideoUpload(fileInstance, setUploadStatus)); await apiClient.post(`/management/trainings/${id}/videos`, form, { timeout: 0 }); await load(); Toast.success("视频已上传"); onSuccess({}); }
-      catch (error) { forgetExpiredUploads(error, [fileInstance]); Toast.error(error instanceof Error ? error.message : "上传失败"); onError({}); }
-      finally { setBusy(false); setUploadStatus(""); }
-    }}><Button disabled={readOnly || busy} loading={busy}>上传培训视频</Button></Upload>{busy && <p role="status">{uploadStatus || "处理中…"}</p>}
+    {!videos.length && !uploadFiles.length && !error && <p className="text-slate-500">暂无视频。</p>}
+    <Upload aria-label="上传培训视频" disabled={readOnly || busy} accept=".mp4,.webm"
+      fileList={uploadFiles} showClear={false} showRetry={!busy && !readOnly}
+      beforeRemove={() => !busy} onChange={({ fileList }) => setUploadFiles(fileList.filter(file => file.status !== "success"))}
+      beforeUpload={({ file }) => {
+        if (Number(file.size || 0) > MAX_VIDEO_BYTES) { Toast.error("视频不能超过 2 GiB"); return false; }
+        return true;
+      }}
+      customRequest={async ({ fileInstance, onProgress, onSuccess, onError }) => {
+        setBusy(true);
+        try {
+          const descriptor = await prepareDraftVideo(fileInstance, ({ phase, totalBytes, uploadedBytes, storedBytes = 0 }) => {
+            // A byte travels twice: from the browser to the server, then from the server to storage.
+            onProgress({ total: totalBytes * 2, loaded: uploadedBytes + storedBytes });
+            if (phase === "uploading") setUploadStatus(`上传到服务器 ${Math.floor(uploadedBytes / totalBytes * 100)}%`);
+            if (phase === "storing") setUploadStatus(storedBytes === totalBytes ? "正在确认存储并准备播放缓存…" : `写入对象存储 ${Math.floor(storedBytes / totalBytes * 100)}%`);
+            if (phase === "ready") setUploadStatus("正在保存到培训…");
+          });
+          const form = new FormData();
+          form.append("file", descriptor);
+          const saved = await apiClient.post<{ videos: Video[] }>(`/management/trainings/${id}/videos`, form, { timeout: 0 });
+          setVideos(saved.videos);
+          setError("");
+          onSuccess({});
+          Toast.success("视频已上传");
+        } catch (error) {
+          forgetExpiredUploads(error, [fileInstance]);
+          onError({});
+          Toast.error(error instanceof Error ? error.message : "上传失败");
+        } finally {
+          setBusy(false);
+          setUploadStatus("");
+        }
+      }}>
+      <Button disabled={readOnly || busy}>上传培训视频</Button>
+    </Upload>
+    {uploadStatus && <p role="status" className="text-sm">{uploadStatus}</p>}
     <Modal centered bodyStyle={{ maxHeight: "calc(100dvh - 240px)", overflowY: "auto" }} title={preview ? `视频预览：${preview.title}` : "视频预览"} visible={!!preview} onCancel={() => setPreview(null)} footer={null} style={{ width: "min(900px, 94vw)" }}>
       {preview && <div className="flex flex-col gap-3">
         {previewLoading && <div role="status" className="flex items-center gap-2 py-10"><Spin />正在加载视频…</div>}
