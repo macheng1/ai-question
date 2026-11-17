@@ -201,7 +201,7 @@ export function TrainingEditor({ id, copyFrom, initialPaperId }: { id?: string; 
     change({ questions });
   };
   const validateTraining = () => {
-    if (materialsBusy) { Toast.warning("正在识别材料，请稍候"); return false; }
+    if (materialsBusy) { Toast.warning("请等待材料上传完成，失败的文件可重试或移除"); return false; }
     if (!training.audience?.type) { Toast.error("请选择学习范围"); setStep(0); return false; }
     if (!training.name.trim()) {
       Toast.error("请输入培训名称");

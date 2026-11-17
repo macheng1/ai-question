@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Banner, Button, Image, InputNumber, Modal, Space, Table, Toast, Upload, VideoPlayer } from "@douyinfe/semi-ui";
 
 import { VideoUploadStatus, type VideoUploadRow } from "./TrainingVideoUploadDialog";
+import { MaterialUploader } from "./MaterialUploader";
 import { videoPlaybackUrl } from "../video-playback";
 import { apiClient } from "@/lib/api/client";
 export type DraftMaterial = { file: File; descriptor?: File; sourceId?: number; sourceTrainingId?: string; kind: "videos" | "materials"; pageCount?: number; pages?: { pageNumber: number; requiredSeconds: number }[] };
@@ -21,7 +22,6 @@ export function TrainingDraftMaterials({ items, onChange, disabled, onBusyChange
   };
   const currentItems = useRef(items);
   currentItems.current = items;
-  const [inspecting, setInspecting] = useState(false);
   const [page, setPage] = useState(1);
   const [seconds, setSeconds] = useState(120);
   const [preview, setPreview] = useState<DraftMaterial | null>(null);
@@ -58,47 +58,16 @@ export function TrainingDraftMaterials({ items, onChange, disabled, onBusyChange
   useEffect(() => {
     if (preview && !items.some(item => item.file === preview.file)) setPreview(null);
   }, [items, preview]);
-  const inspect = async (item: DraftMaterial): Promise<DraftMaterial> => {
-    if (item.kind === "videos" || item.pages) return item;
-    const data = new FormData(); data.append("file", item.file);
-    const info = await apiClient.post<{ id: string; pageCount: number }>("/management/trainings/materials/prepare", data, { timeout: 300000 });
-    return { ...item, descriptor: new File([info.id], item.file.name, { type: "application/vnd.aiquestion.material-upload" }), pageCount: info.pageCount, pages: Array.from({ length: info.pageCount }, (_, index) => ({ pageNumber: index + 1, requiredSeconds: 120 })) };
+  const openPreview = (item: DraftMaterial) => {
+    setPreview({ ...item, pages: item.pages?.map(p => ({ ...p })) });
+    setPage(1); setSeconds(120);
   };
-  const openPreview = async (item: DraftMaterial) => {
-    setInspecting(true); onBusyChange(true);
-    try {
-      const prepared = await inspect(item);
-      if (prepared !== item) onChange(currentItems.current.map(row => row.file === item.file ? prepared : row));
-      setPreview({ ...prepared, pages: prepared.pages?.map(p => ({ ...p })) }); setPage(1); setSeconds(120);
-    } catch (e) { Toast.error(e instanceof Error ? e.message : "文件解析失败"); }
-    finally { setInspecting(false); onBusyChange(false); }
+  const append = (item: DraftMaterial) => {
+    currentItems.current = [...currentItems.current, item];
+    onChange(currentItems.current);
   };
-  const add = async (files: File[], kind: DraftMaterial["kind"]) => {
-    const added: DraftMaterial[] = [];
-    for (const file of Array.from(files || [])) {
-      const valid = kind === "videos" ? /\.(mp4|webm)$/i.test(file.name) : /\.(pdf|png|jpe?g)$/i.test(file.name);
-      const oversized = kind === "materials" && file.size > 20 * 1024 * 1024;
-      if (!valid || !file.size || oversized) {
-        Toast.error(`${file.name}：${oversized ? "单个材料不能超过20MB" : "请选择有效的文件格式"}`); continue;
-      }
-      if (currentItems.current.concat(added).some(item => item.file.name === file.name && item.file.size === file.size && item.file.lastModified === file.lastModified)) continue;
-      added.push({ file, kind });
-    }
-    if (!added.length) return;
-    if (kind === "videos") {
-      currentItems.current = [...currentItems.current, ...added];
-      onChange(currentItems.current);
-      return;
-    }
-    if (items.concat(added).filter(item => item.kind === "materials").reduce((sum, item) => sum + item.file.size, 0) > 190 * 1024 * 1024) {
-      Toast.error("本次上传的 PDF 和图片总大小不能超过 190MB，请减少文件后重试"); return;
-    }
-    setInspecting(true); onBusyChange(true);
-    try {
-      const prepared = await Promise.all(added.map(inspect));
-      onChange([...currentItems.current, ...prepared]);
-    } finally { setInspecting(false); onBusyChange(false); }
-  };
+  const exists = (file: File) => currentItems.current.some(item =>
+    item.file.name === file.name && item.file.size === file.size && item.file.lastModified === file.lastModified);
   const move = (item: DraftMaterial, offset: number) => {
     const group = items.filter(row => row.kind === item.kind);
     const target = group[group.indexOf(item) + offset];
@@ -107,15 +76,15 @@ export function TrainingDraftMaterials({ items, onChange, disabled, onBusyChange
     [next[a], next[b]] = [next[b], next[a]]; onChange(next);
   };
   const actions = (item: DraftMaterial, group: DraftMaterial[]) => <Space>
-    <Button theme="borderless" disabled={disabled || inspecting} onClick={() => void openPreview(item)}>{item.kind === "videos" ? "预览" : "设置时长"}</Button>
-    <Button disabled={disabled || inspecting || group[0] === item} onClick={() => move(item, -1)}>上移</Button>
-    <Button disabled={disabled || inspecting || group[group.length - 1] === item} onClick={() => move(item, 1)}>下移</Button>
-    <Button type="danger" theme="borderless" disabled={disabled || inspecting} onClick={() => onChange(items.filter(row => row !== item))}>删除</Button>
+    <Button theme="borderless" disabled={disabled} onClick={() => void openPreview(item)}>{item.kind === "videos" ? "预览" : "设置时长"}</Button>
+    <Button disabled={disabled || group[0] === item} onClick={() => move(item, -1)}>上移</Button>
+    <Button disabled={disabled || group[group.length - 1] === item} onClick={() => move(item, 1)}>下移</Button>
+    <Button type="danger" theme="borderless" disabled={disabled} onClick={() => onChange(items.filter(row => row !== item))}>删除</Button>
   </Space>;
-  return <section className="flex flex-col gap-6" aria-label="培训材料">
+  return <section className="flex w-full min-w-0 flex-col gap-6" aria-label="培训材料">
     {(["videos", "materials"] as const).map(kind => {
       const group = items.filter(item => item.kind === kind);
-      return <div key={kind} className="flex flex-col gap-3">
+      return <div key={kind} className="flex w-full min-w-0 flex-col gap-3">
         {kind === "materials" && <strong>PDF / 图片材料</strong>}
         <p className="text-sm text-slate-500">{kind === "videos"
           ? "上传 MP4 / WebM 视频，选好后即开始上传，可继续填写培训信息。"
@@ -130,15 +99,28 @@ export function TrainingDraftMaterials({ items, onChange, disabled, onBusyChange
             {actions(item, group)}
           </li>)}</ul>
           {!group.length && <p className="text-slate-500">暂无视频。</p>}
-        </> : <Table<{ material: DraftMaterial; key: number }> rowKey="key" dataSource={group.map(item => ({ material: item, key: rowKey(item) }))} pagination={false} scroll={{ x: 650 }} columns={[
-          { title: "材料", width: 200, render: (_, row) => row.material.file.name },
+        </> : <div className="w-full overflow-x-auto"><Table<{ material: DraftMaterial; key: number }> rowKey="key" dataSource={group.map(item => ({ material: item, key: rowKey(item) }))} pagination={false} style={{ width: "100%", minWidth: 650 }} columns={[
+          { title: "材料", render: (_, row) => row.material.file.name },
           { title: "页数", width: 120, render: (_, row) => row.material.pageCount ?? (/\.pdf$/i.test(row.material.file.name) ? "点击预览识别" : 1) },
           { title: "操作", width: 380, render: (_, item) => actions(item.material, group) },
-        ]} />}
-        <Upload aria-label={kind === "videos" ? "上传培训视频" : "上传PDF / 图片"} disabled={disabled || inspecting} accept={kind === "videos" ? ".mp4,.webm" : ".pdf,.png,.jpg,.jpeg"} fileList={[]} showUploadList={false}
-          customRequest={async ({ fileInstance, onSuccess, onError }) => { try { await add([fileInstance], kind); onSuccess({}); } catch (e) { Toast.error(e instanceof Error ? e.message : "文件解析失败"); onError({}); } }}>
-          <Button disabled={disabled || inspecting} loading={inspecting}>{kind === "videos" ? "上传培训视频" : "上传PDF / 图片"}</Button>
-        </Upload>
+        ]} /></div>}
+        {kind === "videos" ? <Upload aria-label="上传培训视频" disabled={disabled} accept=".mp4,.webm" fileList={[]} showUploadList={false}
+          customRequest={({ fileInstance: file, onSuccess, onError }) => {
+            if (!file.size || !/\.(mp4|webm)$/i.test(file.name)) { Toast.error("请选择有效的视频文件"); onError({}); return; }
+            if (!exists(file)) append({ file, kind });
+            onSuccess({});
+          }}>
+          <Button disabled={disabled}>上传培训视频</Button>
+        </Upload> : <MaterialUploader<{ id: string; pageCount: number }> endpoint="/management/trainings/materials/prepare"
+          disabled={disabled} onPending={onBusyChange} validate={file => {
+            if (exists(file)) throw new Error("此文件已添加");
+            const bytes = currentItems.current.filter(item => item.kind === "materials").reduce((sum, item) => sum + item.file.size, file.size);
+            if (bytes > 190 * 1024 * 1024) throw new Error("本次上传的 PDF 和图片总大小不能超过 190MB");
+          }} onUploaded={(file, info) => append({ file, kind, pageCount: info.pageCount,
+            descriptor: new File([info.id], file.name, { type: "application/vnd.aiquestion.material-upload" }),
+            pages: Array.from({ length: info.pageCount }, (_, index) => ({ pageNumber: index + 1, requiredSeconds: 120 })),
+          })} />}
+
       </div>;
     })}
     <Modal title={preview ? `材料预览：${preview.file.name}` : "材料预览"} visible={!!preview}
