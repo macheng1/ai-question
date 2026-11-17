@@ -50,6 +50,10 @@ public class FileStorageService {
     providerFor(reference).put(file, file.getContentType(), objectKey(reference));
   }
 
+  public VideoMultipartStorage videoMultipart(String reference) {
+    return providerFor(reference) instanceof VideoMultipartStorage multipart ? multipart : null;
+  }
+
   public String reservePreview(String original) {
     return ("aliyun".equals(providerFor(original).provider()) ? "oss:" : "eds:")
         + "training-previews/" + UUID.randomUUID() + ".png";

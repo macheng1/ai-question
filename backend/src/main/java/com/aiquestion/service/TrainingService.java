@@ -13,10 +13,12 @@ public class TrainingService {
 
     private final TrainingRepository persistence;
 
+    private final TrainingVideoStorage videoStorage;
     private final ObjectMapper json;
     private final TrainingExamService exams;
 
-    public TrainingService(TrainingRepository persistence, ObjectMapper json, AssessmentRosterService assessmentRosterService, TrainingAudienceService trainingAudienceService, TrainingExamService exams) {
+    public TrainingService(TrainingRepository persistence, ObjectMapper json, AssessmentRosterService assessmentRosterService, TrainingAudienceService trainingAudienceService, TrainingExamService exams, TrainingVideoStorage videoStorage) {
+        this.videoStorage = videoStorage;
         this.exams = exams;
         this.persistence = persistence;
         this.json = json;
@@ -274,6 +276,7 @@ public class TrainingService {
 
     @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public void delete(long id, long user) {
+        trainingAudienceService.lockAllocationOwner(user);
         var existing = row(id, false);
         owner(existing, user);
         Long previousAssessment = assessmentId(existing);
@@ -294,7 +297,9 @@ public class TrainingService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "已有学习记录，不能删除培训");
         if (com.aiquestion.repository.RepositoryRows.one(persistence.countMaterials(id)) > 0)
             throw new BusinessException(ErrorCode.BAD_REQUEST, "请先删除培训材料，再删除培训");
+        var paths = new LinkedHashSet<>(persistence.findVideoStoragePaths(id));
         persistence.deleteTraining(id);
+        paths.forEach(path -> cleanupUnreferencedVideo(path, "training_deleted"));
         if (previousAssessment != null) exams.retireIfUnlinked(previousAssessment);
         Long copiedAssessment = copiedAssessmentId(r);
         if (copiedAssessment != null)
@@ -432,14 +437,15 @@ public class TrainingService {
         persistence.insertVideo(id, title, path, type);
     }
 
-    @Transactional
-    public String removeVideo(long id, long video, long user) {
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
+    public void removeVideo(long id, long video, long user) {
+        trainingAudienceService.lockAllocationOwner(user);
         owner(row(id, true), user);
         var data = video(id, video);
         if (com.aiquestion.repository.RepositoryRows.one(persistence.countCandidateVideoProgress(video)) > 0 || com.aiquestion.repository.RepositoryRows.one(persistence.countAdministratorVideoProgress(video)) > 0)
             throw new BusinessException(ErrorCode.BAD_REQUEST, "已有学习记录，不能删除视频");
         persistence.deleteVideo(video, id);
-        return data.get("storage_path").toString();
+        cleanupUnreferencedVideo(data.get("storage_path").toString(), "video_removed");
     }
 
     @Transactional
@@ -451,9 +457,9 @@ public class TrainingService {
         for (int i = 0; i < ids.size(); i++) persistence.updateVideoOrder(i, id, ids.get(i));
     }
 
-    public List<String> videoFiles(long id, long user) {
-        owner(row(id, false), user);
-        return persistence.findVideoStoragePaths(id);
+    private void cleanupUnreferencedVideo(String path, String reason) {
+        // Copies belong to the same owner. Copy and both delete paths hold that owner's allocation lock.
+        if (!persistence.hasVideoReference(path)) videoStorage.deleteAfterCommit(path, reason);
     }
 
     private final AssessmentRosterService assessmentRosterService;

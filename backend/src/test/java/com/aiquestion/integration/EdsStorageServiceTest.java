@@ -49,6 +49,22 @@ class EdsStorageServiceTest {
     } finally { server.stop(0); }
   }
 
+  @Test void multipartCompletionAllowsSdkToSortPartTags() {
+    var client = mock(AmazonS3.class);
+    var storage = new EdsStorageService(new EdsProperties("https://eds.example", "bucket", "key", "secret", "")) {
+      @Override protected AmazonS3 createClient() { return client; }
+    };
+    when(client.completeMultipartUpload(any())).thenAnswer(call -> {
+      var tags = call.<com.amazonaws.services.s3.model.CompleteMultipartUploadRequest>getArgument(0).getPartETags();
+      tags.sort(java.util.Comparator.comparingInt(com.amazonaws.services.s3.model.PartETag::getPartNumber));
+      assertEquals(1, tags.get(0).getPartNumber());
+      return null;
+    });
+    storage.finishVideo("key", "upload", java.util.List.of(
+        new com.aiquestion.storage.VideoMultipartStorage.Part(2, 12, "b"),
+        new com.aiquestion.storage.VideoMultipartStorage.Part(1, 8388608, "a")));
+  }
+
   @Test void uploadFailureLogsStorageDetailsAndRedactsCredentials() {
     var logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(EdsStorageService.class);
     var appender = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();

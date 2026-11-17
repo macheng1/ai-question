@@ -43,7 +43,7 @@ class TrainingDisabledSurveyTest {
         var repository = mock(TrainingRepository.class);
         var audience = mock(TrainingAudienceService.class);
         var json = new ObjectMapper();
-        var service = spy(new TrainingService(repository, json, mock(AssessmentRosterService.class), audience, mock(TrainingExamService.class)));
+        var service = spy(new TrainingService(repository, json, mock(AssessmentRosterService.class), audience, mock(TrainingExamService.class), mock(TrainingVideoStorage.class)));
         doReturn(Map.of()).when(service).get(1L, 2L);
         var questions = List.of(new TrainingSurveyRules.Question("q1", "TEXT", "评价", false, List.of()));
         var stored = json.writeValueAsString(questions);

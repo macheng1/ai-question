@@ -104,3 +104,6 @@ storage:
 logging:
   pattern:
     level: "%5p [traceId=%X{traceId:-}]"
+
+training:
+  video-browser-direct: ${TRAINING_VIDEO_BROWSER_DIRECT:false}

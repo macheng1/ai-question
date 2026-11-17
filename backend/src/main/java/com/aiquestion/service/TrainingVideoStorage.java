@@ -8,6 +8,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.*;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 import java.nio.file.*;
 import java.util.Map;
@@ -70,6 +72,31 @@ public class TrainingVideoStorage {
         log.info("video event=playback_resource source=legacy");
         return response.body(new FileSystemResource(file));
     }
+    void deleteAfterCommit(String key, String reason) {
+        TransactionSynchronizationManager.registerSynchronization(
+            new TransactionSynchronization() {
+                @Override public void afterCommit() {
+                    try {
+                        delete(key);
+                        log.info("video event=object_cleanup object={} reason={} result=ok", VideoLog.id(key), reason);
+                    } catch (RuntimeException ex) {
+                        log.warn("video event=object_cleanup object={} reason={} result=failed error={}", VideoLog.id(key), reason, VideoLog.error(ex));
+                    }
+                }
+            });
+    }
+
+    void abortMultipart(String reference, String upload) {
+        String key = validatedKey(reference).substring(4);
+        var provider = oss.videoMultipart(reference);
+        if (upload != null) {
+            provider.abortVideo(key, upload);
+        } else {
+            // An initiation may have succeeded just before a process exited or the response was lost.
+            for (String pending : provider.pendingVideoUploads(key)) provider.abortVideo(key, pending);
+        }
+    }
+
     public void delete(String key) {
         if (key.startsWith("oss:") || key.startsWith("eds:")) {
             validatedKey(key);

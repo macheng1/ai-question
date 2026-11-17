@@ -20,7 +20,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class RequestLogFilter extends OncePerRequestFilter {
   private static final Logger log = LoggerFactory.getLogger(RequestLogFilter.class);
-  private static final Pattern UPLOAD_ID = Pattern.compile("(/management/video-uploads/)([^/]+)");
+  private static final Pattern UPLOAD_ID = Pattern.compile("(/management/video-uploads/(?:direct/)?)(?!direct$)([^/]+)");
   private static final Pattern MATRIX_PARAMETERS = Pattern.compile(";[^/]*");
   private static final Pattern VIDEO_CONTENT = Pattern.compile("/video-playback/([0-9]+)$");
   private static final Pattern BYTE_RANGE = Pattern.compile("(?i:bytes)(?:=| )[0-9,*/ -]+");

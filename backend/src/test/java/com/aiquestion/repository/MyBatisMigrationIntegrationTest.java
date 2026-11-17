@@ -149,6 +149,52 @@ class MyBatisMigrationIntegrationTest {
     assertEquals(paperCount, jdbc.queryForObject("SELECT COUNT(*) FROM test_paper WHERE created_by=?", Long.class, owner));
   }
 
+  @Test void sharedVideoHasIndependentProgressAndOnlyFinalCommittedRemovalDeletesFile() throws Exception {
+    long source = createTraining(null, true);
+    String path = "oss:training-videos/" + UUID.randomUUID() + ".mp4";
+    trainings.addVideo(source, owner, "课程", path, "video/mp4");
+    long sourceVideo = jdbc.queryForObject("SELECT id FROM training_video WHERE training_id=?", Long.class, source);
+    jdbc.update("INSERT INTO training_video_progress(video_id,user_id,position_seconds,completed) VALUES(?,?,30,true)", sourceVideo, owner);
+    long copy = ((Number) copies.copy(source, owner).get("id")).longValue();
+    long copyVideo = jdbc.queryForObject("SELECT id FROM training_video WHERE training_id=? AND storage_path=?", Long.class, copy, path);
+    assertNotEquals(sourceVideo, copyVideo);
+    assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM training_video_progress WHERE video_id=?", Integer.class, copyVideo));
+    long secondCopy = ((Number) copies.copy(copy, owner).get("id")).longValue();
+    trainings.removeVideo(copy, copyVideo, owner);
+    trainings.delete(source, owner);
+    assertEquals(path, jdbc.queryForObject("SELECT storage_path FROM training_video WHERE training_id=?", String.class, secondCopy));
+    verifyNoInteractions(storage, files);
+    var transaction = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+    transaction.executeWithoutResult(status -> {
+      trainings.delete(secondCopy, owner);
+      status.setRollbackOnly();
+    });
+    assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM training_video WHERE training_id=?", Integer.class, secondCopy));
+    verifyNoInteractions(storage);
+    trainings.delete(secondCopy, owner);
+    verify(storage).delete(path);
+  }
+
+  @Test void concurrentRemovalOfSourceAndCopyCleansSharedVideoOnce() throws Exception {
+    long source = createTraining(null, true);
+    String path = "eds:training-videos/" + UUID.randomUUID() + ".mp4";
+    trainings.addVideo(source, owner, "课程", path, "video/mp4");
+    long copy = ((Number) copies.copy(source, owner).get("id")).longValue();
+    long video = jdbc.queryForObject("SELECT id FROM training_video WHERE training_id=?", Long.class, copy);
+    var pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+    var start = new java.util.concurrent.CyclicBarrier(2);
+    try {
+      var removeSource = pool.submit(() -> { start.await(); trainings.delete(source, owner); return null; });
+      var removeCopy = pool.submit(() -> { start.await(); trainings.removeVideo(copy, video, owner); return null; });
+      removeSource.get(15, java.util.concurrent.TimeUnit.SECONDS);
+      removeCopy.get(15, java.util.concurrent.TimeUnit.SECONDS);
+    } finally {
+      pool.shutdownNow();
+    }
+    assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM training_video WHERE storage_path=?", Integer.class, path));
+    verify(storage).delete(path);
+  }
+
   @Test void copyFailureRollsBackDatabaseRowsAndDeletesOnlyNewFiles() throws Exception {
     long training = createTraining(createExam(), true);
     material(training);
@@ -1172,7 +1218,6 @@ class MyBatisMigrationIntegrationTest {
     long source = createTraining(null, false);
     trainings.addVideo(source, owner, "original.mp4", "old.mp4", "video/mp4");
     long video = jdbc.queryForObject("SELECT id FROM training_video WHERE training_id=?", Long.class, source);
-    when(files.copyVideo(anyMap())).thenReturn("eds:training-videos/copied.mp4");
     when(storage.uploadMaterial(any(), anyString(), anyString(), anyString())).thenReturn("eds:training-videos/22222222-2222-2222-2222-222222222222.mp4");
     var upload = new org.springframework.mock.web.MockMultipartFile("files", "new.mp4", "video/mp4", new byte[]{0,0,0,12,'f','t','y','p',0,0,0,0});
     var request = new TrainingCopyService.CopyRequest(((Number) trainings.get(source, owner).get("version")).intValue(), json.convertValue(trainingCommand(null, false), TrainingService.SaveTraining.class));
@@ -1180,6 +1225,7 @@ class MyBatisMigrationIntegrationTest {
       new TrainingCopyService.MaterialSelection("videos", null, 0, null),
       new TrainingCopyService.MaterialSelection("videos", video, null, null)), List.of(upload), authorization);
     assertEquals(List.of("new.mp4", "original.mp4"), jdbc.queryForList("SELECT title FROM training_video WHERE training_id=? ORDER BY sort_order,id", String.class, result.get("id")));
+    assertEquals("old.mp4", jdbc.queryForObject("SELECT storage_path FROM training_video WHERE training_id=? AND title='original.mp4'", String.class, result.get("id")));
     assertEquals(List.of("old.mp4"), jdbc.queryForList("SELECT storage_path FROM training_video WHERE training_id=?", String.class, source));
   }
 

@@ -12,7 +12,7 @@ class TrainingCopiedExamLifecycleTest {
   private final TrainingRepository repository = mock(TrainingRepository.class);
   private final AssessmentRosterService roster = mock(AssessmentRosterService.class);
   private final TrainingAudienceService audiences = mock(TrainingAudienceService.class);
-  private final TrainingService service = spy(new TrainingService(repository, new ObjectMapper(), roster, audiences, mock(TrainingExamService.class)));
+  private final TrainingService service = spy(new TrainingService(repository, new ObjectMapper(), roster, audiences, mock(TrainingExamService.class), mock(TrainingVideoStorage.class)));
 
   private void training(boolean generated) {
     Map<String, Object> row = new HashMap<>();

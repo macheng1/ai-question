@@ -56,11 +56,10 @@ export function TrainingVideos({ id, readOnly = false }: { id: number; readOnly?
       customRequest={async ({ fileInstance, onProgress, onSuccess, onError }) => {
         setBusy(true);
         try {
-          const descriptor = await prepareDraftVideo(fileInstance, ({ phase, totalBytes, uploadedBytes, storedBytes = 0 }) => {
-            // A byte travels twice: from the browser to the server, then from the server to storage.
-            onProgress({ total: totalBytes * 2, loaded: uploadedBytes + storedBytes });
-            if (phase === "uploading") setUploadStatus(`上传到服务器 ${Math.floor(uploadedBytes / totalBytes * 100)}%`);
-            if (phase === "storing") setUploadStatus(storedBytes === totalBytes ? "正在确认存储并准备播放缓存…" : `写入对象存储 ${Math.floor(storedBytes / totalBytes * 100)}%`);
+          const descriptor = await prepareDraftVideo(fileInstance, ({ phase, totalBytes, confirmedBytes = 0, waitingForStorage }) => {
+            onProgress({ total: totalBytes, loaded: phase === "uploading" ? confirmedBytes : totalBytes });
+            if (phase === "uploading") setUploadStatus(`${waitingForStorage ? "正在等待存储确认" : "正在上传视频"} · 已确认 ${Math.floor(confirmedBytes / totalBytes * 100)}%`);
+            if (phase === "storing") setUploadStatus("正在确认视频完整性…");
             if (phase === "ready") setUploadStatus("正在保存到培训…");
           });
           const form = new FormData();

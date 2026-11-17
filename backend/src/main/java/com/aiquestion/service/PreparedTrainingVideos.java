@@ -102,6 +102,7 @@ public class PreparedTrainingVideos {
                 transaction.executeWithoutResult(tx -> {
                     Ticket ticket = repository.lock(id);
                     if (ticket == null || ticket.expires() > System.currentTimeMillis()) return;
+                    if ("DIRECT".equals(ticket.phase())) storage.abortMultipart(ticket.key(), repository.multipartId(id));
                     storage.delete(ticket.key());
                     repository.remove(id);
                 });

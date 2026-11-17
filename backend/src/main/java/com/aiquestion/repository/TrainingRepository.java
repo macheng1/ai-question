@@ -84,5 +84,7 @@ public interface TrainingRepository {
   List<Map<String, Object>> findReviewVideos(@Param("trainingId") Long trainingId);
   List<Long> findVideoIds(@Param("trainingId") Long trainingId);
   int updateVideoOrder(@Param("sortOrder") int sortOrder, @Param("trainingId") Long trainingId, @Param("videoId") Long videoId);
+  boolean hasVideoReference(@Param("path") String path);
+
   List<String> findVideoStoragePaths(@Param("trainingId") Long trainingId);
 }

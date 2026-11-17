@@ -150,9 +150,7 @@ public class TrainingEndpointService {
 
     public ApiResponse<?> delete(long id, String auth) {
         long uid = user(auth);
-        var keys = service.videoFiles(id, uid);
         service.delete(id, uid);
-        keys.forEach(key -> cleanupVideo(key, "training_deleted"));
         return ApiResponse.ok(null);
     }
 
@@ -245,8 +243,7 @@ public class TrainingEndpointService {
     }
 
     public ApiResponse<?> removeVideo(long id, long video, String auth) {
-        String key = service.removeVideo(id, video, user(auth));
-        cleanupVideo(key, "video_removed");
+        service.removeVideo(id, video, user(auth));
         return ApiResponse.ok(null);
     }
 

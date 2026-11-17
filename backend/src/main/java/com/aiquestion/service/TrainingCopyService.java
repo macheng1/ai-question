@@ -46,6 +46,7 @@ public class TrainingCopyService {
 
     @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> copy(long sourceId, long userId) {
+        eligibility.lockAllocationOwner(userId);
         var source = trainings.get(sourceId, userId);
         Long originalExam = source.get("assessmentId") instanceof Number id ? id.longValue() : null;
         // 与培训编辑保持相同锁顺序：先考试，后培训。
@@ -65,7 +66,7 @@ public class TrainingCopyService {
         registerRollbackCleanup(copiedObjects, newId);
         // 空的指定人员范围使副本在重新选人前不可学习，也不会自动分配。
         persistence.resetAudience(newId);
-        copyVideos(sourceId, newId, copiedObjects);
+        copyVideos(sourceId, newId);
         copyMaterials(sourceId, newId, copiedObjects);
         return trainings.get(newId, userId);
     }
@@ -104,7 +105,7 @@ public class TrainingCopyService {
         List<String> copiedObjects = new ArrayList<>();
         registerRollbackCleanup(copiedObjects, newId);
         if (selection == null) {
-            copyVideos(sourceId, newId, copiedObjects);
+            copyVideos(sourceId, newId);
             copyMaterials(sourceId, newId, copiedObjects);
         } else {
             copySelected(sourceId, newId, userId, selection, uploads, auth, copiedObjects);
@@ -129,13 +130,14 @@ public class TrainingCopyService {
                 var source = (video ? persistence.findSourceVideos(sourceId) : persistence.findSourceMaterials(sourceId)).stream()
                     .filter(row -> ((Number) row.get("id")).longValue() == item.sourceId()).findFirst()
                     .orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "原培训材料已变更，请刷新后重试"));
-                String key = video ? files.copyVideo(source) : files.copyMaterial(source);
-                keys.add(key);
                 if (video) {
+                    String key = (String) source.get("storage_path");
                     persistence.insertVideo(newId, (String) source.get("title"), key, (String) source.get("content_type"), 0);
                     log.info("video event=copy_associate training={} sourceTraining={} object={} result=linked", newId, sourceId, VideoLog.id(key));
                     addedId = persistence.findSourceVideos(newId).stream().mapToLong(row -> ((Number) row.get("id")).longValue()).max().orElseThrow();
                 } else {
+                    String key = files.copyMaterial(source);
+                    keys.add(key);
                     var generated = new com.aiquestion.repository.GeneratedId();
                     persistence.insertMaterial(newId, (String) source.get("title"), (String) source.get("material_type"), key, ((Number) source.get("page_count")).intValue(), 0, generated);
                     addedId = generated.getId();
@@ -161,10 +163,9 @@ public class TrainingCopyService {
         materials.reorder(newId, userId, materialIds);
     }
 
-    private void copyVideos(long sourceId, long newId, List<String> keys) {
+    private void copyVideos(long sourceId, long newId) {
         for (var video : persistence.findSourceVideos(sourceId)) {
-            String key = files.copyVideo(video);
-            keys.add(key);
+            String key = (String) video.get("storage_path");
             persistence.insertVideo(newId, (String) video.get("title"), key, (String) video.get("content_type"), ((Number) video.get("sort_order")).intValue());
             log.info("video event=copy_associate training={} sourceTraining={} object={} result=linked", newId, sourceId, VideoLog.id(key));
         }
@@ -185,20 +186,12 @@ public class TrainingCopyService {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCompletion(int status) {
+                if (status == STATUS_COMMITTED) return;
                 for (String key : keys) {
-                    boolean video = key.contains("training-videos/");
-                    if (video) log.info("video event=copy_transaction training={} object={} txStatus={} result={}",
-                            training, VideoLog.id(key), status, status == STATUS_COMMITTED ? "committed" : "uncommitted");
-                    if (status == STATUS_COMMITTED) continue;
-                    long start = System.nanoTime();
                     try {
                         storage.delete(key);
-                        if (video) log.info("video event=object_cleanup training={} object={} reason=copy_rollback result=ok elapsedMs={}",
-                                training, VideoLog.id(key), VideoLog.elapsedMs(start));
                     } catch (RuntimeException ex) {
-                        if (video) log.warn("video event=object_cleanup training={} object={} reason=copy_rollback result=failed error={} elapsedMs={}",
-                                training, VideoLog.id(key), VideoLog.error(ex), VideoLog.elapsedMs(start));
-                        else log.warn("培训材料复制回滚后清理对象失败 object={} error={}", VideoLog.id(key), VideoLog.error(ex));
+                        log.warn("培训材料复制回滚后清理对象失败 training={} object={} error={}", training, VideoLog.id(key), VideoLog.error(ex));
                     }
                 }
             }

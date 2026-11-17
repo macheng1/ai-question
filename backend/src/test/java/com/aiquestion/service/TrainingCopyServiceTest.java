@@ -56,11 +56,10 @@ class TrainingCopyServiceTest {
   @Test void rollbackDeletesOnlyNewObjects() {
     var video = Map.<String,Object>of("id", 7L, "title", "视频", "storage_path", "oss:old", "content_type", "video/mp4", "sort_order", 0);
     when(repository.findSourceVideos(1L)).thenReturn(List.of(video));
-    when(files.copyVideo(video)).thenReturn("oss:new");
     service.copy(1L, 2L);
     TransactionSynchronizationManager.getSynchronizations().forEach(s -> s.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK));
-    verify(storage).delete("oss:new");
-    verify(storage, never()).delete("oss:old");
+    verify(repository).insertVideo(100L, "视频", "oss:old", "video/mp4", 0);
+    verifyNoInteractions(files, storage);
   }
 
   @Test void materialCopiesEveryPageTimingWithNewMaterialId() {

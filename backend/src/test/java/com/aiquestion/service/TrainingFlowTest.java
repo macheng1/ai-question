@@ -12,7 +12,7 @@ class TrainingFlowTest {
   private final TrainingRepository repository = mock(TrainingRepository.class);
   private final TrainingAudienceRepository audienceRepository = mock(TrainingAudienceRepository.class);
   private final TrainingAudienceService audience = new TrainingAudienceService(audienceRepository, mock(TrainingEligibilityService.class));
-  private final TrainingService service = new TrainingService(repository, new ObjectMapper(), mock(AssessmentRosterService.class), audience, mock(TrainingExamService.class));
+  private final TrainingService service = new TrainingService(repository, new ObjectMapper(), mock(AssessmentRosterService.class), audience, mock(TrainingExamService.class), mock(TrainingVideoStorage.class));
 
   @org.junit.jupiter.params.ParameterizedTest
   @org.junit.jupiter.params.provider.ValueSource(booleans = {true, false})

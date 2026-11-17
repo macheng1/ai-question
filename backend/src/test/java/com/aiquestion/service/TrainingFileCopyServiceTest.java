@@ -30,7 +30,7 @@ class TrainingFileCopyServiceTest {
       return null;
     }).when(provider).put(any(), anyString(), anyString());
     doAnswer(call -> { objects.remove(call.getArgument(0)); return null; }).when(provider).delete(anyString());
-    var files = new TrainingFileCopyService(storage, mock(TrainingVideoStorage.class));
+    var files = new TrainingFileCopyService(storage);
     String copied = files.copyMaterial(Map.of("storage_key", "oss:training-materials/original.pdf", "material_type", "PDF"));
     assertNotEquals("oss:training-materials/original.pdf", copied);
     assertArrayEquals(original, objects.get(copied.substring(4)));

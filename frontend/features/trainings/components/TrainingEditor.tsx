@@ -73,10 +73,20 @@ export function TrainingEditor({ id, copyFrom, initialPaperId }: { id?: string; 
   });
   const [loading, setLoading] = useState(Boolean(id || copyFrom));
   const [error, setError] = useState("");
-  const [uploadRows, setUploadRows] = useState<VideoUploadRow[] | null>(null);
-  const uploadController = useRef<AbortController | null>(null);
-  useEffect(() => () => uploadController.current?.abort(), []);
-  const [uploading, setUploading] = useState(false);
+  const [uploadRows, setUploadRows] = useState<VideoUploadRow[]>([]);
+  const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const uploads = useRef(new Map<File, { controller: AbortController; result: Promise<File | undefined> }>());
+  const uploadQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const saveAttempt = useRef<symbol | null>(null);
+  useEffect(() => {
+    const jobs = uploads.current;
+    return () => {
+      saveAttempt.current = null;
+      for (const job of jobs.values()) job.controller.abort();
+      jobs.clear();
+    };
+  }, []);
   const [saveError, setSaveError] = useState("");
   const [busy, setBusy] = useState(false);
   const [audienceError, setAudienceError] = useState("正在检查学员资格，请稍候");
@@ -221,36 +231,41 @@ export function TrainingEditor({ id, copyFrom, initialPaperId }: { id?: string; 
     }
     setStep(next);
   };
-  const prepareRows = async (rows: VideoUploadRow[]) => {
-    if (savingRef.current) return;
-    savingRef.current = true;
+  const startUpload = (file: File) => {
     const controller = new AbortController();
-    uploadController.current = controller;
-    setUploading(true);
-    setUploadRows(rows);
-    setSaveError("");
-    const update = (file: File, patch: Partial<VideoUploadRow>) =>
-      setUploadRows(current => current?.map(row => row.file === file ? { ...row, ...patch } : row) ?? null);
-    try {
-      for (const row of rows) {
-        if (controller.signal.aborted) break;
-        if (row.phase === "ready") continue;
-        try {
-          update(row.file, { phase: "uploading", message: undefined });
-          const descriptor = await prepareDraftVideo(row.file, progress => { if (!controller.signal.aborted) update(row.file, progress); }, controller.signal);
-          update(row.file, { phase: "ready", descriptor });
-        } catch (e) {
-          if (controller.signal.aborted) break;
-          update(row.file, { phase: "failed", message: e instanceof Error ? e.message : "上传失败，请重试" });
-        }
+    const initial: VideoUploadRow = { file, phase: "waiting", uploadedBytes: 0 };
+    setUploadRows(rows => [...rows.filter(row => row.file !== file), initial]);
+    const update = (patch: Partial<VideoUploadRow>) => {
+      if (!controller.signal.aborted) {
+        setUploadRows(rows => rows.map(row => row.file === file ? { ...row, ...patch } : row));
       }
-    } finally {
-      savingRef.current = false;
-      uploadController.current = null;
-      setUploading(false);
-    }
+    };
+    const result = uploadQueue.current.then(async () => {
+      if (controller.signal.aborted) return;
+      try {
+        return await prepareDraftVideo(file, update, controller.signal);
+      } catch (e) {
+        update({ phase: "failed", message: e instanceof Error ? e.message : "上传失败，请重试" });
+      }
+    });
+    uploads.current.set(file, { controller, result });
+    uploadQueue.current = result;
+    return result;
   };
-  const save = async (confirmed = false) => {
+  const changeDraftMaterials = (items: DraftMaterial[]) => {
+    const files = new Set(items.filter(item => item.kind === "videos" && !item.sourceId).map(item => item.file));
+    for (const [file, job] of uploads.current) {
+      if (!files.has(file)) {
+        job.controller.abort();
+        uploads.current.delete(file);
+      }
+    }
+    setUploadRows(rows => rows.filter(row => files.has(row.file)));
+    for (const file of files) if (!uploads.current.has(file)) startUpload(file);
+    setDraftMaterials(items);
+    setDirty(true);
+  };
+  const save = async (retryFailed = false) => {
     if (addingRef.current || savingRef.current || busy || loading || error) return;
     if (!validateTraining()) return;
     const examError = validateTrainingExam(training.exam ? { ...training.exam, startAt: training.startAt ?? null, endAt: training.endAt ?? null } : undefined);
@@ -279,16 +294,26 @@ export function TrainingEditor({ id, copyFrom, initialPaperId }: { id?: string; 
       Toast.error("请先设置材料阅读时长"); setStep(0); return;
     }
     const newVideos = draftMaterials.filter(item => item.kind === "videos" && !item.sourceId);
-    if (!training.id && newVideos.length && !confirmed) {
-      await prepareRows(newVideos.map(({ file }) => ({ file, phase: "waiting", uploadedBytes: 0 })));
-      return;
-    }
-    const descriptors = new Map(uploadRows?.map(row => [row.file, row.descriptor]));
-    if (newVideos.some(item => !descriptors.get(item.file))) return;
     savingRef.current = true;
+    const attempt = Symbol();
+    saveAttempt.current = attempt;
     setSaveError("");
     setBusy(true);
+    setShowUploadDialog(newVideos.some(({ file }) => !uploadRows.some(row => row.file === file && row.phase === "ready")));
+    let videosReady = false;
     try {
+      const descriptors = new Map<File, File>();
+      await Promise.all(newVideos.map(async ({ file }) => {
+        const failed = uploadRows.some(row => row.file === file && row.phase === "failed");
+        const job = retryFailed && failed ? startUpload(file) : uploads.current.get(file)?.result ?? startUpload(file);
+        const descriptor = await job;
+        if (!descriptor) throw new Error("视频未就绪，请重试失败视频，或返回编辑后移除。");
+        descriptors.set(file, descriptor);
+      }));
+      if (saveAttempt.current !== attempt) return;
+      videosReady = true;
+      setShowUploadDialog(false);
+      setSubmitting(true);
       const payload = { ...training, exam: training.exam ? { ...training.exam, startAt: training.startAt ?? null, endAt: training.endAt ?? null } : undefined };
       let prepared: Training | undefined;
       if (!training.id && !copyFrom && draftMaterials.length) {
@@ -313,26 +338,34 @@ export function TrainingEditor({ id, copyFrom, initialPaperId }: { id?: string; 
         prepared = await apiClient.post<Training>(`/management/trainings/${copyFrom}/copy-with-materials`, data, { timeout: 0 });
       }
       const saved = prepared || await saveTraining(training.id || undefined, payload);
+      if (saveAttempt.current !== attempt) return;
       savedScope.current = scopeKey(saved);
       setTraining(saved);
       setDirty(false);
       setDraftMaterials([]);
-      setUploadRows(null);
+      uploads.current.clear();
+      setUploadRows([]);
+      setShowUploadDialog(false);
       Toast.success(copyFrom && !training.id ? "培训复制成功" : "培训已保存");
       router.replace("/profile/trainings");
     } catch (e) {
+      if (saveAttempt.current !== attempt) return;
       forgetExpiredUploads(e, draftMaterials.map(item => item.file));
       const message = e instanceof Error ? e.message : "保存失败";
-      if (uploadRows) {
+      if (newVideos.length && (!videosReady || (e instanceof ApiError && e.code === "VIDEO_UPLOAD_EXPIRED"))) {
+        setShowUploadDialog(true);
         setSaveError(message);
         if (e instanceof ApiError && e.code === "VIDEO_UPLOAD_EXPIRED") {
-          setUploadRows(uploadRows.map(row => ({ file: row.file, phase: "failed", uploadedBytes: 0, message: "暂存已过期，请重试" })));
+          for (const { file } of newVideos) uploads.current.delete(file);
+          setUploadRows(rows => rows.map(row => ({ file: row.file, phase: "failed", uploadedBytes: 0, message: "暂存已过期，请重试" })));
         }
       } else Toast.error(message);
     } finally {
-      savingRef.current = false;
-
-      setBusy(false);
+      if (saveAttempt.current === attempt) {
+        savingRef.current = false;
+        setBusy(false);
+        setSubmitting(false);
+      }
     }
   };
   return (
@@ -459,7 +492,7 @@ export function TrainingEditor({ id, copyFrom, initialPaperId }: { id?: string; 
                       <TrainingMaterials id={training.id} readOnly={started} />
                     </>
                   ) : (
-                    <TrainingDraftMaterials onBusyChange={setMaterialsBusy} items={draftMaterials} disabled={busy} onChange={items => { setDraftMaterials(items); setDirty(true); }} />
+                    <TrainingDraftMaterials onBusyChange={setMaterialsBusy} items={draftMaterials} disabled={busy} onChange={changeDraftMaterials} uploadRows={uploadRows} onRetryVideo={startUpload} />
                   )}
                 </div>
               </Card>
@@ -665,18 +698,25 @@ export function TrainingEditor({ id, copyFrom, initialPaperId }: { id?: string; 
               {step < 2 ? (
                 <Button theme="solid" disabled={busy || !!adding} onClick={() => goToStep(step + 1)}>下一步</Button>
               ) : (
-                <Button theme="solid" type="warning" loading={busy} disabled={!!adding || uploading} onClick={() => void save()}>
-                  {copyFrom && !training.id ? "确认修改并复制" : "保存培训"}
+                <Button theme="solid" type="warning" loading={busy} disabled={!!adding || busy} onClick={() => void save()}>
+                  {submitting ? (copyFrom ? "正在保存副本…" : "正在保存培训…") : copyFrom && !training.id ? "确认修改并复制" : "保存培训"}
                 </Button>
               )}
             </Space>
           </div>
         </>
       )}
-      {uploadRows && <TrainingVideoUploadDialog rows={uploadRows} saving={busy} uploading={uploading}
+      {showUploadDialog && <TrainingVideoUploadDialog rows={uploadRows} saving={submitting} waiting={busy && !submitting}
         copying={!!copyFrom} error={saveError}
-        onClose={() => { if (!busy) { uploadController.current?.abort(); setUploadRows(null); setSaveError(""); } }}
-        onRetry={() => void prepareRows(uploadRows)} onSave={() => void save(true)} />}
+        onClose={() => {
+          if (submitting) return;
+          saveAttempt.current = null;
+          savingRef.current = false;
+          setBusy(false);
+          setShowUploadDialog(false);
+          setSaveError("");
+        }}
+        onRetry={() => void save(true)} />}
       <Modal
         bodyStyle={{ maxHeight: "calc(100vh - 180px)", overflowY: "auto", overflowX: "hidden", paddingRight: 16, paddingBottom: 24 }}
         title="满意度评估预览"

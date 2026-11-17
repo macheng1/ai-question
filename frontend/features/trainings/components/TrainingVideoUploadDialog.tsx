@@ -8,8 +8,10 @@ export type VideoUploadRow = {
   phase: DraftVideoProgress["phase"] | "waiting" | "failed";
   uploadedBytes: number;
   storedBytes?: number;
+  confirmedBytes?: number;
+  waitingForStorage?: boolean;
+  transport?: DraftVideoProgress["transport"];
   message?: string;
-  descriptor?: File;
 };
 
 function size(bytes: number) {
@@ -18,9 +20,26 @@ function size(bytes: number) {
     : `${(bytes / 1024 ** 2).toFixed(1)} MiB`;
 }
 
-export function TrainingVideoUploadDialog({ rows, saving, uploading, copying, error, onClose, onRetry, onSave }: {
-  rows: VideoUploadRow[]; saving: boolean; uploading: boolean; copying: boolean; error: string;
-  onClose: () => void; onRetry: () => void; onSave: () => void;
+export function VideoUploadStatus({ row }: { row: VideoUploadRow }) {
+  const percent = row.phase === "ready" ? 100 : Math.min(99, Math.floor(100 * (row.confirmedBytes ?? 0) / row.file.size));
+  const pendingParts = row.phase === "uploading" && row.waitingForStorage;
+  const status = {
+    waiting: "等待上传",
+    uploading: pendingParts ? "正在等待存储确认" : "正在上传视频",
+    storing: "正在确认视频完整性",
+    ready: "已就绪",
+    failed: "上传失败",
+  }[row.phase];
+  return <div className="min-w-32 text-sm">
+    <span>{status}{row.phase === "uploading" && ` · 已确认 ${percent}%`}</span>
+    <Progress percent={percent} aria-label={row.file.name + " " + status} />
+    {row.message && <div role="alert" className="break-words text-red-600">{row.message}</div>}
+  </div>;
+}
+
+export function TrainingVideoUploadDialog({ rows, saving, waiting, copying, error, onClose, onRetry }: {
+  rows: VideoUploadRow[]; saving: boolean; waiting: boolean; copying: boolean; error: string;
+  onClose: () => void; onRetry: () => void;
 }) {
   const ready = rows.filter(row => row.phase === "ready").length;
   const failed = rows.some(row => row.phase === "failed");
@@ -30,26 +49,16 @@ export function TrainingVideoUploadDialog({ rows, saving, uploading, copying, er
     bodyStyle={{ maxHeight: "65vh", overflow: "auto" }} footer={
       <div className="flex flex-wrap items-center justify-end gap-2">
         <Button disabled={locked} onClick={onClose}>返回编辑</Button>
-        {failed && <Button disabled={locked || uploading} onClick={onRetry}>重试失败视频</Button>}
-        <Button theme="solid" type="primary" disabled={uploading || ready !== rows.length || saving} loading={saving} onClick={onSave}>
-          {copying ? "保存培训副本" : "保存培训"}
-        </Button>
+        {error && <Button theme="solid" disabled={locked || waiting} onClick={onRetry}>{failed ? "重试失败视频并保存" : "重新保存"}</Button>}
       </div>
     }>
-    <p className="mb-3 text-sm" role="status">{saving ? (copying ? "正在保存副本并复制所选原材料…" : "正在保存培训…") : `已就绪 ${ready} / ${rows.length} 个视频`}</p>
+    <p className="mb-3 text-sm" role="status">{saving ? (copying ? "正在保存副本并复制所选原材料…" : "正在保存培训…") : `已就绪 ${ready} / ${rows.length} 个视频${waiting ? "，全部就绪后将自动保存。" : ""}`}</p>
     <table className="w-full table-fixed text-left text-sm">
-      <thead><tr className="border-b text-slate-500"><th className="w-1/3 py-2">视频</th><th className="py-2">上传到服务器</th><th className="py-2">写入对象存储</th></tr></thead>
-      <tbody>{rows.map((row, index) => {
-        const percent = (bytes: number) => Math.min(100, Math.floor(100 * bytes / row.file.size));
-        const sent = percent(row.uploadedBytes);
-        const written = percent(row.storedBytes ?? 0);
-        const status = { waiting: "等待上传", uploading: "正在上传", storing: written === 100 ? "正在确认写入并准备缓存" : "正在写入存储", ready: "已就绪", failed: "上传失败" }[row.phase];
-        return <tr key={index} className="border-b align-top">
-          <td className="py-3 pr-4"><div className="break-all">{row.file.name}</div><span className="text-slate-500">{size(row.file.size)} · {status}</span>{row.message && <div role="alert" className="break-words text-red-600">{row.message}</div>}</td>
-          <td className="py-3 pr-3">{sent}%<Progress percent={sent} aria-label={row.file.name + " 上传到服务器"} /></td>
-          <td className="py-3">{written}%<Progress percent={written} aria-label={row.file.name + " 写入对象存储"} /></td>
-        </tr>;
-      })}</tbody>
+      <thead><tr className="border-b text-slate-500"><th className="w-1/2 py-2">视频</th><th className="py-2">上传进度</th></tr></thead>
+      <tbody>{rows.map((row, index) => <tr key={index} className="border-b align-top">
+        <td className="py-3 pr-4"><div className="break-all">{row.file.name}</div><span className="text-slate-500">{size(row.file.size)}</span></td>
+        <td className="py-3"><VideoUploadStatus row={row} /></td>
+      </tr>)}</tbody>
     </table>
     {error && <p role="alert" className="mt-3 text-red-600">{error}</p>}
   </Modal>;

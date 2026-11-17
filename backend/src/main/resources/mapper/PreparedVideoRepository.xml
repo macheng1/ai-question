@@ -1,10 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.aiquestion.repository.PreparedVideoRepository">
-  <sql id="columns">id, owner_id AS owner, original_name AS name, byte_size AS size, object_key AS `key`, phase, expires_at AS expires</sql>
+  <sql id="columns">id, owner_id AS owner, original_name AS name, byte_size AS size, object_key AS `key`, phase, expires_at AS expires, part_size AS partSize</sql>
+  <update id="attach">UPDATE training_video_upload SET multipart_id=#{upload} WHERE id=#{id}</update>
+  <select id="multipartId" resultType="string">SELECT multipart_id FROM training_video_upload WHERE id=#{id}</select>
+  <select id="lockOwner" resultType="long">SELECT id FROM app_user WHERE id=#{owner} FOR UPDATE</select>
+  <select id="pendingCount" resultType="int">SELECT COUNT(*) FROM training_video_upload WHERE owner_id=#{owner}</select>
   <insert id="reserve">
-    INSERT INTO training_video_upload(id, owner_id, original_name, byte_size, object_key, phase, expires_at)
-    VALUES(#{id}, #{owner}, #{name}, #{size}, #{key}, #{phase}, #{expires})
+    INSERT INTO training_video_upload(id, owner_id, original_name, byte_size, object_key, phase, expires_at, part_size)
+    VALUES(#{id}, #{owner}, #{name}, #{size}, #{key}, #{phase}, #{expires}, #{partSize})
   </insert>
   <select id="find" resultType="com.aiquestion.repository.PreparedVideoRepository$Ticket">
     SELECT <include refid="columns"/> FROM training_video_upload WHERE id=#{id}

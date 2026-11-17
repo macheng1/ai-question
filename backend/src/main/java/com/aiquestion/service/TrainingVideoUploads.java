@@ -76,10 +76,7 @@ public class TrainingVideoUploads {
     }
 
     private synchronized String reserveUpload(long owner, String name, long size) throws IOException {
-        if (name == null || name.isBlank() || name.length() > 255 || name.contains("/") || name.contains("\\")
-                || name.chars().anyMatch(Character::isISOControl))
-            throw bad("视频文件名无效");
-        type(name, size);
+        validate(name, size);
         long reserved = 0, ownerReserved = 0;
         int ownerCount = 0;
         for (Upload upload : uploads.values()) {
@@ -223,6 +220,13 @@ public class TrainingVideoUploads {
             log.info("video event=upload_claim upload={} bytes={} parts={} result=ok", ref, upload.size, upload.digests.length);
             return new StagedFile(upload, ref, false);
         }
+    }
+
+    static void validate(String name, long size) {
+        if (name == null || name.isBlank() || name.length() > 255 || name.contains("/") || name.contains("\\")
+                || name.chars().anyMatch(Character::isISOControl))
+            throw bad("视频文件名无效");
+        type(name, size);
     }
 
     static String type(String name, long size) {

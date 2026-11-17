@@ -117,6 +117,9 @@
   <update id="updateVideoOrder">
     UPDATE training_video SET sort_order=#{sortOrder} WHERE training_id=#{trainingId} AND id=#{videoId}
   </update>
+  <select id="hasVideoReference" resultType="boolean">
+    SELECT EXISTS (SELECT 1 FROM training_video WHERE storage_path=#{path})
+  </select>
   <select id="findVideoStoragePaths" resultType="java.lang.String">
     SELECT storage_path FROM training_video WHERE training_id=#{trainingId}
   </select>

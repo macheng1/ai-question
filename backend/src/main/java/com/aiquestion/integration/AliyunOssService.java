@@ -8,6 +8,14 @@ import com.aiquestion.storage.ObjectStorage;
 import com.aliyun.oss.OSS;
 import com.aliyun.oss.OSSClientBuilder;
 import com.aliyun.oss.model.ObjectMetadata;
+import com.aliyun.oss.model.ListPartsRequest;
+import com.aliyun.oss.model.ListMultipartUploadsRequest;
+import com.aliyun.oss.model.PartETag;
+import com.aliyun.oss.model.GeneratePresignedUrlRequest;
+import com.aliyun.oss.model.GetObjectRequest;
+import java.io.InputStream;
+import java.io.IOException;
+import java.util.List;
 import com.aliyun.oss.model.AbortMultipartUploadRequest;
 import com.aliyun.oss.model.CompleteMultipartUploadRequest;
 import com.aliyun.oss.model.InitiateMultipartUploadRequest;
@@ -18,7 +26,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 /** 阿里云 OSS 适配层，负责私有对象操作和连接释放。 */
 @Service
-public class AliyunOssService implements ObjectStorage, AutoCloseable {
+public class AliyunOssService implements ObjectStorage, com.aiquestion.storage.VideoMultipartStorage, AutoCloseable {
   private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AliyunOssService.class);
   private final AliyunOssProperties properties;
 
@@ -63,12 +71,31 @@ public class AliyunOssService implements ObjectStorage, AutoCloseable {
         putVideoParts(client, key, metadata, input, file.getSize());
       } else {
         metadata.setContentLength(file.getSize());
-        client.putObject(new PutObjectRequest(properties.bucket(), key, input, metadata));
+        try {
+          client.putObject(new PutObjectRequest(properties.bucket(), key, input, metadata));
+        } catch (com.aliyun.oss.ClientException failure) {
+          // A PUT can succeed even when its response is lost. Verify this single-part object before proceeding.
+          if (!video || !matchesStoredFile(client, key, file, failure)) throw failure;
+          log.info("video event=origin_upload_verified provider={} key={} bytes={}", provider(), key, file.getSize());
+        }
       }
       if (video) log.info("video event=origin_upload_done provider={} key={} bytes={} elapsedMs={}", provider(), key, file.getSize(), VideoLog.elapsedMs(start));
     } catch (Exception ex) {
       if (video) VideoObjectLog.failure(provider(), "upload", key, start, ex);
       throw new BusinessException(ErrorCode.SYSTEM_ERROR, "文件上传 OSS 失败");
+    }
+  }
+
+  private boolean matchesStoredFile(OSS client, String key, MultipartFile file, RuntimeException failure) {
+    try {
+      var stored = client.getObjectMetadata(properties.bucket(), key);
+      if (stored.getContentLength() != file.getSize() || stored.getETag() == null) return false;
+      try (var source = file.getInputStream()) {
+        return org.springframework.util.DigestUtils.md5DigestAsHex(source).equalsIgnoreCase(stored.getETag());
+      }
+    } catch (RuntimeException | java.io.IOException verificationError) {
+      failure.addSuppressed(verificationError);
+      return false;
     }
   }
 
@@ -102,6 +129,73 @@ public class AliyunOssService implements ObjectStorage, AutoCloseable {
       }
       throw failure;
     }
+  }
+
+
+  @Override public String beginVideo(String key, String type) {
+    var metadata = new ObjectMetadata();
+    metadata.setContentType(type);
+    metadata.setHeader("x-oss-object-acl", "private");
+    return client().initiateMultipartUpload(new InitiateMultipartUploadRequest(properties.bucket(), key, metadata)).getUploadId();
+  }
+
+  @Override public String signVideoPart(String key, String upload, int number) {
+    var request = new GeneratePresignedUrlRequest(properties.bucket(), key, com.aliyun.oss.HttpMethod.PUT);
+    request.setExpiration(java.util.Date.from(java.time.Instant.now().plusSeconds(600)));
+    request.setContentType("application/octet-stream");
+    request.addQueryParameter("uploadId", upload);
+    request.addQueryParameter("partNumber", Integer.toString(number));
+    return client().generatePresignedUrl(request).toExternalForm().replaceFirst("^http://", "https://");
+  }
+
+  @Override public void putVideoPart(String key, String upload, int number, InputStream input, long bytes) {
+    client().uploadPart(new UploadPartRequest(properties.bucket(), key, upload, number, input, bytes));
+  }
+
+  @Override public List<Part> videoParts(String key, String upload) {
+    var request = new ListPartsRequest(properties.bucket(), key, upload);
+    request.setMaxParts(1000); // Part sizing keeps each session within a single listing.
+    var listing = client().listParts(request);
+    if (listing.isTruncated()) throw new BusinessException(ErrorCode.BAD_REQUEST, "视频分片数量无效");
+    return listing.getParts().stream().map(p -> new Part(p.getPartNumber(), p.getSize(), p.getETag())).toList();
+  }
+
+  @Override public void finishVideo(String key, String upload, List<Part> parts) {
+    // The OSS SDK sorts this list in place before sending the completion request.
+    var tags = new java.util.ArrayList<PartETag>(parts.size());
+    for (var part : parts) tags.add(new PartETag(part.number(), part.etag()));
+    client().completeMultipartUpload(new CompleteMultipartUploadRequest(properties.bucket(), key, upload, tags));
+  }
+
+  @Override public boolean videoExists(String key) {
+    return client().doesObjectExist(properties.bucket(), key);
+  }
+
+  @Override public long videoLength(String key) {
+    return client().getObjectMetadata(properties.bucket(), key).getContentLength();
+  }
+
+  @Override public byte[] videoHeader(String key) throws IOException {
+    var request = new GetObjectRequest(properties.bucket(), key);
+    request.setRange(0, 11);
+    try (var object = client().getObject(request)) {
+      return object.getObjectContent().readNBytes(12);
+    }
+  }
+
+  @Override public void abortVideo(String key, String upload) {
+    try {
+      client().abortMultipartUpload(new AbortMultipartUploadRequest(properties.bucket(), key, upload));
+    } catch (com.aliyun.oss.OSSException error) {
+      if (!"NoSuchUpload".equals(error.getErrorCode())) throw error;
+    }
+  }
+
+  @Override public List<String> pendingVideoUploads(String key) {
+    var request = new ListMultipartUploadsRequest(properties.bucket());
+    request.setPrefix(key);
+    return client().listMultipartUploads(request).getMultipartUploads().stream()
+        .filter(u -> key.equals(u.getKey())).map(u -> u.getUploadId()).toList();
   }
 
   @Override public StoredObject open(String key) {
@@ -150,6 +244,7 @@ public class AliyunOssService implements ObjectStorage, AutoCloseable {
   protected OSS createClient() {
     validateConfiguration();
     var config = new com.aliyun.oss.ClientBuilderConfiguration();
+    config.setProtocol(com.aliyun.oss.common.comm.Protocol.HTTPS);
     config.setMaxConnections(128);
     config.setConnectionTimeout(10000);
     config.setConnectionRequestTimeout(10000);

@@ -12,6 +12,14 @@ import com.amazonaws.client.builder.AwsClientBuilder;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.ObjectMetadata;
+import com.amazonaws.services.s3.model.ListPartsRequest;
+import com.amazonaws.services.s3.model.ListMultipartUploadsRequest;
+import com.amazonaws.services.s3.model.PartETag;
+import com.amazonaws.services.s3.model.GeneratePresignedUrlRequest;
+import com.amazonaws.services.s3.model.GetObjectRequest;
+import java.io.InputStream;
+import java.io.IOException;
+import java.util.List;
 import com.amazonaws.services.s3.model.AbortMultipartUploadRequest;
 import com.amazonaws.services.s3.model.CompleteMultipartUploadRequest;
 import com.amazonaws.services.s3.model.InitiateMultipartUploadRequest;
@@ -23,7 +31,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 /** EDS 的 S3 适配：按内网部署要求，仅此客户端跳过 TLS 证书和主机名校验。 */
 @Service
-public class EdsStorageService implements ObjectStorage, AutoCloseable {
+public class EdsStorageService implements ObjectStorage, com.aiquestion.storage.VideoMultipartStorage, AutoCloseable {
   private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(EdsStorageService.class);
   private final EdsProperties properties;
   public EdsStorageService(EdsProperties properties) { this.properties = properties; }
@@ -153,6 +161,74 @@ public class EdsStorageService implements ObjectStorage, AutoCloseable {
       }
       throw failure;
     }
+  }
+
+
+  @Override public String beginVideo(String key, String type) {
+    var metadata = new ObjectMetadata();
+    metadata.setContentType(type);
+
+    return client().initiateMultipartUpload(new InitiateMultipartUploadRequest(properties.bucket(), key, metadata)).getUploadId();
+  }
+
+  @Override public String signVideoPart(String key, String upload, int number) {
+    var request = new GeneratePresignedUrlRequest(properties.bucket(), key, com.amazonaws.HttpMethod.PUT);
+    request.setExpiration(java.util.Date.from(java.time.Instant.now().plusSeconds(600)));
+    request.setContentType("application/octet-stream");
+    request.addRequestParameter("uploadId", upload);
+    request.addRequestParameter("partNumber", Integer.toString(number));
+    return client().generatePresignedUrl(request).toExternalForm();
+  }
+
+  @Override public void putVideoPart(String key, String upload, int number, InputStream input, long bytes) {
+    client().uploadPart(new UploadPartRequest().withBucketName(properties.bucket()).withKey(key)
+        .withUploadId(upload).withPartNumber(number).withInputStream(input).withPartSize(bytes));
+  }
+
+  @Override public List<Part> videoParts(String key, String upload) {
+    var request = new ListPartsRequest(properties.bucket(), key, upload);
+    request.setMaxParts(1000); // The largest supported video uses 256 parts.
+    var listing = client().listParts(request);
+    if (listing.isTruncated()) throw new BusinessException(ErrorCode.BAD_REQUEST, "视频分片数量无效");
+    return listing.getParts().stream().map(p -> new Part(p.getPartNumber(), p.getSize(), p.getETag())).toList();
+  }
+
+  @Override public void finishVideo(String key, String upload, List<Part> parts) {
+    // The OSS SDK sorts this list in place before sending the completion request.
+    var tags = new java.util.ArrayList<PartETag>(parts.size());
+    for (var part : parts) tags.add(new PartETag(part.number(), part.etag()));
+    client().completeMultipartUpload(new CompleteMultipartUploadRequest(properties.bucket(), key, upload, tags));
+  }
+
+  @Override public boolean videoExists(String key) {
+    return client().doesObjectExist(properties.bucket(), key);
+  }
+
+  @Override public long videoLength(String key) {
+    return client().getObjectMetadata(properties.bucket(), key).getContentLength();
+  }
+
+  @Override public byte[] videoHeader(String key) throws IOException {
+    var request = new GetObjectRequest(properties.bucket(), key);
+    request.setRange(0, 11);
+    try (var object = client().getObject(request)) {
+      return object.getObjectContent().readNBytes(12);
+    }
+  }
+
+  @Override public void abortVideo(String key, String upload) {
+    try {
+      client().abortMultipartUpload(new AbortMultipartUploadRequest(properties.bucket(), key, upload));
+    } catch (com.amazonaws.services.s3.model.AmazonS3Exception error) {
+      if (!"NoSuchUpload".equals(error.getErrorCode())) throw error;
+    }
+  }
+
+  @Override public List<String> pendingVideoUploads(String key) {
+    var request = new ListMultipartUploadsRequest(properties.bucket());
+    request.setPrefix(key);
+    return client().listMultipartUploads(request).getMultipartUploads().stream()
+        .filter(u -> key.equals(u.getKey())).map(u -> u.getUploadId()).toList();
   }
 
   @Override public StoredObject open(String key) {

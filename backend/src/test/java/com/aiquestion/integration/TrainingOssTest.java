@@ -34,6 +34,43 @@ class TrainingOssTest {
   assertEquals("video/mp4",capture.getValue().getMetadata().getContentType());
   assertTrue(("oss:"+key).length()<100);
  }
+ @Test void lostUploadResponseRequiresMatchingStoredContent() {
+  var key = "training-videos/12345678-1234-1234-1234-123456789abc.mp4";
+  var file = new MockMultipartFile("file", "test.mp4", "video/mp4", new byte[]{1, 2, 3});
+  when(client.putObject(any(PutObjectRequest.class))).thenThrow(new com.aliyun.oss.ClientException("Read timed out"));
+  var stored = mock(ObjectMetadata.class);
+  when(client.getObjectMetadata("bucket", key)).thenReturn(stored);
+  when(stored.getContentLength()).thenReturn(3L);
+  when(stored.getETag()).thenReturn("5289DF737DF57326FCDD22597AFB1FAC");
+  assertDoesNotThrow(() -> service().put(file, "video/mp4", key));
+  when(stored.getETag()).thenReturn("different");
+  assertThrows(BusinessException.class, () -> service().put(file, "video/mp4", key));
+ }
+ @Test void multipartCompletionAllowsSdkToSortPartTags() {
+  when(client.completeMultipartUpload(any(CompleteMultipartUploadRequest.class))).thenAnswer(call -> {
+   var tags = call.<CompleteMultipartUploadRequest>getArgument(0).getPartETags();
+   tags.sort(java.util.Comparator.comparingInt(PartETag::getPartNumber));
+   assertEquals(1, tags.get(0).getPartNumber());
+   return null;
+  });
+  service().finishVideo("key", "upload", java.util.List.of(
+      new com.aiquestion.storage.VideoMultipartStorage.Part(2, 12, "b"),
+      new com.aiquestion.storage.VideoMultipartStorage.Part(1, 8388608, "a")));
+ }
+
+ @Test void signedUrlUsesOnlyTheRequestedKeyUploadAndPart() throws Exception {
+  when(client.generatePresignedUrl(any(GeneratePresignedUrlRequest.class))).thenReturn(
+      java.net.URI.create("https://example.invalid/test").toURL());
+  service().signVideoPart("training-videos/key.mp4", "upload", 17);
+  var capture = org.mockito.ArgumentCaptor.forClass(GeneratePresignedUrlRequest.class);
+  verify(client).generatePresignedUrl(capture.capture());
+  var request = capture.getValue();
+  assertEquals(com.aliyun.oss.HttpMethod.PUT, request.getMethod());
+  assertEquals("training-videos/key.mp4", request.getKey());
+  assertEquals("application/octet-stream", request.getContentType());
+  assertEquals(Map.of("uploadId", "upload", "partNumber", "17"), request.getQueryParameter());
+ }
+
  @Test void closingStreamDoesNotCloseSharedClient() throws Exception {
   var obj=new OSSObject(); var metadata=new ObjectMetadata(); metadata.setContentLength(3);
   obj.setObjectMetadata(metadata);obj.setObjectContent(new ByteArrayInputStream(new byte[]{1,2,3}));

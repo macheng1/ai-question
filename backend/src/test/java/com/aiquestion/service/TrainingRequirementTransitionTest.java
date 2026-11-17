@@ -54,7 +54,7 @@ class TrainingRequirementTransitionTest {
     var roster = mock(TrainingAudienceRepository.class);
     var eligibility = mock(TrainingEligibilityService.class);
     var audience = new TrainingAudienceService(roster, eligibility);
-    var service = spy(new TrainingService(repository, new ObjectMapper(), mock(AssessmentRosterService.class), audience, mock(TrainingExamService.class)));
+    var service = spy(new TrainingService(repository, new ObjectMapper(), mock(AssessmentRosterService.class), audience, mock(TrainingExamService.class), mock(TrainingVideoStorage.class)));
     doReturn(Map.of()).when(service).get(1L, 2L);
     var now = LocalDateTime.now(java.time.ZoneId.of("Asia/Shanghai"));
     var row = new HashMap<String, Object>(Map.of("created_by", 2L, "version", 1,

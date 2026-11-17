@@ -131,18 +131,15 @@ mvn test
 mvn package
 ```
 
-### 培训视频 OSS 存储
+### 培训视频上传与存储
 
-新培训视频复用 `ALIYUN_OSS_ACCESS_KEY_ID`、`ALIYUN_OSS_ACCESS_KEY_SECRET`、
-`ALIYUN_OSS_ENDPOINT`、`ALIYUN_OSS_BUCKET` 配置上传 OSS。配置缺失或上传失败会明确报错，不会回退到本地磁盘。
-对象位于 `training-videos/` 下，并在上传时设置私有 ACL；RAM 权限应包含该前缀的上传、读取、删除及设置对象 ACL 权限。
-管理预览校验培训归属，考生播放校验学习凭证，然后由后端流式读取 OSS；不会向客户端暴露永久公开地址或密钥，也不要求浏览器跨域访问 OSS。
-`training_video.storage_path` 保存 `oss:training-videos/<uuid>.mp4`（或 `.webm`），沿用已有字段，不新增迁移。
-删除培训或视频会清理对应 OSS 对象；清理异常写入日志，可按日志对象键补偿清理。
+管理员选择视频后，默认由后端逐片转发到对象存储。保存培训时只关联已就绪的视频。上传失败时页面提示重试。
 
-无 `oss:` 前缀的历史记录仍兼容 `training.video-directory` 指向的本地文件。
-历史文件不会自动搬迁；发布前已有的本地视频应保留原目录，或通过培训编辑页重新上传至 OSS 后替换。
-新视频不依赖本地视频卷，但上传过程仍可能使用容器临时目录缓存 multipart 请求。
+如需启用浏览器直传，设置 `TRAINING_VIDEO_BROWSER_DIRECT=true`。浏览器必须能访问存储端点。存储桶跨域规则需允许培训页面的来源（含协议和端口）、PUT 方法及 Content-Type 请求头。开发环境来源例如 `http://localhost:13000`。
+
+使用阿里云 OSS 时配置 `ALIYUN_OSS_ACCESS_KEY_ID`、`ALIYUN_OSS_ACCESS_KEY_SECRET`、`ALIYUN_OSS_ENDPOINT` 和 `ALIYUN_OSS_BUCKET`。上传账号需要在视频前缀下发起、上传、列举、合并和终止分片，以及读取和清理对象。视频预览与播放仍需通过培训权限校验。
+
+复制培训时复用原视频的存储路径，每门培训保留独立的视频记录和学习进度。删除最后一个引用后才清理原文件。历史本地视频仍从 `training.video-directory` 读取。
 
 可选真实 OSS 验证：设置 `RUN_OSS_LIVE_TEST=true`、`OSS_TEST_VIDEO` 为 MP4 样片绝对路径以及上述 OSS 环境变量，
 运行 `mvn test -Dtest=TrainingOssLiveTest`。测试会上传、完整读取比对并删除本次测试对象；默认测试不会访问 OSS。
