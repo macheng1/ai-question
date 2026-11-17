@@ -113,6 +113,8 @@ public class TrainingService {
     public List<Map<String, Object>> list(long user) {
         return persistence.findByOwner(user).stream().map(r -> {
             var v = view(r);
+            Object hasShortAnswer = r.get("has_short_answer");
+            v.put("hasShortAnswer", Boolean.TRUE.equals(hasShortAnswer) || hasShortAnswer instanceof Number n && n.intValue() > 0);
             v.put("pendingReviewCount", r.get("pending_review_count"));
             v.put("responseCount", count(((Number) r.get("id")).longValue()));
             return v;

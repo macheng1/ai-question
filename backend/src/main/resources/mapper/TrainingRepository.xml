@@ -11,7 +11,17 @@
     SELECT COUNT(*) FROM training_survey_response WHERE training_id=#{trainingId}
   </select>
   <select id="findByOwner" resultType="java.util.LinkedHashMap">
-    SELECT t.*, a.status exam_status, a.end_at exam_end_at, (SELECT COUNT(*) FROM training linked WHERE linked.assessment_id=t.assessment_id) exam_reference_count, (SELECT COUNT(*) FROM assessment_attempt aa WHERE aa.task_id=a.id AND aa.status='PENDING_REVIEW') pending_review_count FROM training t LEFT JOIN assessment_task a ON a.id=t.assessment_id WHERE t.created_by=#{ownerId} ORDER BY t.id DESC
+    SELECT t.*, a.status exam_status, a.end_at exam_end_at,
+      (SELECT COUNT(*) FROM training linked WHERE linked.assessment_id=t.assessment_id) exam_reference_count,
+      (SELECT COUNT(*) FROM assessment_attempt aa WHERE aa.task_id=a.id AND aa.status='PENDING_REVIEW') pending_review_count,
+      CASE WHEN p.mode='RANDOM' THEN EXISTS (
+        SELECT 1 FROM test_paper_random_bank rb WHERE rb.paper_id=p.id AND rb.short_answer_count > 0
+      ) ELSE EXISTS (
+        SELECT 1 FROM test_paper_question pq JOIN question_item q ON q.id=pq.question_id
+        WHERE pq.paper_id=p.id AND q.question_type='SHORT_ANSWER'
+      ) END has_short_answer
+    FROM training t LEFT JOIN assessment_task a ON a.id=t.assessment_id LEFT JOIN test_paper p ON p.id=a.paper_id
+    WHERE t.created_by=#{ownerId} ORDER BY t.id DESC
   </select>
   <select id="countExamParticipants" resultType="java.lang.Integer">
     SELECT COUNT(*) FROM assessment_participant p JOIN training t ON t.assessment_id=p.task_id WHERE t.id=#{trainingId} AND EXISTS (SELECT 1 FROM training_audience r WHERE r.training_id=t.id AND r.employee_id=p.employee_id)

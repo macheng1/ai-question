@@ -56,7 +56,7 @@ public class DashboardController {
     var rows = service.exportRoster(ManagementAccess.userId(), start, end, trainingId, departmentId, category, status);
     return ResponseEntity.ok()
         .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
-            .filename("培训人员名单.xlsx", StandardCharsets.UTF_8).build().toString())
+            .filename("未完成人员清单.xlsx", StandardCharsets.UTF_8).build().toString())
         .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
         .body(DashboardLogExporter.writeRoster(rows));
   }
