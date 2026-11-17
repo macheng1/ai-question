@@ -118,6 +118,16 @@ public class QuestionItemController {
         .body(importService.template());
   }
 
+  @Operation(summary = "下载 Word 试题导入模板")
+  @GetMapping("/template/word")
+  public ResponseEntity<byte[]> wordTemplate() {
+    return ResponseEntity.ok()
+        .header(HttpHeaders.CONTENT_DISPOSITION, org.springframework.http.ContentDisposition
+            .attachment().filename("试题导入模板.docx", java.nio.charset.StandardCharsets.UTF_8).build().toString())
+        .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
+        .body(importService.wordTemplate());
+  }
+
   @Operation(summary = "导入试题模板")
   @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public ApiResponse<QuestionImportService.ImportResult> importQuestions(

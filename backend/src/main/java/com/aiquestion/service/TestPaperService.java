@@ -11,6 +11,9 @@ import com.aiquestion.repository.TestPaperQuestionRepository;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.*;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.List;
 import com.aiquestion.repository.TestPaperRuntimeRepository;
@@ -136,6 +139,36 @@ TestPaperService {
         var items = questionRepository.findQuestions(id);
         items.forEach(item -> checkBank(item.getBankId()));
         return withOptions(items);
+    }
+
+    public record ScoredQuestion(@NotNull Long questionId, @NotNull @Positive @Digits(integer=6, fraction=2) BigDecimal score) {}
+    public record FixedChanges(@NotNull List<@NotNull @Valid ScoredQuestion> added,
+                               @NotNull List<@NotNull @Valid ScoredQuestion> updated,
+                               @NotNull List<@NotNull Long> removed) {}
+
+    @Transactional
+    public void saveFixedQuestions(Long paperId, FixedChanges changes) {
+        if (questionRepository.lockOwnedPaper(paperId, ManagementAccess.userId()) == null)
+            throw new BusinessException(ErrorCode.NOT_FOUND, "试卷不存在");
+        var paper = get(paperId);
+        ensureEditable(paper);
+        if ("RANDOM".equalsIgnoreCase(paper.getMode()))
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "请选择固定组卷试卷");
+        var existing = new HashSet<Long>();
+        for (var question : questionRepository.findQuestions(paperId)) existing.add(question.getId());
+        for (var id : changes.removed()) removeQuestion(paperId, id);
+        for (var item : changes.updated()) {
+            if (questionRepository.updateScore(paperId, item.questionId(), item.score()) == 0)
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "试卷题目已变更，请刷新后重试");
+        }
+        int sort = questionRepository.nextSortNo(paperId);
+        for (var item : changes.added()) {
+            if (!existing.add(item.questionId()))
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "试卷已包含该题，请刷新后重试");
+            checkQuestion(item.questionId());
+            questionRepository.insert(paperId, item.questionId(), item.score(), sort++);
+        }
+        ensureScoreMatched(paperId);
     }
 
     public QuestionItem addQuestion(Long paperId, Long questionId, BigDecimal score) {

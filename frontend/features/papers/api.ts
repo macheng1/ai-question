@@ -55,6 +55,10 @@ export function copyPaper(
 export function getPaperQuestions(id: number) {
   return apiClient.get<QuestionItem[]>(`/management/papers/${id}/questions`);
 }
+type ScoredQuestion = { questionId: number; score: number };
+export function saveFixedQuestions(id: number, added: ScoredQuestion[], updated: ScoredQuestion[], removed: number[]) {
+  return apiClient.put<void>(`/management/papers/${id}/questions`, { added, updated, removed });
+}
 export function addPaperQuestion(
   id: number,
   data: { questionId: number; score?: number },

@@ -248,6 +248,8 @@ public interface QuestionBankRepository {
    */
   QuestionBank findOwnedById(@Param("id") Long id, @Param("userId") Long userId);
 
+  Long lockOwnedForImport(@Param("id") Long id, @Param("userId") Long userId);
+
   /**
    * 数据访问方法。
    *

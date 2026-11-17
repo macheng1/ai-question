@@ -2,7 +2,10 @@ package com.aiquestion.controller;
 
 import com.aiquestion.common.ApiResponse;
 import com.aiquestion.service.OrganizationService;
-import java.util.*;
+import com.aiquestion.service.EmployeeWorkbookService;
+import java.io.IOException;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -10,8 +13,11 @@ import org.springframework.web.bind.annotation.*;
 public class OrganizationController {
   private final OrganizationService service;
 
-  public OrganizationController(OrganizationService service) {
+  private final EmployeeWorkbookService workbooks;
+
+  public OrganizationController(OrganizationService service, EmployeeWorkbookService workbooks) {
     this.service = service;
+    this.workbooks = workbooks;
   }
 
   @GetMapping("/departments")
@@ -33,6 +39,19 @@ public class OrganizationController {
   @PutMapping("/departments/{id}")
   public ApiResponse<?> updateDepartment(@PathVariable Long id, @RequestBody Department r) {
     return ApiResponse.ok(service.saveDepartment(id, r.name(), r.status()));
+  }
+
+  @GetMapping("/employees/import/template")
+  public ResponseEntity<byte[]> employeeTemplate() throws IOException {
+    return ResponseEntity.ok()
+        .header("Content-Disposition", "attachment; filename*=UTF-8''%E5%AD%A6%E5%91%98%E5%AF%BC%E5%85%A5%E6%A8%A1%E6%9D%BF.xlsx")
+        .header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        .body(workbooks.template());
+  }
+
+  @PostMapping("/employees/import")
+  public ApiResponse<Integer> importEmployees(@RequestParam("file") MultipartFile file) throws IOException {
+    return ApiResponse.ok(workbooks.importFile(file));
   }
 
   @PostMapping("/employees")

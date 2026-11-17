@@ -1,5 +1,5 @@
 "use client";
-import { Typography, Space, Tag, Banner } from "@douyinfe/semi-ui";
+import { Typography, Space, Tag } from "@douyinfe/semi-ui";
 import { Layout, Card } from "@douyinfe/semi-ui";
 
 import { IconArrowLeft, IconPlus, IconDownload, IconUpload } from "@douyinfe/semi-icons";
@@ -19,7 +19,7 @@ import {
   importQuestions,
   getQuestionImportTemplate,
   type QuestionItem,
-  type QuestionImportResult,
+  type QuestionImportIssue,
 } from "@/features/banks/management-api";
 
 type OptionForm = { optionKey: string; optionText: string; correct: boolean };
@@ -62,8 +62,7 @@ export default function QuestionsPage() {
   const [total, setTotal] = useState(0);
   const [listLoading, setListLoading] = useState(false);
   const [search, setSearch] = useState("");
-  const [uploadVersion, setUploadVersion] = useState(0);
-  const [importResult, setImportResult] = useState<QuestionImportResult | null>(null);
+  const [importResult, setImportResult] = useState<{ summary: string; issues: QuestionImportIssue[] } | null>(null);
   const requestId = useRef(0);
   const load = useCallback(async () => {
     const currentRequest = ++requestId.current;
@@ -427,7 +426,7 @@ export default function QuestionsPage() {
           setImportFile(null);
         }}
         okText="确定导入"
-        cancelText={importResult ? "关闭" : "取消"}
+        cancelText="取消"
         confirmLoading={importLoading}
         okButtonProps={{ disabled: !importFile || importLoading }}
         cancelButtonProps={{ disabled: importLoading }}
@@ -435,21 +434,28 @@ export default function QuestionsPage() {
         maskClosable={!importLoading}
         onOk={async () => {
           if (!importFile) {
-            Toast.error("请选择 .xlsx 文件");
+            Toast.error("请选择 .xlsx 或 .docx 文件");
             return;
           }
           setImportLoading(true);
           try {
             const result = await importQuestions(bankId, importFile);
-            Toast.success(
-              `导入完成：新增 ${result.imported} 题，跳过 ${result.skipped} 题`,
-            );
-            setImportResult(result);
-            setUploadVersion((version) => version + 1);
+            const summary = `新增 ${result.imported} 题，重复跳过 ${result.skipped} 题`;
+            const issues = result.issues ?? result.errors.map(message => {
+              const split = message.indexOf("：");
+              return { location: split < 0 ? "—" : message.slice(0, split), stem: "", reason: message.slice(split + 1) };
+            });
             setImportFile(null);
-            load();
+            setImportOpen(false);
+            if (issues.length) setImportResult({ summary: `${summary}，失败 ${issues.length} 题`, issues });
+            else Toast.success(`导入完成：${summary}`);
+            void load();
           } catch (e) {
-            Toast.error(e instanceof Error ? e.message : "导入失败");
+            setImportOpen(false);
+            setImportFile(null);
+            setImportResult({ summary: importFile.name, issues: [
+              { location: "文件", stem: "", reason: e instanceof Error ? e.message : "导入失败，请重试" },
+            ] });
           } finally {
             setImportLoading(false);
           }
@@ -459,40 +465,65 @@ export default function QuestionsPage() {
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 p-4">
             <div className="min-w-0">
               <Typography.Text strong>1. 下载并填写模板</Typography.Text>
-              <div className="mt-1 text-xs leading-5 text-slate-500">支持单选、多选、判断和问答题，请先替换示例题。</div>
+              <div className="mt-1 text-xs leading-5 text-slate-500">支持单选、多选、判断和问答题，请先替换示例题。Word 中每道题的答案写在该题下方。</div>
             </div>
-            <Button icon={<IconDownload />} disabled={importLoading}
-              onClick={() => { getQuestionImportTemplate().catch((e) => Toast.error(e instanceof Error ? e.message : "模板下载失败")); }}>
-              下载模板
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {(["xlsx", "docx"] as const).map(format => (
+                <Button key={format} icon={<IconDownload />} disabled={importLoading}
+                  onClick={() => getQuestionImportTemplate(format).catch(e => Toast.error(e instanceof Error ? e.message : "模板下载失败"))}>
+                  下载{format === "docx" ? " Word " : " Excel "}模板
+                </Button>
+              ))}
+            </div>
           </div>
           <div className="min-w-0">
             <div className="mb-3"><Typography.Text strong>2. 上传题目文件</Typography.Text></div>
             <Upload
-              key={`${importOpen}-${uploadVersion}`}
+              key={String(importOpen)}
               style={{ width: "100%" }}
               disabled={importLoading}
-              accept=".xlsx"
+              accept=".xlsx,.docx"
               limit={1}
               action=""
               uploadTrigger="custom"
               draggable
               dragIcon={<IconUpload size="extra-large" />}
               dragMainText="点击选择文件，或拖拽文件到此处"
-              dragSubText="仅支持 .xlsx 格式，每次导入一个文件"
-              onAcceptInvalid={() => Toast.error("请选择 .xlsx 格式的文件")}
+              dragSubText="支持 Excel（.xlsx）或 Word（.docx），每次导入一个文件"
+              onAcceptInvalid={() => Toast.error("请选择 .xlsx 或 .docx 格式的文件")}
               onExceed={() => Toast.warning("每次只能导入一个文件，请先移除已选文件")}
               onChange={({ fileList }) => setImportFile(fileList[0]?.fileInstance || null)}
               onRemove={() => setImportFile(null)}
             />
             <div className="mt-3 text-xs leading-5 text-slate-500">
-              重复题干自动跳过；有效行正常导入，失败行会显示原因，修正后可再次导入。
+              重复题干自动跳过；有效题目正常导入，失败题目会显示位置和原因，修正后可再次导入。
             </div>
           </div>
-          {importResult && <Banner type={importResult.errors.length ? "warning" : "success"}
-            title={`新增 ${importResult.imported} 题，重复跳过 ${importResult.skipped} 题，失败 ${importResult.errors.length} 行`}
-            description={importResult.errors.length ? <div className="max-h-48 overflow-y-auto">{importResult.errors.map((error, index) => <div key={index}>{error}</div>)}</div> : "导入完成，可关闭窗口查看题目。"} />}
         </div>
+      </Modal>
+      <Modal title="导入错误明细" visible={Boolean(importResult)} width="min(760px, calc(100vw - 24px))"
+        onCancel={() => setImportResult(null)}
+        footer={<>
+          <Button onClick={() => setImportResult(null)}>关闭</Button>
+          <Button theme="solid" onClick={() => { setImportResult(null); setImportOpen(true); }}>重新选择文件</Button>
+        </>}>
+        {importResult && <>
+          <p className="mb-3 break-words">{importResult.summary}</p>
+          <div className="max-h-[50vh] overflow-auto">
+            <table className="w-full table-fixed text-left text-sm">
+              <thead className="sticky top-0 bg-slate-50"><tr>
+                <th className="w-20 p-2">位置</th><th className="p-2">题干</th><th className="p-2">错误原因</th>
+              </tr></thead>
+              <tbody>{importResult.issues.map((issue, index) =>
+                <tr key={index} className="border-b border-slate-100 align-top">
+                  <td className="p-2">{issue.location}</td>
+                  <td className="whitespace-pre-wrap break-words p-2">{issue.stem || (issue.location === "文件" ? "—" : "未提供题干")}</td>
+                  <td className="break-words p-2">{issue.reason}</td>
+                </tr>
+              )}</tbody>
+            </table>
+          </div>
+        </>}
       </Modal>
     </ProfileShell>
   );

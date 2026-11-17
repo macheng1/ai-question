@@ -44,4 +44,9 @@ LEFT JOIN assessment_attempt aa ON aa.id=(SELECT MAX(x.id) FROM assessment_attem
     <if test="filters.containsKey('departmentId')">AND ta.department_id=#{filters.departmentId}</if>
     ORDER BY t.id DESC,ta.employee_id
   </select>
+  <select id="learnerEmails" resultType="java.util.LinkedHashMap">
+    SELECT id,email FROM organization_employee
+    WHERE created_by=#{owner} AND status='ACTIVE' AND id IN
+    <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+  </select>
 </mapper>

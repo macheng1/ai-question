@@ -6,6 +6,7 @@ import "@douyinfe/semi-ui/react19-adapter";
 import { Button, Form, Input, Modal, Table, Tag, Toast } from "@douyinfe/semi-ui";
 import type { FormApi } from "@douyinfe/semi-ui/lib/es/form/interface";
 import { IconPlus, IconSearch } from "@douyinfe/semi-icons";
+import { EmployeeImport } from "@/features/organization/EmployeeImport";
 import { ProfileShell } from "@/components/layout/ProfileShell";
 import { getDepartments, getEmployees, saveDepartment, saveEmployee, type Department, type Employee, type SaveDepartment, type SaveEmployee } from "@/features/organization/api";
 
@@ -53,8 +54,8 @@ export default function OrganizationPage() {
         {departments.map(d => <div key={d.id} className="mt-3 border-t border-slate-100 pt-3"><Button block theme={selected === d.id ? "light" : "borderless"} style={{ height: "auto", minHeight: 44, padding: "10px 8px", textAlign: "left", justifyContent: "flex-start" }} onClick={() => setSelected(d.id)}><span className="whitespace-normal break-words text-left leading-6">{d.name}（{d.employeeCount}）{d.status === "INACTIVE" ? " · 已停用" : ""}</span></Button><div className="flex justify-end"><Button size="small" theme="borderless" disabled={saving} onClick={() => setDepartmentEdit(d)}>重命名</Button><Button size="small" theme="borderless" disabled={saving} onClick={() => toggleDepartment(d)}>{d.status === "ACTIVE" ? "停用" : "恢复"}</Button></div></div>)}
       </div></Card>
       <Layout.Content className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><Typography.Title heading={2} className="break-all !text-base !font-semibold">{currentDepartment?.name || "全部学员"}</Typography.Title><Button theme="solid" type="primary" icon={<IconPlus />} disabled={saving || loading || !activeDepartments.length} onClick={() => setEmployeeEdit("new")}>新增学员</Button></div>
-        {!activeDepartments.length && !loading && <p className="mb-3 text-sm text-slate-500">请先新增或恢复一个部门，再添加学员。</p>}
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><Typography.Title heading={2} className="break-all !text-base !font-semibold">{currentDepartment?.name || "全部学员"}</Typography.Title><div className="flex gap-2"><EmployeeImport onImported={load} /><Button theme="solid" type="primary" icon={<IconPlus />} disabled={saving || loading || !activeDepartments.length} onClick={() => setEmployeeEdit("new")}>新增学员</Button></div></div>
+        {!activeDepartments.length && !loading && <p className="mb-3 text-sm text-slate-500">手动新增学员前请先新增或恢复部门。通过 Excel 导入时可直接填写新部门名称。</p>}
         <Input prefix={<IconSearch />} showClear placeholder="搜索姓名、手机号、邮箱、工号、岗位或部门" value={keyword} onChange={setKeyword} />
         <div className="mt-4 overflow-x-auto"><Table<Employee> rowKey="id" loading={loading} dataSource={visible} empty={keyword ? "没有匹配的学员" : "暂无学员"} pagination={{ pageSize: 10 }} scroll={{ x: 1500 }} columns={[
           { title: "姓名", dataIndex: "name", width: 100 }, { title: "学员类型", width: 100, render: (_, e) => <Tag color={e.learnerType === "EXTERNAL" ? "orange" : "blue"}>{e.learnerType === "EXTERNAL" ? "外部" : "内部"}</Tag> }, { title: "性别", width: 80, render: (_, e) => e.gender === "MALE" ? "男" : e.gender === "FEMALE" ? "女" : "未填写" }, { title: "工号", dataIndex: "employeeNo", width: 130, render: value => value || "—" }, { title: "手机号", dataIndex: "phone", width: 135 }, { title: "邮箱", dataIndex: "email", width: 220, render: value => <span className="break-all">{value || "—"}</span> }, { title: "部门", dataIndex: "departmentName", width: 120 }, { title: "岗位", dataIndex: "jobTitle", width: 100 },

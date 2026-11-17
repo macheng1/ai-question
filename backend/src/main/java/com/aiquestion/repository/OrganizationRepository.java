@@ -15,6 +15,7 @@ public interface OrganizationRepository {
       @Param("ownerId") Long ownerId,
       @Param("activeOnly") boolean activeOnly);
   List<String> lockDepartmentStatus(@Param("departmentId") Long departmentId, @Param("ownerId") Long ownerId);
+  List<Map<String, Object>> findDepartmentsByName(@Param("ownerId") long ownerId, @Param("name") String name);
   int insertDepartment(
       @Param("ownerId") Long ownerId,
       @Param("name") String name,

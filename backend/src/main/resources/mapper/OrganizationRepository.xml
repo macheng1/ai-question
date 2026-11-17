@@ -13,6 +13,9 @@
   <select id="lockDepartmentStatus" resultType="java.lang.String">
     SELECT status FROM organization_department WHERE id=#{departmentId} AND created_by=#{ownerId} FOR UPDATE
   </select>
+  <select id="findDepartmentsByName" resultType="java.util.LinkedHashMap">
+    SELECT id,status FROM organization_department WHERE created_by=#{ownerId} AND name=#{name} FOR UPDATE
+  </select>
   <insert id="insertDepartment" useGeneratedKeys="true" keyProperty="generated.id" keyColumn="id">
     INSERT INTO organization_department(created_by,name,status) VALUES(#{ownerId},#{name},#{status})
   </insert>

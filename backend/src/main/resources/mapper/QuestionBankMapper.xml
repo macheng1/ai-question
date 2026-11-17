@@ -38,6 +38,9 @@
     FROM question_bank
     WHERE id = #{id}
   </select>
+  <select id="lockOwnedForImport" resultType="long">
+    SELECT id FROM question_bank WHERE id=#{id} AND created_by=#{userId} FOR UPDATE
+  </select>
   <select id="findOwnedById" resultType="com.aiquestion.domain.QuestionBank">
     SELECT id, name, question_count, category, source, published, created_by FROM question_bank
     WHERE id = #{id} AND created_by = #{userId}

@@ -35,16 +35,22 @@ public class QuestionImportService {
         this.bankRepository = bankRepository; this.itemRepository = itemRepository; this.optionRepository = optionRepository;
     }
 
-    public byte[] template() {
-        try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
-            Sheet sheet = workbook.createSheet("试题导入");
-            String[] headers = {"题型", "题干", "选项A", "选项B", "选项C", "选项D", "正确答案", "解析", "标签", "难度", "出处"};
-            String[][] examples = {
+    private static final String[][] EXAMPLES = {
                 {"单选题", "示例：临时离开办公电脑时，应先做什么？", "锁定屏幕", "关闭显示器", "调低亮度", "最小化窗口", "A", "锁屏后需要重新验证身份才能继续操作。", "信息安全", "易", "入职培训"},
                 {"多选题", "示例：哪些做法有助于保护工作账号？", "启用多因素认证", "多个系统共用密码", "使用独立密码", "把验证码发给同事", "AC", "独立密码和多因素认证都能降低账号被盗用的风险。", "账号安全", "中", "入职培训"},
                 {"判断题", "示例：可以把工作账号的验证码发给自称是管理员的人。", "", "", "", "", "错误", "验证码仅供本人验证身份时使用。", "账号安全", "易", "入职培训"},
                 {"问答题", "示例：收到要求输入工作账号密码的可疑邮件，应如何处理？", "", "", "", "", "先通过已知的官方渠道核实发件人身份，避免点击邮件链接或输入密码，并向信息安全人员报告。", "", "邮件安全", "中", "入职培训"}
             };
+
+    public byte[] wordTemplate() {
+        try { return WordQuestionImport.template(EXAMPLES); }
+        catch (IOException e) { throw new BusinessException(ErrorCode.SYSTEM_ERROR, "Word 模板生成失败"); }
+    }
+
+    public byte[] template() {
+        try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            Sheet sheet = workbook.createSheet("试题导入");
+            String[] headers = {"题型", "题干", "选项A", "选项B", "选项C", "选项D", "正确答案", "解析", "标签", "难度", "出处"};
             Row header = sheet.createRow(0);
             CellStyle headerStyle = workbook.createCellStyle();
             headerStyle.setFillForegroundColor(IndexedColors.ORANGE.getIndex());
@@ -57,7 +63,7 @@ public class QuestionImportService {
             }
             CellStyle exampleStyle = workbook.createCellStyle();
             exampleStyle.setWrapText(true);
-            for (String[] example : examples) {
+            for (String[] example : EXAMPLES) {
                 Row row = sheet.createRow(sheet.getLastRowNum() + 1);
                 row.setHeightInPoints(54);
                 for (int i = 0; i < example.length; i++) {
@@ -75,44 +81,110 @@ public class QuestionImportService {
 
     @Transactional(rollbackFor = Exception.class)
     public ImportResult importFile(Long bankId, MultipartFile file, Long userId) {
-        if (bankRepository.findOwnedById(bankId, userId) == null) { throw new BusinessException(ErrorCode.QUESTION_BANK_NOT_FOUND); }
-        if (file == null || file.isEmpty()) { throw new BusinessException(ErrorCode.BAD_REQUEST, "请上传 Excel 文件"); }
-        String name = Optional.ofNullable(file.getOriginalFilename()).orElse("").toLowerCase(Locale.ROOT);
-        if (!name.endsWith(".xlsx")) { throw new BusinessException(ErrorCode.BAD_REQUEST, "仅支持 .xlsx 格式"); }
-        int imported = 0, skipped = 0; List<String> errors = new ArrayList<>();
-        try (Workbook workbook = WorkbookFactory.create(file.getInputStream())) {
-            Sheet sheet = workbook.getSheetAt(0); DataFormatter formatter = new DataFormatter();
-            int headerRow = findHeaderRow(sheet, formatter);
-            if (headerRow < 0) { throw new BusinessException(ErrorCode.BAD_REQUEST, "未找到模板表头“题型”，请使用标准试题导入模板"); }
-            for (int rowIndex = headerRow + 1; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
-                Row row = sheet.getRow(rowIndex); if (row == null || blank(formatter, row, 1)) continue;
-                int line = rowIndex + 1;
-                try {
-                    String typeText = value(formatter, row, 0), stem = value(formatter, row, 1), answer = value(formatter, row, 6);
-                    String type = normalizeType(typeText);
-                    if (stem.isBlank() || answer.isBlank()) { throw new IllegalArgumentException("题干和正确答案不能为空"); }
-                    if (itemRepository.countByBankIdAndStem(bankId, stem) > 0) { skipped++; continue; }
-                    List<OptionRequest> options = new ArrayList<>();
-                    if ("TRUE_FALSE".equals(type)) { answer = normalizeBoolean(answer); }
-                    else if ("SHORT_ANSWER".equals(type)) {
-                        for (int i = 2; i <= 5; i++) {
-                            if (!blank(formatter, row, i)) throw new IllegalArgumentException("问答题不能包含选项");
-                        }
-                        answer = formatter.formatCellValue(row.getCell(6));
-                    } else {
-                        String normalizedAnswer = answer.replaceAll("[，、,\\s]+", "").toUpperCase(Locale.ROOT);
-                        for (int i = 0; i < 4; i++) { String text = value(formatter, row, 2 + i); if (!text.isBlank()) options.add(new OptionRequest(String.valueOf((char)('A' + i)), text, normalizedAnswer.contains(String.valueOf((char)('A' + i))), i)); }
-                        if (options.size() < 2 || options.stream().noneMatch(OptionRequest::correct)) { throw new IllegalArgumentException("选项至少填写两项且必须包含正确答案"); }
-                        answer = normalizedAnswer;
-                    }
-                    answer = QuestionAnswerRules.validate(type, answer, options);
-                    QuestionItem item = new QuestionItem(); item.setBankId(bankId); item.setQuestionType(type); item.setStem(stem); item.setAnswerText(answer); item.setAnalysis(value(formatter,row,7)); item.setTags(value(formatter,row,8)); item.setDifficulty(normalizeDifficulty(value(formatter,row,9))); item.setScore(BigDecimal.ONE); item.setSource(value(formatter,row,10)); item.setStatus("ENABLED"); itemRepository.insert(item);
-                    for (OptionRequest request : options) { QuestionOption option = new QuestionOption(); option.setQuestionId(item.getId()); option.setOptionKey(request.optionKey()); option.setOptionText(request.optionText()); option.setCorrect(Boolean.TRUE.equals(request.correct())); option.setSortNo(request.sortNo()); optionRepository.insert(option); }
-                    bankRepository.incrementQuestionCount(bankId); imported++;
-                } catch (IllegalArgumentException | BusinessException e) { errors.add("第" + line + "行：" + e.getMessage()); }
+        if (bankRepository.lockOwnedForImport(bankId, userId) == null) { throw new BusinessException(ErrorCode.QUESTION_BANK_NOT_FOUND); }
+        if (file == null || file.isEmpty()) throw new BusinessException(ErrorCode.BAD_REQUEST, "请选择 Excel 或 Word 文件");
+        String name = Objects.toString(file.getOriginalFilename(), "").toLowerCase(Locale.ROOT);
+        List<ImportQuestion> questions;
+        try (var input = file.getInputStream()) {
+            if (name.endsWith(".docx")) questions = WordQuestionImport.read(input);
+            else if (name.endsWith(".xlsx")) questions = readExcel(input);
+            else throw new BusinessException(ErrorCode.BAD_REQUEST, "仅支持 .xlsx 和 .docx 格式");
+        } catch (BusinessException e) {
+            throw e;
+        } catch (IOException | RuntimeException e) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "文件解析失败，请检查格式并使用对应的导入模板");
+        }
+        int imported = 0, skipped = 0;
+        List<ImportIssue> issues = new ArrayList<>();
+        for (var question : questions) {
+            try {
+                if (insertQuestion(bankId, question)) imported++;
+                else skipped++;
+            } catch (IllegalArgumentException | BusinessException e) {
+                issues.add(new ImportIssue(question.location, question.stem, e.getMessage()));
             }
-            return new ImportResult(imported, skipped, errors);
-        } catch (Exception e) { if (e instanceof BusinessException be) throw be; throw new BusinessException(ErrorCode.BAD_REQUEST, "Excel 文件解析失败，请确认使用标准模板"); }
+        }
+        if (questions.isEmpty()) throw new BusinessException(ErrorCode.BAD_REQUEST, "文件中没有题目，请填写后重新导入");
+        return new ImportResult(imported, skipped, issues);
+    }
+
+    private List<ImportQuestion> readExcel(java.io.InputStream input) throws IOException {
+        try (Workbook workbook = WorkbookFactory.create(input)) {
+            Sheet sheet = workbook.getSheetAt(0);
+            DataFormatter formatter = new DataFormatter();
+            int headerRow = findHeaderRow(sheet, formatter);
+            if (headerRow < 0) throw new BusinessException(ErrorCode.BAD_REQUEST, "未找到模板表头“题型”，请使用标准试题导入模板");
+            List<ImportQuestion> questions = new ArrayList<>();
+            for (int i = headerRow + 1; i <= sheet.getLastRowNum(); i++) {
+                var row = sheet.getRow(i);
+                if (row == null || java.util.stream.IntStream.range(0, 11).allMatch(col -> blank(formatter, row, col))) continue;
+                var question = new ImportQuestion("第" + (i + 1) + "行", value(formatter,row,0), value(formatter,row,1));
+                for (int j = 0; j < 4; j++) {
+                    String text = value(formatter, row, j + 2);
+                    if (!text.isEmpty()) question.options.put(String.valueOf((char) ('A' + j)), text);
+                }
+                question.answer = formatter.formatCellValue(row.getCell(6));
+                question.analysis = value(formatter,row,7);
+                question.tags = value(formatter,row,8);
+                question.difficulty = value(formatter,row,9);
+                question.source = value(formatter,row,10);
+                questions.add(question);
+            }
+            return questions;
+        }
+    }
+
+    private boolean insertQuestion(Long bankId, ImportQuestion question) {
+        if (question.error != null) throw new IllegalArgumentException(question.error);
+        String type = normalizeType(question.type);
+        if (question.stem.isBlank()) throw new IllegalArgumentException("缺少题干");
+        if (question.answer.isBlank()) throw new IllegalArgumentException("缺少答案");
+        if (itemRepository.countByBankIdAndStem(bankId, question.stem) > 0) return false;
+        List<OptionRequest> options = new ArrayList<>();
+        String answer = question.answer;
+        if ("TRUE_FALSE".equals(type)) answer = normalizeBoolean(answer.trim());
+        else {
+            String keys = answer.toUpperCase(Locale.ROOT);
+            question.options.forEach((key, text) -> options.add(new OptionRequest(key, text, keys.contains(key), key.charAt(0) - 'A')));
+        }
+        answer = QuestionAnswerRules.validate(type, answer, options);
+        if (question.tags.codePointCount(0, question.tags.length()) > 500)
+            throw new IllegalArgumentException("标签最多 500 个字符");
+        if (question.source.codePointCount(0, question.source.length()) > 255)
+            throw new IllegalArgumentException("出处最多 255 个字符");
+        validateTextSize("题干", question.stem);
+        validateTextSize("答案", answer);
+        validateTextSize("解析", question.analysis);
+        for (var option : options) validateTextSize("选项 " + option.optionKey(), option.optionText());
+        QuestionItem item = new QuestionItem();
+        item.setBankId(bankId);
+        item.setQuestionType(type);
+        item.setStem(question.stem);
+        item.setAnswerText(answer);
+        item.setAnalysis(question.analysis);
+        item.setTags(question.tags);
+        item.setDifficulty(normalizeDifficulty(question.difficulty));
+        item.setScore(BigDecimal.ONE);
+        item.setSource(question.source);
+        item.setStatus("ENABLED");
+        itemRepository.insert(item);
+        for (var request : options) {
+            var option = new QuestionOption();
+            option.setQuestionId(item.getId());
+            option.setOptionKey(request.optionKey());
+            option.setOptionText(request.optionText());
+            option.setCorrect(Boolean.TRUE.equals(request.correct()));
+            option.setSortNo(request.sortNo());
+            optionRepository.insert(option);
+        }
+        bankRepository.incrementQuestionCount(bankId);
+        return true;
+    }
+
+    private static void validateTextSize(String field, String text) {
+        // MySQL TEXT capacity is measured in bytes under utf8mb4.
+        if (text.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 65_535)
+            throw new IllegalArgumentException(field + "内容过长，请缩短后重试");
     }
 
     private static String value(DataFormatter formatter, Row row, int index) { Cell cell = row.getCell(index); return cell == null ? "" : formatter.formatCellValue(cell).trim(); }
@@ -121,5 +193,11 @@ public class QuestionImportService {
     private static String normalizeType(String value) { String normalized = value == null ? "" : value.replaceAll("\\s+", "").replace("（必填）", "").replace("(必填)", "").toUpperCase(Locale.ROOT); return switch (normalized) { case "单选题", "单选", "SINGLE", "SINGLECHOICE" -> "SINGLE"; case "多选题", "多选", "MULTIPLE", "MULTIPLECHOICE" -> "MULTIPLE"; case "判断题", "判断", "TRUEFALSE", "TRUE_FALSE", "判断题型" -> "TRUE_FALSE"; case "问答题", "问答", "简答题", "简答", "SHORTANSWER", "SHORT_ANSWER" -> "SHORT_ANSWER"; default -> throw new IllegalArgumentException("题型必须是单选题、多选题、判断题或问答题"); }; }
     private static String normalizeBoolean(String answer) { return switch (answer.trim()) { case "正确", "对", "是", "TRUE", "true" -> "TRUE"; case "错误", "错", "否", "FALSE", "false" -> "FALSE"; default -> throw new IllegalArgumentException("判断题答案必须填写正确或错误"); }; }
     private static String normalizeDifficulty(String value) { return switch (value) { case "易", "简单", "EASY" -> "EASY"; case "难", "困难", "HARD" -> "HARD"; default -> "MEDIUM"; }; }
-    public record ImportResult(int imported, int skipped, List<String> errors) {}
+    public record ImportIssue(String location, String stem, String reason) {}
+    public record ImportResult(int imported, int skipped, List<ImportIssue> issues) {
+        // 兼容仍使用文本错误信息的客户端。
+        public List<String> getErrors() {
+            return issues.stream().map(issue -> issue.location() + "：" + issue.reason()).toList();
+        }
+    }
 }

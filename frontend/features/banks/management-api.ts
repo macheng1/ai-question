@@ -12,13 +12,17 @@ export function createBankCategory(data:Omit<Category,"id">){ return apiClient.p
 export function updateBankCategory(id:number,data:Omit<Category,"id">){ return apiClient.put<Category>(`/management/bank-categories/${id}`, data); }
 export function deleteBankCategory(id:number){ return apiClient.delete<void>(`/management/bank-categories/${id}`); }
 export type QuestionOption = { id?:number; optionKey:string; optionText:string; correct?:boolean; sortNo?:number };
-export type QuestionItem = { id:number; bankId:number; questionType:string; stem:string; answerText?:string; analysis?:string; tags?:string; source?:string; difficulty?:string; score?:number; options?:QuestionOption[] };
+export type QuestionItem = { status?:string; id:number; bankId:number; questionType:string; stem:string; answerText?:string; analysis?:string; tags?:string; source?:string; difficulty?:string; score?:number; options?:QuestionOption[] };
 export function getBankQuestions(bankId:number, pageNo = 1, pageSize = 50, keyword?:string){ return apiClient.get<{records:QuestionItem[];total:number}>("/management/questions", { bankId, pageNo, pageSize, keyword }); }
 export type SaveQuestion = { bankId:number; questionType:string; stem:string; answerText?:string; analysis?:string; tags?:string; source?:string; difficulty?:string; score?:number; options?:QuestionOption[] };
 export function getQuestion(id:number){ return apiClient.get<QuestionItem>(`/management/questions/${id}`); }
 export function createQuestion(data:SaveQuestion){ return apiClient.post<QuestionItem>("/management/questions", data); }
 export function updateQuestion(id:number,data:Omit<SaveQuestion,"bankId">){ return apiClient.put<QuestionItem>(`/management/questions/${id}`, data); }
 export function deleteQuestion(id:number){ return apiClient.delete<void>(`/management/questions/${id}`); }
-export type QuestionImportResult = { imported:number; skipped:number; errors:string[] };
+export type QuestionImportIssue = { location: string; stem: string; reason: string };
+export type QuestionImportResult = { imported:number; skipped:number; errors:string[]; issues?:QuestionImportIssue[] };
 export function importQuestions(bankId:number,file:File){ return apiClient.uploadForm<QuestionImportResult>("/management/questions/import", { bankId:String(bankId) }, "file", file); }
-export function getQuestionImportTemplate(){ return apiClient.download("/management/questions/template"); }
+export function getQuestionImportTemplate(format: "xlsx" | "docx" = "xlsx"){
+  const path = format === "docx" ? "/management/questions/template/word" : "/management/questions/template";
+  return apiClient.download(path, { filename: "试题导入模板." + format });
+}

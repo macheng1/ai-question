@@ -10,6 +10,7 @@ public interface DashboardRepository {
   List<Map<String,Object>> rows(@Param("owner") long owner, @Param("filters") Map<String,Object> filters);
   List<Map<String,Object>> trainingOptions(@Param("owner") long owner);
   List<Map<String,Object>> departmentOptions(@Param("owner") long owner);
+  List<Map<String,Object>> learnerEmails(@Param("owner") long owner, @Param("ids") java.util.Set<Long> ids);
   default Map<String,Object> options(long owner) {
     return Map.of("trainings", trainingOptions(owner), "departments", departmentOptions(owner));
   }

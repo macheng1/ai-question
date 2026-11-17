@@ -72,6 +72,20 @@ public class DashboardService {
     return loadDetails(owner, start, end, trainingId, departmentId, category, "incomplete", status, 1, 10, false).rows();
   }
 
+  @Transactional(readOnly = true)
+  public List<Map<String, Object>> overdueRows(long owner, LocalDate start, LocalDate end,
+      Long trainingId, Long departmentId, String category) {
+    return loadDetails(owner, start, end, trainingId, departmentId, category, "learners", "OVERDUE", 1, 10, false).rows();
+  }
+
+  public Map<Long,String> learnerEmails(long owner, Set<Long> ids) {
+    Map<Long,String> emails = new HashMap<>();
+    for (var row : repository.learnerEmails(owner, ids)) {
+      emails.put(((Number) row.get("id")).longValue(), Objects.toString(row.get("email"), "").trim());
+    }
+    return emails;
+  }
+
   private Result loadDetails(long owner, LocalDate start, LocalDate end, Long trainingId,
       Long departmentId, String category, String tab, String status, int page, int pageSize,
       boolean paginate) {

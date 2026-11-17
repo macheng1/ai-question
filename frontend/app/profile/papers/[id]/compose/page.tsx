@@ -17,11 +17,9 @@ import {
   type QuestionItem,
 } from "@/features/banks/management-api";
 import {
-  addPaperQuestion,
+  saveFixedQuestions,
   getPaper,
   getPaperQuestions,
-  removePaperQuestion,
-  updatePaperQuestionScore,
   updatePaperStatus,
   type Paper,
 } from "@/features/papers/api";
@@ -44,6 +42,10 @@ export default function ComposePaperPage() {
   const [selected, setSelected] = useState<QuestionItem[]>([]);
   // 已保存的题目快照，用于在点击“保存组卷/完成组卷”时计算差异。
   const [savedSelected, setSavedSelected] = useState<QuestionItem[]>([]);
+  const [loadedBank, setLoadedBank] = useState<number>();
+  const [bankError, setBankError] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [batchScore, setBatchScore] = useState("");
   const [keyword, setKeyword] = useState("");
   const [filter, setFilter] = useState("ALL");
   const [loading, setLoading] = useState(true);
@@ -94,13 +96,28 @@ export default function ComposePaperPage() {
         cancelled = true;
       };
     }
-    getBankQuestions(bankId)
-      .then((data) => {
-        if (!cancelled) setQuestions(data.records);
-      })
-      .catch((e) =>
-        !cancelled && Toast.error(e instanceof Error ? e.message : "题目加载失败"),
-      );
+    setQuestions([]);
+    setLoadedBank(undefined);
+    setBankError(false);
+    const loadQuestions = async (id: number) => {
+      const all = new Map<number, QuestionItem>();
+      for (let page = 1; ; page++) {
+        const data = await getBankQuestions(id, page, 100);
+        if (cancelled) return;
+        for (const item of data.records) {
+          if (!item.status || item.status === "ENABLED") all.set(item.id, item);
+        }
+        if (data.records.length < 100 || page * 100 >= data.total) break;
+      }
+      setQuestions(Array.from(all.values()));
+      setLoadedBank(id);
+    };
+    loadQuestions(bankId).catch(e => {
+      if (!cancelled) {
+        setBankError(true);
+        Toast.error(e instanceof Error ? e.message : "题目加载失败");
+      }
+    });
     return () => {
       cancelled = true;
     };
@@ -116,11 +133,27 @@ export default function ComposePaperPage() {
     [questions, keyword, filter],
   );
   const selectedIds = new Set(selected.map((item) => item.id));
-  const locked = Boolean(paper?.hasAssessment);
-  const score = selected.reduce(
-    (sum, item) => sum + Number(item.score || 5),
-    0,
-  );
+  const locked = !paper || Boolean(paper.hasAssessment) || saving;
+  const score = selected.reduce((sum, item) => sum + Math.round(Number(item.score ?? 5) * 100), 0) / 100;
+  const available = visibleQuestions.filter(item => !selectedIds.has(item.id));
+  const addAll = () => {
+    if (locked || loadedBank !== bankId || !available.length) return;
+    const remaining = Math.round((Number(paper?.totalScore) - score) * 100);
+    const fixed = Number(batchScore);
+    if (batchScore && (!Number.isFinite(fixed) || fixed <= 0 || !/^\d+(\.\d{1,2})?$/.test(batchScore))) {
+      Toast.error("每题分值须大于 0，最多两位小数");
+      return;
+    }
+    if (!batchScore && remaining < available.length) {
+      Toast.warning("剩余分数不足以平均分配，请先调整已选分值或指定每题分值");
+      return;
+    }
+    const base = Math.floor(remaining / available.length);
+    const extra = remaining % available.length;
+    setSelected([...selected, ...available.map((item, i) => ({
+      ...item, score: batchScore ? fixed : (base + (i < extra ? 1 : 0)) / 100,
+    }))]);
+  };
   const add = async (item: QuestionItem) => {
     if (locked) {
       Toast.info("试卷已有考试任务，组卷已锁定");
@@ -159,24 +192,13 @@ export default function ComposePaperPage() {
     const savedById = new Map(savedSelected.map((item) => [item.id, item]));
     const selectedById = new Map(selected.map((item) => [item.id, item]));
     try {
-      await Promise.all(
-        savedSelected
-          .filter((item) => !selectedById.has(item.id))
-          .map((item) => removePaperQuestion(paperId, item.id)),
+      const asScored = (item: QuestionItem) => ({ questionId: item.id, score: Number(item.score ?? 5) });
+      await saveFixedQuestions(paperId,
+        selected.filter(item => !savedById.has(item.id)).map(asScored),
+        selected.filter(item => savedById.has(item.id) && Number(savedById.get(item.id)?.score) !== Number(item.score)).map(asScored),
+        savedSelected.filter(item => !selectedById.has(item.id)).map(item => item.id),
       );
-      await Promise.all(
-        selected
-          .filter((item) => !savedById.has(item.id))
-          .map((item) => addPaperQuestion(paperId, { questionId: item.id, score: Number(item.score || 5) })),
-      );
-      await Promise.all(
-        selected
-          .filter((item) => savedById.has(item.id) && Number(savedById.get(item.id)?.score || 5) !== Number(item.score || 5))
-          .map((item) => updatePaperQuestionScore(paperId, item.id, Number(item.score || 5))),
-      );
-      const latest = await getPaperQuestions(paperId);
-      setSelected(latest);
-      setSavedSelected(latest);
+      setSavedSelected(selected);
       return true;
     } catch (e) {
       Toast.error(e instanceof Error ? e.message : "组卷保存失败");
@@ -190,7 +212,12 @@ export default function ComposePaperPage() {
       );
       return;
     }
-    if (await persistSelection()) Toast.success("组卷已保存");
+    setSaving(true);
+    try {
+      if (await persistSelection()) Toast.success("组卷已保存");
+    } finally {
+      setSaving(false);
+    }
   };
   const complete = async () => {
     if (score !== Number(paper?.totalScore || 0)) {
@@ -199,6 +226,7 @@ export default function ComposePaperPage() {
       );
       return;
     }
+    setSaving(true);
     try {
       if (!(await persistSelection())) return;
       await updatePaperStatus(paperId, "PUBLISHED");
@@ -206,6 +234,8 @@ export default function ComposePaperPage() {
       window.location.href = "/profile/papers";
     } catch (e) {
       Toast.error(e instanceof Error ? e.message : "操作失败");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -243,7 +273,7 @@ export default function ComposePaperPage() {
             <span className="shrink-0 whitespace-nowrap rounded bg-orange-50 px-2 py-1 text-orange-600">
               {paper?.status === "PUBLISHED" ? "已完成组卷" : "未完成组卷"}
             </span>
-            {locked && (
+            {paper?.hasAssessment && (
               <span className="shrink-0 whitespace-nowrap rounded bg-slate-200 px-2 py-1 text-slate-600">
                 <IconLock aria-hidden="true" /> 已锁定
               </span>
@@ -338,6 +368,14 @@ export default function ComposePaperPage() {
                 问答
               </Button>
             </div>
+            <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-3">
+              <label htmlFor="batch-score" className="text-sm">每题分值</label>
+              <Input id="batch-score" className="!w-40" value={batchScore} onChange={setBatchScore}
+                disabled={locked} placeholder="自动平分剩余分数" />
+              <Button disabled={locked || loadedBank !== bankId || !available.length} onClick={addAll}>
+                全选加入（{available.length} 题）
+              </Button>
+            </div>
             <div className="flex flex-col max-h-[720px] gap-2 overflow-y-auto bg-slate-50/40 p-2">
               {visibleQuestions.map((item, index) => (
                 <button type="button"
@@ -374,14 +412,16 @@ export default function ComposePaperPage() {
               ))}
               {!visibleQuestions.length && (
                 <div className="py-24 text-center text-sm text-slate-400">
-                  暂无可选题目
+                  {bankError ? "题目加载失败" : bankId && loadedBank !== bankId ? "正在加载题库…" : "暂无可选题目"}
                 </div>
               )}
             </div>
           </Layout.Content></div>
           <div className="min-w-0 col-span-2 lg:col-span-1"><Layout.Content className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-            <div className="border-b border-slate-100 px-5 py-4 text-base font-semibold text-slate-800">
-              已选题目 ({selected.length})
+            <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 text-base font-semibold text-slate-800">
+              <span>已选题目 ({selected.length})</span>
+              <Button size="small" theme="borderless" disabled={locked || selected.length === 0}
+                onClick={() => setSelected([])}>取消已选题目</Button>
             </div>
             <div className="border-b border-slate-100 bg-slate-50 px-5 py-3 text-sm text-slate-500">
               从左侧点击题目添加 · 当前总分 {score} 分

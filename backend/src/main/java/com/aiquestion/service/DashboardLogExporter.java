@@ -25,17 +25,21 @@ public final class DashboardLogExporter {
       "PASSED", "已通过", "FAILED", "未通过", "NONE", "无考试", "PENDING_REVIEW", "待批阅");
 
   public static byte[] write(List<Map<String, Object>> rows) throws IOException {
-    return write(rows, false);
+    return write(rows, false, "学习日志");
   }
 
   public static byte[] writeRoster(List<Map<String, Object>> rows) throws IOException {
-    return write(rows, true);
+    return write(rows, true, "未完成人员清单");
   }
 
-  private static byte[] write(List<Map<String, Object>> rows, boolean roster) throws IOException {
+  public static byte[] writeOverdue(List<Map<String, Object>> rows) throws IOException {
+    return write(rows, true, "逾期未完成人员清单");
+  }
+
+  private static byte[] write(List<Map<String, Object>> rows, boolean roster, String sheetName) throws IOException {
     String[] headers = roster ? new String[]{"姓名", "手机号", "部门", "培训名称", "整体状态", "学习进度（%）", "有效学时（小时）", "考试状态", "逾期情况"} : HEADERS;
     try (var workbook = new XSSFWorkbook(); var output = new ByteArrayOutputStream()) {
-      var sheet = workbook.createSheet(roster ? "未完成人员清单" : "学习日志");
+      var sheet = workbook.createSheet(sheetName);
       var headerStyle = workbook.createCellStyle();
       var font = workbook.createFont();
       font.setBold(true);

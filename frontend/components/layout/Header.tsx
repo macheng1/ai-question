@@ -28,12 +28,12 @@ export function Header() {
   const home = identity ? accountHome(identity.accountType) : "/login";
   return (
     <Layout.Header className="border-b border-slate-200 bg-white">
-      <div className="mx-auto flex min-h-16 w-[96%] max-w-[1800px] items-center justify-between gap-3">
+      <div className="mx-auto flex flex-wrap min-h-16 w-[96%] max-w-[1800px] items-center justify-between gap-3">
         <Link href={home} className="flex shrink-0 items-center py-2 no-underline">
           <Image src="/casela-logo.png" alt="CASELA Technologies" width={151} height={40} className="h-auto w-[121px] object-contain sm:w-[151px]" />
         </Link>
         {identity ? (
-          <Space>
+          <Space className="ml-auto max-w-full" wrap>
             {identity.accountType === "ADMIN" && (
               <a
                 href="/manuals/admin-guide.docx"
@@ -78,7 +78,7 @@ export function Header() {
                   </Avatar>
                 }
               >
-                {identity.name || identity.phone}
+                <span className="block max-w-[45vw] truncate">{identity.name || identity.phone}</span>
               </Button>
             </Dropdown>
           </Space>

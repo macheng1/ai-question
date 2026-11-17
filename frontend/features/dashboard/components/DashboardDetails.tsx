@@ -1,5 +1,8 @@
 "use client";
 import { useState } from "react";
+import { OverdueEmailDialog } from "./OverdueEmailDialog";
+import { apiClient } from "@/lib/api/client";
+import { Checkbox } from "@douyinfe/semi-ui";
 import { IconDownload } from "@douyinfe/semi-icons";
 import { exportDashboardRows } from "../api";
 import { useCompactViewport } from "@/lib/hooks/useCompactViewport";
@@ -75,6 +78,32 @@ export function DashboardDetails({
 }) {
   const compact = useCompactViewport();
   const [exporting, setExporting] = useState(false);
+  const overdueList = query.tab === "learners" && query.status === "OVERDUE";
+  const [selected, setSelected] = useState<string[]>([]);
+  const [selecting, setSelecting] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
+  const { start, end, trainingId, departmentId, category } = query;
+  const filters = { start, end, trainingId, departmentId, category };
+  const [notifying, setNotifying] = useState(false);
+  async function notifyLearners() {
+    if (notifying || !selected.length) return;
+    setNotifying(true);
+    try {
+      const result = await apiClient.post<{ sent: number; missingEmail: number; failed: number; unsentKeys: string[] }>(
+        "/management/dashboard/overdue/notify", { ...filters, records: selected }, { timeout: 0 });
+      setSelected(result.unsentKeys);
+      if (!result.unsentKeys.length) Toast.success(`发送成功，已通知 ${result.sent} 名学员`);
+      else Toast.warning(`已通知 ${result.sent} 人，缺少有效邮箱 ${result.missingEmail} 人，发送失败 ${result.failed} 人`);
+    } catch (e) { Toast.error(e instanceof Error ? e.message : "发送失败"); }
+    finally { setNotifying(false); }
+  }
+  async function selectAllOverdue() {
+    setSelecting(true);
+    try {
+      setSelected(await apiClient.get<string[]>("/management/dashboard/overdue/keys", filters));
+    } catch (e) { Toast.error(e instanceof Error ? e.message : "获取名单失败"); }
+    finally { setSelecting(false); }
+  }
   async function handleExport() {
     setExporting(true);
     try {
@@ -310,6 +339,12 @@ export function DashboardDetails({
           </span>
         </div>
         <Space wrap>
+        {overdueList && <>
+          <Button loading={selecting} disabled={loading || notifying || selecting || !data.total} onClick={selectAllOverdue}>选择全部 {data.total} 条</Button>
+          {selected.length > 0 && <Button disabled={selecting || notifying} onClick={() => setSelected([])}>清空选择</Button>}
+          <Button theme="solid" loading={notifying} disabled={!selected.length || loading || notifying || selecting} onClick={notifyLearners}>通知学员（{selected.length}）</Button>
+          <Button disabled={!selected.length || loading || notifying || selecting} onClick={() => setEmailOpen(true)}>转发名单</Button>
+        </>}
         {(query.tab === "logs" || query.tab === "incomplete") && (
           <Button icon={<IconDownload />} loading={exporting} disabled={loading || data.total === 0} onClick={handleExport}>
             导出 Excel
@@ -336,7 +371,14 @@ export function DashboardDetails({
       </div>
       <Table<DashboardRow>
         className="[&_.semi-table-pagination-outer]:!m-0 [&_.semi-table-pagination-outer]:flex-wrap [&_.semi-table-pagination-outer]:gap-3 [&_.semi-table-pagination-outer]:!px-4 [&_.semi-table-pagination-outer]:!py-4"
-        columns={columns}
+        columns={overdueList ? [{
+          title: "选择", width: 64, render: (_: unknown, row: DashboardRow) => {
+            const key = row.trainingId + "-" + row.employeeId;
+            return <Checkbox aria-label={`选择 ${row.name} · ${row.trainingName}`} disabled={loading || notifying || selecting}
+              checked={selected.includes(key)} onChange={e => setSelected(prev =>
+                e.target.checked ? [...prev, key] : prev.filter(item => item !== key))} />;
+          },
+        }, ...columns] : columns}
         dataSource={data.rows}
         loading={loading}
         rowKey={(row) =>
@@ -368,6 +410,7 @@ export function DashboardDetails({
           <p className="m-0">未完成人员清单仅统计已开始学习或答题、尚未完成培训的学员。</p>
         </div>
       )}
+      {overdueList && emailOpen && <OverdueEmailDialog records={selected} filters={filters} onClose={() => setEmailOpen(false)} />}
     </Card>
   );
 }

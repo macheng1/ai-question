@@ -95,6 +95,13 @@ public class TestPaperController {
     return ApiResponse.ok(service.questions(id));
   }
 
+  @Operation(summary = "批量保存固定组卷")
+  @PutMapping("/{id}/questions")
+  public ApiResponse<Void> saveFixedQuestions(@PathVariable Long id, @Valid @RequestBody TestPaperService.FixedChanges changes) {
+    service.saveFixedQuestions(id, changes);
+    return ApiResponse.ok(null);
+  }
+
   @Operation(summary = "向试卷添加题目")
   @PostMapping("/{id}/questions")
   public ApiResponse<QuestionItem> addQuestion(

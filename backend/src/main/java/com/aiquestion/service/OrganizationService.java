@@ -53,6 +53,27 @@ public class OrganizationService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "部门不存在或不可用");
     }
 
+    long resolveImportDepartment(String input) {
+        if (input.isBlank() || input.length() > 100)
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "请填写部门名称，最多100个字符");
+        long owner = ManagementAccess.userId();
+        assignments.lockAllocationOwner(owner);
+        var matches = persistence.findDepartmentsByName(owner, input);
+        if (matches.isEmpty()) return insertDepartment(owner, input, "ACTIVE");
+        var active = matches.stream().filter(row -> "ACTIVE".equals(row.get("status"))).toList();
+        if (active.isEmpty())
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "部门“" + input + "”已停用，请先恢复部门");
+        if (active.size() > 1)
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "存在多个同名在用部门，请先区分部门名称");
+        return ((Number) active.get(0).get("id")).longValue();
+    }
+
+    private long insertDepartment(long owner, String name, String status) {
+        var generated = new com.aiquestion.repository.GeneratedId();
+        persistence.insertDepartment(owner, name, status, generated);
+        return generated.getId();
+    }
+
     @Transactional
     public Map<String, Object> saveDepartment(Long id, String name, String status) {
         validateStatus(status);
@@ -61,9 +82,7 @@ public class OrganizationService {
         assignments.lockAllocationOwner(owner);
         boolean restored = false;
         if (id == null) {
-            var inserted1 = new com.aiquestion.repository.GeneratedId();
-            persistence.insertDepartment(owner, clean, status, inserted1);
-            id = inserted1.getId();
+            id = insertDepartment(owner, clean, status);
         } else {
             var previous = persistence.lockDepartmentStatus(id, owner);
             if (previous.isEmpty())
@@ -79,6 +98,11 @@ public class OrganizationService {
 
     @Transactional
     public Map<String, Object> saveEmployee(Long id, String name, String phone, String email, String jobTitle, Long departmentId, String status, String learnerType, String gender, String employeeNo, String remark) {
+        long saved = persistEmployee(id, name, phone, email, jobTitle, departmentId, status, learnerType, gender, employeeNo, remark);
+        return employees().stream().filter(r -> ((Number) r.get("id")).longValue() == saved).findFirst().orElseThrow();
+    }
+
+    long persistEmployee(Long id, String name, String phone, String email, String jobTitle, Long departmentId, String status, String learnerType, String gender, String employeeNo, String remark) {
         validateStatus(status);
         CandidateLearningService.validate(name, phone);
         String cleanEmail = email == null || email.isBlank() ? null : email.trim();
@@ -121,7 +145,6 @@ public class OrganizationService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "手机号已存在");
         }
         assignments.assignEmployee(id, owner);
-        final long saved = id;
-        return employees().stream().filter(r -> ((Number) r.get("id")).longValue() == saved).findFirst().orElseThrow();
+        return id;
     }
 }

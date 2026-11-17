@@ -8,3 +8,12 @@ export const getDepartments = () => apiClient.get<Department[]>("/management/dep
 export const getEmployees = () => apiClient.get<Employee[]>("/management/employees");
 export const saveDepartment = (id: number | undefined, data: SaveDepartment) => id ? apiClient.put<Department>(`/management/departments/${id}`, data) : apiClient.post<Department>("/management/departments", data);
 export const saveEmployee = (id: number | undefined, data: SaveEmployee) => id ? apiClient.put<Employee>(`/management/employees/${id}`, data) : apiClient.post<Employee>("/management/employees", data);
+
+export const downloadEmployeeTemplate = () =>
+  apiClient.download("/management/employees/import/template", { filename: "学员导入模板.xlsx" });
+
+export function importEmployees(file: File) {
+  const data = new FormData();
+  data.append("file", file);
+  return apiClient.post<number>("/management/employees/import", data);
+}

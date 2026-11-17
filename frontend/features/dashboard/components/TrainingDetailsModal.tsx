@@ -57,6 +57,7 @@ export function TrainingDetailsModal({ initialQuery, title, onClose }: {
             <span>完成率：{data.overview.completionRate == null ? "—" : `${data.overview.completionRate}%`}</span>
           </div>
           <DashboardDetails
+            key={JSON.stringify([query.tab, query.status, query.start, query.end, query.trainingId, query.departmentId, query.category])}
             data={data}
             query={query}
             loading={loading}

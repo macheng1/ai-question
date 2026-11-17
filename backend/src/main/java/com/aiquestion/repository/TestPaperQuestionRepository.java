@@ -13,6 +13,9 @@ import org.apache.ibatis.annotations.Param;
  * @author aiquestion
  */
 public interface TestPaperQuestionRepository {
+  Long lockOwnedPaper(@Param("paperId") Long paperId, @Param("ownerId") Long ownerId);
+  int nextSortNo(@Param("paperId") Long paperId);
+
   /**
    * 数据访问方法。
    *
