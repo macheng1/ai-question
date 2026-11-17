@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { videoPlaybackUrl } from "../video-playback";
 import { apiClient } from "@/lib/api/client";
 import { Button, Layout, Modal, Spin, Toast, Upload, VideoPlayer } from "@douyinfe/semi-ui";
-import { forgetExpiredUploads, MAX_VIDEO_BYTES, prepareDraftVideo } from "../video-upload";
+import { forgetExpiredUploads, prepareDraftVideo } from "../video-upload";
 type Video = { id: number; title: string };
 export function TrainingVideos({ id, readOnly = false }: { id: number; readOnly?: boolean }) {
   const [videos, setVideos] = useState<Video[]>([]);
@@ -42,7 +42,7 @@ export function TrainingVideos({ id, readOnly = false }: { id: number; readOnly?
     setBusy(true); try { await apiClient.delete(`/management/trainings/${id}/videos/${video.id}`); await load(); Toast.success("视频已删除"); }
     catch (e) { Toast.error(e instanceof Error ? e.message : "删除失败"); } finally { setBusy(false); }
   }});
-  return <Layout.Content className="flex flex-col gap-3"><p className="text-sm">上传 MP4 / WebM 视频，单个视频最大 2 GiB。上传、排序和删除立即生效。</p>
+  return <Layout.Content className="flex flex-col gap-3"><p className="text-sm">上传 MP4 / WebM 视频。上传、排序和删除立即生效。</p>
     {error && <p role="alert" className="text-red-600">{error}<Button theme="borderless" onClick={() => load().catch(e => setError(e.message))}>重试</Button></p>}
     <ul className="divide-y divide-slate-100">{videos.map((v, i) => <li key={v.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><span className="break-all">{i + 1}. {v.title}</span><span className="flex gap-3"><Button onClick={() => setPreview(v)}>预览</Button><Button disabled={readOnly || busy || i === 0} onClick={() => move(i, -1)}>上移</Button><Button disabled={readOnly || busy || i === videos.length - 1} onClick={() => move(i, 1)}>下移</Button><Button disabled={readOnly || busy} type="danger" onClick={() => remove(v)}>删除</Button></span></li>)}</ul>
     {!videos.length && !uploadFiles.length && !error && <p className="text-slate-500">暂无视频。</p>}
@@ -50,7 +50,6 @@ export function TrainingVideos({ id, readOnly = false }: { id: number; readOnly?
       fileList={uploadFiles} showClear={false} showRetry={!busy && !readOnly}
       beforeRemove={() => !busy} onChange={({ fileList }) => setUploadFiles(fileList.filter(file => file.status !== "success"))}
       beforeUpload={({ file }) => {
-        if (Number(file.size || 0) > MAX_VIDEO_BYTES) { Toast.error("视频不能超过 2 GiB"); return false; }
         return true;
       }}
       customRequest={async ({ fileInstance, onProgress, onSuccess, onError }) => {

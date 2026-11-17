@@ -3,6 +3,9 @@ package com.aiquestion.service;
 import com.aiquestion.common.*;
 import com.aiquestion.storage.FileStorageService;
 import java.util.*;
+import com.aiquestion.repository.PreparedMaterialRepository;
+import com.aiquestion.repository.PreparedMaterialRepository.Ticket;
+import org.springframework.transaction.support.TransactionTemplate;
 import java.io.*;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -32,7 +35,13 @@ public class TrainingMaterialService {
 
     private final com.aiquestion.repository.MaterialPreviewRepository previews;
 
-    public TrainingMaterialService(TrainingMaterialRepository persistence, FileStorageService oss, TrainingService trainings, com.aiquestion.repository.MaterialPreviewRepository previews) {
+    private final PreparedMaterialRepository prepared;
+    private final TransactionTemplate transaction;
+    private static final String DESCRIPTOR = "application/vnd.aiquestion.material-upload";
+
+    public TrainingMaterialService(TrainingMaterialRepository persistence, FileStorageService oss, TrainingService trainings, com.aiquestion.repository.MaterialPreviewRepository previews, PreparedMaterialRepository prepared, TransactionTemplate transaction) {
+        this.prepared = prepared;
+        this.transaction = transaction;
         this.previews = previews;
         this.persistence = persistence;
         this.oss = oss;
@@ -59,27 +68,60 @@ public class TrainingMaterialService {
         com.aiquestion.repository.RepositoryRows.one(persistence.lockTrainingForUpload(training));
         if (com.aiquestion.repository.RepositoryRows.one(persistence.countTrainingSessions(training)) > 0)
             throw new BusinessException(ErrorCode.BAD_REQUEST, "已有学习记录，不能新增材料，请新建培训");
+        Ticket ticket;
+        if (DESCRIPTOR.equalsIgnoreCase(file.getContentType())) {
+            if (file.getSize() != 36) throw invalidTicket();
+            String id = new String(file.getBytes(), java.nio.charset.StandardCharsets.US_ASCII);
+            ticket = prepared.lock(id);
+            if (ticket == null || ticket.owner() != user || ticket.expires() <= System.currentTimeMillis())
+                throw invalidTicket();
+            prepared.remove(id);
+        } else {
+            ticket = store(user, file);
+        }
+        var inserted = new com.aiquestion.repository.GeneratedId();
+        persistence.insertMaterial(training, ticket.title(), ticket.type(), ticket.key(), ticket.pages(), inserted);
+        long id = inserted.getId();
+        for (int page = 1; page <= ticket.pages(); page++) persistence.insertPage(id, page);
+        return id;
+    }
+
+    private BusinessException invalidTicket() {
+        return new BusinessException(ErrorCode.BAD_REQUEST, "材料上传记录已失效，请移除后重新选择文件");
+    }
+
+    private Ticket store(long user, MultipartFile file) throws IOException {
         var info = inspect(file);
-        String title = info.title(), type = info.type(), mime = info.mime(), extension = info.extension();
-        int pages = info.pageCount();
-        String key = oss.uploadMaterial(file, mime, extension, "training-materials");
+        String key = oss.uploadMaterial(file, info.mime(), info.extension(), "training-materials");
         org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {
             public void afterCompletion(int status) {
-                if (status != STATUS_COMMITTED) try { oss.delete(key); } catch (RuntimeException ignored) { }
+                if (status != STATUS_COMMITTED) oss.delete(key);
             }
         });
-        try {
-            var inserted1 = new com.aiquestion.repository.GeneratedId();
-            persistence.insertMaterial(training, title, type, key, pages, inserted1);
-            Long id = inserted1.getId();
-            for (int page = 1; page <= pages; page++) persistence.insertPage(id, page);
-            return id;
-        } catch (RuntimeException e) {
+        return new Ticket(UUID.randomUUID().toString(), user, info.title(), info.type(), key,
+                info.pageCount(), System.currentTimeMillis() + java.time.Duration.ofDays(1).toMillis());
+    }
+
+    @Transactional
+    public Map<String, Object> prepare(long user, MultipartFile file) throws IOException {
+        Ticket ticket = store(user, file);
+        prepared.insert(ticket);
+        return Map.of("id", ticket.id(), "pageCount", ticket.pages());
+    }
+
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelay = 600000)
+    public void expirePreparedMaterials() {
+        for (String id : prepared.expired(System.currentTimeMillis())) {
             try {
-                oss.delete(key);
-            } catch (RuntimeException ignored) {
+                transaction.executeWithoutResult(tx -> {
+                    Ticket ticket = prepared.lock(id);
+                    if (ticket == null || ticket.expires() > System.currentTimeMillis()) return;
+                    oss.delete(ticket.key());
+                    prepared.remove(id);
+                });
+            } catch (RuntimeException error) {
+                org.slf4j.LoggerFactory.getLogger(getClass()).warn("材料暂存清理失败 id={}", id, error);
             }
-            throw e;
         }
     }
 

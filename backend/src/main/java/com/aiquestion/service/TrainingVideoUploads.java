@@ -24,7 +24,6 @@ import org.springframework.web.multipart.MultipartFile;
 public class TrainingVideoUploads {
     private static final Logger log = LoggerFactory.getLogger(TrainingVideoUploads.class);
     public static final String DESCRIPTOR = "application/vnd.aiquestion.video-upload";
-    static final long MAX_SIZE = 2L * 1024 * 1024 * 1024;
     static final int PART_SIZE = 8 * 1024 * 1024;
     private static final long TTL = Duration.ofHours(24).toMillis();
 
@@ -86,8 +85,8 @@ public class TrainingVideoUploads {
                 ownerCount++;
             }
         }
-        if (ownerCount >= 64 || uploads.size() >= 512 || ownerReserved + size > Math.max(MAX_SIZE, capacity / 2)
-                || reserved + size > capacity)
+        if (ownerCount >= 64 || uploads.size() >= 512 || size > capacity / 2 - ownerReserved
+                || size > capacity - reserved)
             throw new BusinessException(ErrorCode.TOO_MANY_REQUESTS, "暂存视频已达容量限制，请先保存已上传的视频");
         Files.createDirectories(directory);
         if (Files.getFileStore(directory).getUsableSpace() - reserve - writingBytes < size)
@@ -231,8 +230,8 @@ public class TrainingVideoUploads {
 
     static String type(String name, long size) {
         String lower = name.toLowerCase(Locale.ROOT);
-        if (size < 12 || size > MAX_SIZE || !(lower.endsWith(".mp4") || lower.endsWith(".webm")))
-            throw bad("仅支持2GB以内的MP4或WebM视频");
+        if (size < 12 || !(lower.endsWith(".mp4") || lower.endsWith(".webm")))
+            throw bad("请选择有效的 MP4 或 WebM 视频");
         return lower.endsWith(".mp4") ? "video/mp4" : "video/webm";
     }
 

@@ -74,6 +74,10 @@ public class TrainingEndpointService {
         return ApiResponse.ok(null);
     }
 
+    public ApiResponse<?> prepareMaterial(org.springframework.web.multipart.MultipartFile file, String auth) throws java.io.IOException {
+        return ApiResponse.ok(materials.prepare(user(auth), file));
+    }
+
     public ApiResponse<?> inspectMaterial(org.springframework.web.multipart.MultipartFile file, String auth) throws java.io.IOException {
         user(auth);
         return ApiResponse.ok(materials.inspect(file));

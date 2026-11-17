@@ -20,12 +20,12 @@ class TrainingVideoUploadsTest {
     @BeforeEach void setup() { service = new TrainingVideoUploads(directory.toString(), 8L << 30, 2L << 30); }
 
     @Test void acceptsTwoGiBAndUsesLongOffsetsForLastPart() throws Exception {
-        long limit = 1L << 31;
+        long limit = (1L << 31) + TrainingVideoUploads.PART_SIZE;
         String id = service.create(1, "片尾.webm", limit);
         byte[] last = new byte[TrainingVideoUploads.PART_SIZE];
-        service.put(1, id, 255, new ByteArrayInputStream(last));
+        service.put(1, id, 256, new ByteArrayInputStream(last));
         assertEquals(limit, Files.size(directory.resolve(id + ".part")));
-        assertThrows(BusinessException.class, () -> service.put(1, id, 256, new ByteArrayInputStream(last)));
+        assertThrows(BusinessException.class, () -> service.put(1, id, 257, new ByteArrayInputStream(last)));
         assertThrows(BusinessException.class, () -> service.create(1, "大.mp4", limit + 1));
         assertThrows(BusinessException.class, () -> service.create(1, "短.mp4", 11));
         assertThrows(BusinessException.class, () -> service.create(1, "错误.mov", 12));

@@ -320,7 +320,7 @@ export function TrainingEditor({ id, copyFrom, initialPaperId }: { id?: string; 
         const data = new FormData();
         data.append("training", new Blob([JSON.stringify(payload)], { type: "application/json" }));
         for (const item of draftMaterials) {
-          data.append(item.kind, item.kind === "videos" ? descriptors.get(item.file)! : item.file);
+          data.append(item.kind, item.kind === "videos" ? descriptors.get(item.file)! : item.descriptor ?? item.file);
         }
         data.append("materialTimings", new Blob([JSON.stringify(draftMaterials.filter(item => item.kind === "materials").map(item => item.pages))], { type: "application/json" }));
         prepared = await apiClient.post<Training>("/management/trainings/with-materials", data, { timeout: 0 });
@@ -331,7 +331,7 @@ export function TrainingEditor({ id, copyFrom, initialPaperId }: { id?: string; 
         const items = [];
         for (const item of draftMaterials) {
           const reference = item.sourceId ? { sourceId: item.sourceId } : { uploadIndex: uploadIndex++ };
-          if (!item.sourceId) data.append("files", item.kind === "videos" ? descriptors.get(item.file)! : item.file);
+          if (!item.sourceId) data.append("files", item.kind === "videos" ? descriptors.get(item.file)! : item.descriptor ?? item.file);
           items.push({ kind: item.kind, ...reference, pages: item.pages });
         }
         data.append("draft", new Blob([JSON.stringify({ copy: { sourceVersion: sourceVersion.current, training: payload }, items })], { type: "application/json" }));

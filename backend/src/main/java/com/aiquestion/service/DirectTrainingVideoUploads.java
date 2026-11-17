@@ -80,6 +80,16 @@ public class DirectTrainingVideoUploads {
         if (!proxySlots.tryAcquire())
             throw new BusinessException(ErrorCode.TOO_MANY_REQUESTS, "视频分片上传繁忙，请稍后重试");
         try {
+            if (expected > TrainingVideoUploads.PART_SIZE) {
+                var stream = new java.io.BufferedInputStream(input);
+                if (index == 0) {
+                    stream.mark(12);
+                    TrainingVideoUploads.verifyHeader(TrainingVideoUploads.type(ticket.name(), ticket.size()), stream.readNBytes(12));
+                    stream.reset();
+                }
+                storage.videoMultipart(ticket.key()).putVideoPart(key(ticket), upload, index + 1, stream, expected);
+                return;
+            }
             byte[] buffer = new byte[(int) expected];
             if (input.readNBytes(buffer, 0, buffer.length) != buffer.length || input.read() != -1)
                 throw bad("视频分片长度错误");
@@ -171,9 +181,12 @@ public class DirectTrainingVideoUploads {
     }
 
     static int choosePartSize(String reference, long size) {
-        if (!reference.startsWith("oss:")) return TrainingVideoUploads.PART_SIZE;
-        long bytesPerUnit = (long) OSS_PART_UNIT * MAX_LISTED_PARTS;
-        return Math.toIntExact(((size + bytesPerUnit - 1) / bytesPerUnit) * OSS_PART_UNIT);
+        long unit = reference.startsWith("oss:") ? OSS_PART_UNIT : TrainingVideoUploads.PART_SIZE;
+        long target = reference.startsWith("oss:") ? MAX_LISTED_PARTS : 10_000;
+        long typical = Math.min(TrainingVideoUploads.PART_SIZE, ((size - 1) / (unit * target) + 1) * unit);
+        long required = ((size - 1) / (unit * 10_000) + 1) * unit;
+        if (required > Integer.MAX_VALUE) throw bad("文件超出当前存储分片协议支持的范围");
+        return (int) Math.max(typical, required);
     }
 
     static void validateParts(long size, int partSize, List<VideoMultipartStorage.Part> parts) {

@@ -187,10 +187,14 @@ public class EdsStorageService implements ObjectStorage, com.aiquestion.storage.
 
   @Override public List<Part> videoParts(String key, String upload) {
     var request = new ListPartsRequest(properties.bucket(), key, upload);
-    request.setMaxParts(1000); // The largest supported video uses 256 parts.
-    var listing = client().listParts(request);
-    if (listing.isTruncated()) throw new BusinessException(ErrorCode.BAD_REQUEST, "视频分片数量无效");
-    return listing.getParts().stream().map(p -> new Part(p.getPartNumber(), p.getSize(), p.getETag())).toList();
+    request.setMaxParts(1000);
+    var parts = new java.util.ArrayList<Part>();
+    while (true) {
+      var listing = client().listParts(request);
+      for (var p : listing.getParts()) parts.add(new Part(p.getPartNumber(), p.getSize(), p.getETag()));
+      if (!listing.isTruncated()) return parts;
+      request.setPartNumberMarker(listing.getNextPartNumberMarker());
+    }
   }
 
   @Override public void finishVideo(String key, String upload, List<Part> parts) {

@@ -30,6 +30,12 @@ public class TrainingController {
         return service.reorderMaterials(id, ids, auth);
     }
 
+    @PostMapping(value = "/management/trainings/materials/prepare", consumes = "multipart/form-data")
+    public ApiResponse<?> prepareMaterial(@RequestParam org.springframework.web.multipart.MultipartFile file,
+        @RequestHeader(value = "Authorization", required = false) String auth) throws java.io.IOException {
+        return service.prepareMaterial(file, auth);
+    }
+
     @PostMapping(value = "/management/trainings/materials/inspect", consumes = "multipart/form-data")
     public ApiResponse<?> inspectMaterial(@RequestParam org.springframework.web.multipart.MultipartFile file,
         @RequestHeader(value = "Authorization", required = false) String auth) throws java.io.IOException {

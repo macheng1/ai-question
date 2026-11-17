@@ -6,7 +6,7 @@ import { Banner, Button, Image, InputNumber, Modal, Space, Table, Toast, Upload,
 import { VideoUploadStatus, type VideoUploadRow } from "./TrainingVideoUploadDialog";
 import { videoPlaybackUrl } from "../video-playback";
 import { apiClient } from "@/lib/api/client";
-export type DraftMaterial = { file: File; sourceId?: number; sourceTrainingId?: string; kind: "videos" | "materials"; pageCount?: number; pages?: { pageNumber: number; requiredSeconds: number }[] };
+export type DraftMaterial = { file: File; descriptor?: File; sourceId?: number; sourceTrainingId?: string; kind: "videos" | "materials"; pageCount?: number; pages?: { pageNumber: number; requiredSeconds: number }[] };
 
 /** Files stay in this form until the final create request succeeds. */
 export function TrainingDraftMaterials({ items, onChange, disabled, onBusyChange, uploadRows, onRetryVideo }: {
@@ -61,8 +61,8 @@ export function TrainingDraftMaterials({ items, onChange, disabled, onBusyChange
   const inspect = async (item: DraftMaterial): Promise<DraftMaterial> => {
     if (item.kind === "videos" || item.pages) return item;
     const data = new FormData(); data.append("file", item.file);
-    const info = await apiClient.post<{ pageCount: number }>("/management/trainings/materials/inspect", data, { timeout: 300000 });
-    return { ...item, pageCount: info.pageCount, pages: Array.from({ length: info.pageCount }, (_, index) => ({ pageNumber: index + 1, requiredSeconds: 120 })) };
+    const info = await apiClient.post<{ id: string; pageCount: number }>("/management/trainings/materials/prepare", data, { timeout: 300000 });
+    return { ...item, descriptor: new File([info.id], item.file.name, { type: "application/vnd.aiquestion.material-upload" }), pageCount: info.pageCount, pages: Array.from({ length: info.pageCount }, (_, index) => ({ pageNumber: index + 1, requiredSeconds: 120 })) };
   };
   const openPreview = async (item: DraftMaterial) => {
     setInspecting(true); onBusyChange(true);
@@ -77,9 +77,9 @@ export function TrainingDraftMaterials({ items, onChange, disabled, onBusyChange
     const added: DraftMaterial[] = [];
     for (const file of Array.from(files || [])) {
       const valid = kind === "videos" ? /\.(mp4|webm)$/i.test(file.name) : /\.(pdf|png|jpe?g)$/i.test(file.name);
-      const limit = kind === "videos" ? 2048 : 20;
-      if (!valid || !file.size || file.size > limit * 1024 * 1024) {
-        Toast.error(`${file.name}：请选择支持的格式，单个文件不超过 ${limit}MB`); continue;
+      const oversized = kind === "materials" && file.size > 20 * 1024 * 1024;
+      if (!valid || !file.size || oversized) {
+        Toast.error(`${file.name}：${oversized ? "单个材料不能超过20MB" : "请选择有效的文件格式"}`); continue;
       }
       if (currentItems.current.concat(added).some(item => item.file.name === file.name && item.file.size === file.size && item.file.lastModified === file.lastModified)) continue;
       added.push({ file, kind });
@@ -118,8 +118,8 @@ export function TrainingDraftMaterials({ items, onChange, disabled, onBusyChange
       return <div key={kind} className="flex flex-col gap-3">
         {kind === "materials" && <strong>PDF / 图片材料</strong>}
         <p className="text-sm text-slate-500">{kind === "videos"
-          ? "上传 MP4 / WebM 视频，单个视频最大 2 GiB，选好后即开始上传，可继续填写培训信息。"
-          : "支持 PDF、PNG、JPG，单个文件不超过20MB，PDF最多200页。默认每页120秒，可统一设置或逐页调整，最后一步保存时统一上传。"}</p>
+          ? "上传 MP4 / WebM 视频，选好后即开始上传，可继续填写培训信息。"
+          : "支持 PDF、PNG、JPG，单个文件不超过20MB，PDF最多200页。默认每页120秒，可统一设置或逐页调整，选好文件后即开始上传。"}</p>
         {kind === "videos" ? <>
           <ul className="divide-y divide-slate-100">{group.map((item, index) => <li key={rowKey(item)} className="flex flex-wrap items-center justify-between gap-3 py-3">
             <span className="break-all">{index + 1}. {item.file.name}</span>

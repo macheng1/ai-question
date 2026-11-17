@@ -1,7 +1,6 @@
 import axios from "axios";
 import { apiClient, ApiError } from "@/lib/api/client";
 
-export const MAX_VIDEO_BYTES = 2 * 1024 ** 3;
 const endpoint = "/management/video-uploads";
 type UploadSession = {
   id: string;
@@ -76,7 +75,7 @@ async function sendPart(session: UploadSession, index: number, part: Blob, signa
 
 async function uploadParts(file: File, report: (bytes: number, confirmedBytes: number, waitingForStorage: boolean) => void, signal?: AbortSignal) {
   checkCancelled(signal);
-  if (file.size < 12 || file.size > MAX_VIDEO_BYTES) throw new Error("请选择 2 GiB 以内的 MP4 或 WebM 视频");
+  if (file.size < 12) throw new Error("请选择有效的 MP4 或 WebM 视频");
   let session = sessions.get(file);
   if (!session || Date.now() - session.created > 23 * 60 * 60_000) {
     session = await startSession(file, signal);
