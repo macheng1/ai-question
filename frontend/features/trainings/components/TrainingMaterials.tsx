@@ -34,7 +34,6 @@ export function TrainingMaterials({ id, readOnly = false }: { id: number; readOn
      <div className="flex min-h-[254px] flex-col items-center justify-center gap-3 sm:min-h-[326px]" role="status" aria-live="polite">
       <Spin size="large" />
       <span className="whitespace-nowrap text-sm text-slate-600">正在加载第 {page} 页…</span>
-      <span className="text-center text-xs text-slate-400">首次预览可能需要几秒，请稍候</span>
      </div>
     )}
    </div></div>}
