@@ -3,10 +3,11 @@ import { Typography } from "@douyinfe/semi-ui";
 import { Layout } from "@douyinfe/semi-ui";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Banner, Button, Progress, Spin, VideoPlayer, Toast } from "@douyinfe/semi-ui";
 import { IconPlay, IconTick, IconClock, IconArrowRight } from "@douyinfe/semi-icons";
 import { confirmLearner } from "@/features/auth/learner-session";
-import { registerProgressSaver } from "../progress-navigation";
+import { flushActiveProgress, registerProgressSaver } from "../progress-navigation";
 import { createProgressQueue } from "../progress-queue";
 import { saveLearningProgress, nextProgressRequestId } from "../progress-transport";
 import { videoPlaybackUrl } from "../video-playback";
@@ -25,6 +26,9 @@ export async function loadExamLearning(examId: string, name: string, phone: stri
 export function ExamTrainingVideos({ examId, data, onBack, onContinue, starting, continueLabel = "开始考试", onProgress, reviewTrainingId }: {
   reviewTrainingId?: string; examId: string; data: ExamLearning; onBack: () => void; onContinue: () => void; starting: boolean; continueLabel?: string; onProgress?: (video: ExamVideo) => void;
 }) {
+  const router = useRouter();
+  const [leaving, setLeaving] = useState(false);
+  const leavingRef = useRef(false);
   const [videos, setVideos] = useState(data.videos);
   const [selectedId, setSelectedId] = useState(data.videos.find(v => !v.completed)?.id ?? data.videos[0]?.id);
   const [source, setSource] = useState<{ videoId: number; url: string }>();
@@ -37,6 +41,23 @@ export function ExamTrainingVideos({ examId, data, onBack, onContinue, starting,
   const video = videos.find(v => v.id === selectedId);
   const completedCount = videos.filter(v => v.completed).length;
   const allCompleted = completedCount === videos.length;
+
+  async function backToPersonalCenter() {
+    if (leavingRef.current || saving || starting) return;
+    leavingRef.current = true;
+    setLeaving(true);
+    try {
+      player.current?.pause();
+      await flushActiveProgress();
+      router.push("/learner");
+    } catch (e) {
+      Toast.error(e instanceof Error ? e.message : "进度保存失败，请重试");
+    } finally {
+      leavingRef.current = false;
+      setLeaving(false);
+    }
+  }
+
 
   useEffect(() => {
     const controller = new AbortController();
@@ -138,10 +159,10 @@ export function ExamTrainingVideos({ examId, data, onBack, onContinue, starting,
       <Typography.Title heading={1} className="h5-video-title !text-xl !leading-7 !mb-2">{video?.title || "培训视频学习"}</Typography.Title><p className="h5-muted">{reviewTrainingId ? "回看不计入学习时长，也不改变学习记录。" : Number(examId)<0?"请完整观看全部培训视频，进度自动保存。":"请完整观看全部培训视频。学习期间不占用考试答题时间。"}</p>
       {!reviewTrainingId && <><div className="h5-lesson-progress"><Typography.Title heading={2} className="!text-sm">课程完成进度</Typography.Title><span>{completedCount} / {videos.length} 节</span></div>
       <Progress percent={Math.round(completedCount / Math.max(1, videos.length) * 100)} stroke="#53ab8b" showInfo={false} /></>}
-      <div className="h5-lesson-list">{videos.map((v, i) => <Button key={v.id} block className={`h5-lesson ${v.id === selectedId ? "selected" : ""}`} theme="borderless" icon={v.completed ? <IconTick /> : <IconPlay />} disabled={saving || starting} onClick={async () => { try { player.current?.pause(); await retrySave.current?.(); setSelectedId(v.id); } catch(e) { Toast.error(e instanceof Error?e.message:"进度保存失败，请重试"); } }}>{i + 1}. {v.title}{!reviewTrainingId && <> · {v.completed ? "已完成" : "待完成"}</>}</Button>)}</div>
-      {error && <Banner type="danger" description={error} closeIcon={null}>{src && !reviewTrainingId && <Button theme="borderless" disabled={saving} onClick={() => void retrySave.current?.().catch(()=>{})}>重试保存进度</Button>}<Button theme="borderless" disabled={saving} onClick={async () => { try { await retrySave.current?.(); setRetry(n => n + 1); } catch { /* Keep the unacknowledged batch for another retry. */ } }}>重新加载视频</Button></Banner>}
+      <div className="h5-lesson-list">{videos.map((v, i) => <Button key={v.id} block className={`h5-lesson ${v.id === selectedId ? "selected" : ""}`} theme="borderless" icon={v.completed ? <IconTick /> : <IconPlay />} disabled={saving || starting || leaving} onClick={async () => { try { player.current?.pause(); await retrySave.current?.(); setSelectedId(v.id); } catch(e) { Toast.error(e instanceof Error?e.message:"进度保存失败，请重试"); } }}>{i + 1}. {v.title}{!reviewTrainingId && <> · {v.completed ? "已完成" : "待完成"}</>}</Button>)}</div>
+      {error && <Banner type="danger" description={error} closeIcon={null}>{src && !reviewTrainingId && <Button theme="borderless" disabled={saving || leaving} onClick={() => void retrySave.current?.().catch(()=>{})}>重试保存进度</Button>}<Button theme="borderless" disabled={saving || leaving} onClick={async () => { try { await retrySave.current?.(); setRetry(n => n + 1); } catch { /* Keep the unacknowledged batch for another retry. */ } }}>重新加载视频</Button></Banner>}
 
     </div>
-    <div className="h5-bottom">{!reviewTrainingId && <><p>{allCompleted ? "全部视频已完成，可以继续" : "请先完成全部视频学习"}</p><Button block theme="solid" className="h5-primary" size="large" disabled={!allCompleted || saving || starting} loading={starting} onClick={onContinue}>{allCompleted ? continueLabel : "请先完成视频学习"}<IconArrowRight /></Button></>}<Button block theme="borderless" className="h5-link" disabled={saving || starting} onClick={async () => { try { player.current?.pause(); await retrySave.current?.(); onBack(); } catch(e) { Toast.error(e instanceof Error?e.message:"进度保存失败，请重试"); } }}>{reviewTrainingId ? "返回" : "返回填写信息"}</Button></div>
+    <div className="h5-bottom">{!reviewTrainingId && <><p>{allCompleted ? "全部视频已完成，可以继续" : "请先完成全部视频学习"}</p><Button block theme="solid" className="h5-primary" size="large" disabled={!allCompleted || saving || starting || leaving} loading={starting} onClick={onContinue}>{allCompleted ? continueLabel : "请先完成视频学习"}<IconArrowRight /></Button></>}<Button block theme="borderless" className="h5-link" disabled={saving || starting || leaving} onClick={async () => { try { player.current?.pause(); await retrySave.current?.(); onBack(); } catch(e) { Toast.error(e instanceof Error?e.message:"进度保存失败，请重试"); } }}>{reviewTrainingId ? "返回" : "返回填写信息"}</Button><Button block theme="borderless" className="h5-link" disabled={saving || starting || leaving} loading={leaving} onClick={() => void backToPersonalCenter()}>返回个人中心</Button></div>
   </Layout.Content>;
 }
