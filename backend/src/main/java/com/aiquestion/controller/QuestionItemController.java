@@ -111,7 +111,8 @@ public class QuestionItemController {
   public ResponseEntity<byte[]> template() {
     return ResponseEntity.ok()
         .header(
-            HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=question-import-template.xlsx")
+            HttpHeaders.CONTENT_DISPOSITION, org.springframework.http.ContentDisposition
+            .attachment().filename("试题导入模板.xlsx", java.nio.charset.StandardCharsets.UTF_8).build().toString())
         .contentType(
             MediaType.parseMediaType(
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))

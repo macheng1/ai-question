@@ -57,9 +57,9 @@ export function TrainingVideos({ id, readOnly = false }: { id: number; readOnly?
         try {
           const descriptor = await prepareDraftVideo(fileInstance, ({ phase, totalBytes, confirmedBytes = 0, waitingForStorage }) => {
             onProgress({ total: totalBytes, loaded: phase === "uploading" ? confirmedBytes : totalBytes });
-            if (phase === "uploading") setUploadStatus(`${waitingForStorage ? "正在等待存储确认" : "正在上传视频"} · 已确认 ${Math.floor(confirmedBytes / totalBytes * 100)}%`);
-            if (phase === "storing") setUploadStatus("正在确认视频完整性…");
-            if (phase === "ready") setUploadStatus("正在保存到培训…");
+            if (phase === "uploading") setUploadStatus(`${waitingForStorage ? "正在上传，等待服务器响应 ·" : "正在上传"} ${Math.floor(confirmedBytes / totalBytes * 100)}%`);
+            if (phase === "storing") setUploadStatus("正在完成上传…");
+            if (phase === "ready") setUploadStatus("上传完成，正在保存到培训…");
           });
           const form = new FormData();
           form.append("file", descriptor);

@@ -22,16 +22,15 @@ function size(bytes: number) {
 
 export function VideoUploadStatus({ row }: { row: VideoUploadRow }) {
   const percent = row.phase === "ready" ? 100 : Math.min(99, Math.floor(100 * (row.confirmedBytes ?? 0) / row.file.size));
-  const pendingParts = row.phase === "uploading" && row.waitingForStorage;
   const status = {
     waiting: "等待上传",
-    uploading: pendingParts ? "正在等待存储确认" : "正在上传视频",
-    storing: "正在确认视频完整性",
-    ready: "已就绪",
+    uploading: row.waitingForStorage ? "正在上传，等待服务器响应 ·" : "正在上传",
+    storing: "正在完成上传…",
+    ready: "上传完成",
     failed: "上传失败",
   }[row.phase];
   return <div className="min-w-32 text-sm">
-    <span>{status}{row.phase === "uploading" && ` · 已确认 ${percent}%`}</span>
+    <span>{status}{row.phase === "uploading" && ` ${percent}%`}</span>
     <Progress percent={percent} aria-label={row.file.name + " " + status} />
     {row.message && <div role="alert" className="break-words text-red-600">{row.message}</div>}
   </div>;
