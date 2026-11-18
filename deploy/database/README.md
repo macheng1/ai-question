@@ -30,3 +30,13 @@ mysql -h 数据库地址 -u 数据库用户 -p --default-character-set=utf8mb4 a
 - 项目目前没有独立的 `SUPER_ADMIN` 角色；此处初始化的是管理端默认企业管理员，沿用现有 `app_user` 账号模型。
 
 完整建表脚本已包含相同管理员初始化逻辑，无需再单独执行管理员脚本。
+
+## 清空数据并重新初始化管理员
+
+已有 V60 表结构需要重置业务数据时，执行同一个文件 `reset-data-and-admin.sql`：
+
+```sh
+mysql -h 数据库地址 -u 数据库用户 -p --default-character-set=utf8mb4 aiquestion < deploy/database/reset-data-and-admin.sql
+```
+
+执行前停止应用及后台任务。该脚本删除全部业务数据和原有账号，再创建默认管理员 `13800000000 / 12345678`，保留表结构和 Flyway 版本记录，不删除 OSS 或服务器上的文件。所有删除和账号初始化在同一事务中，失败自动回滚；不重置各表自增序列。需要创建、执行、删除存储过程的权限。失败时修复原因后，先执行 `DROP PROCEDURE IF EXISTS reset_business_data_and_admin_v60;`，再重新执行脚本。
