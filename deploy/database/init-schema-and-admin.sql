@@ -1,8 +1,8 @@
 -- Manual initialization for an EMPTY MySQL 8 database only.
--- Schema snapshot: commit 1cbbf1a, version 50. Not an automatic application migration.
+-- Schema snapshot: migrations through V60, updated 2026-11-18. Not an automatic application migration.
 -- Run with mysql without --force before starting the application.
 -- Default administrator: 13800000000 / 12345678. Change password after login.
--- Includes a version 50 BASELINE record so existing V1-V50 migrations/seeds are not replayed.
+-- Includes a version 60 BASELINE record so existing V1-V60 migrations/seeds are not replayed.
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
 /*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
@@ -68,9 +68,12 @@ CREATE TABLE `assessment_attempt` (
   `submitted_at` timestamp(3) NULL DEFAULT NULL,
   `created_at` timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `updated_at` timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  `reviewed_by` bigint DEFAULT NULL,
+  `reviewed_at` timestamp(3) NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_attempt_number` (`participant_id`,`attempt_no`),
   KEY `fk_attempt_task` (`task_id`),
+  KEY `idx_attempt_review_queue` (`task_id`,`status`,`submitted_at`),
   CONSTRAINT `fk_attempt_participant` FOREIGN KEY (`participant_id`) REFERENCES `assessment_participant` (`id`),
   CONSTRAINT `fk_attempt_task` FOREIGN KEY (`task_id`) REFERENCES `assessment_task` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -83,6 +86,9 @@ CREATE TABLE `assessment_attempt_question` (
   `question_id` bigint NOT NULL,
   `score` decimal(8,2) NOT NULL DEFAULT '0.00',
   `sort_no` int NOT NULL DEFAULT '0',
+  `snapshot_type` varchar(32) DEFAULT NULL,
+  `snapshot_stem` text,
+  `snapshot_answer` text,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_attempt_question_snapshot` (`attempt_id`,`question_id`),
   KEY `fk_attempt_question_question` (`question_id`),
@@ -124,7 +130,6 @@ CREATE TABLE `assessment_roster` (
   `candidate_name` varchar(100) NOT NULL,
   `phone` varchar(50) NOT NULL,
   PRIMARY KEY (`task_id`,`employee_id`),
-  UNIQUE KEY `roster_phone` (`task_id`,`phone`),
   CONSTRAINT `assessment_roster_ibfk_1` FOREIGN KEY (`task_id`) REFERENCES `assessment_task` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -181,8 +186,8 @@ CREATE TABLE `candidate_learning_session` (
   `completed_at` timestamp(3) NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `token` (`token`),
-  UNIQUE KEY `candidate_task` (`task_id`,`candidate_name`,`phone`),
-  UNIQUE KEY `candidate_training` (`training_id`,`candidate_name`,`phone`),
+  UNIQUE KEY `uk_learning_task_employee` (`task_id`,`employee_id`),
+  UNIQUE KEY `uk_learning_training_employee` (`training_id`,`employee_id`),
   KEY `idx_learning_employee` (`employee_id`,`training_id`,`task_id`),
   CONSTRAINT `candidate_learning_session_ibfk_1` FOREIGN KEY (`task_id`) REFERENCES `assessment_task` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_learning_training` FOREIGN KEY (`training_id`) REFERENCES `training` (`id`) ON DELETE CASCADE
@@ -200,6 +205,8 @@ CREATE TABLE `candidate_material_progress` (
   `first_seen` timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `completed_at` timestamp(3) NULL DEFAULT NULL,
   `heartbeat_token` char(36) DEFAULT NULL,
+  `consumed_heartbeat_token` varchar(36) DEFAULT NULL,
+  `consumed_seconds` double DEFAULT NULL,
   PRIMARY KEY (`session_id`,`material_id`,`page_number`),
   KEY `material_id` (`material_id`,`page_number`),
   CONSTRAINT `candidate_material_progress_ibfk_1` FOREIGN KEY (`session_id`) REFERENCES `candidate_learning_session` (`id`) ON DELETE CASCADE,
@@ -220,6 +227,7 @@ CREATE TABLE `candidate_video_progress` (
   `last_play_position` double DEFAULT NULL,
   `first_studied_at` timestamp(3) NULL DEFAULT NULL,
   `completed_at` timestamp(3) NULL DEFAULT NULL,
+  `last_request_id` varchar(80) DEFAULT NULL,
   PRIMARY KEY (`session_id`,`video_id`),
   KEY `video_id` (`video_id`),
   CONSTRAINT `candidate_video_progress_ibfk_1` FOREIGN KEY (`session_id`) REFERENCES `candidate_learning_session` (`id`) ON DELETE CASCADE,
@@ -280,9 +288,9 @@ CREATE TABLE `learner_paper_binding` (
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `learning_clock` (
-  `phone` varchar(50) NOT NULL,
   `credited_at` timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  PRIMARY KEY (`phone`)
+  `employee_id` bigint NOT NULL,
+  PRIMARY KEY (`employee_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -523,6 +531,8 @@ CREATE TABLE `test_paper_random_bank` (
   `true_false_score` decimal(8,2) NOT NULL DEFAULT '0.00',
   `created_at` timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `updated_at` timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  `short_answer_count` int NOT NULL DEFAULT '0',
+  `short_answer_score` decimal(8,2) NOT NULL DEFAULT '0.00',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_random_paper_bank` (`paper_id`,`bank_id`),
   KEY `fk_random_bank_bank` (`bank_id`),
@@ -576,7 +586,6 @@ CREATE TABLE `training_audience` (
   `department_name` varchar(100) NOT NULL,
   `assigned_at` timestamp(3) NULL DEFAULT NULL,
   PRIMARY KEY (`training_id`,`employee_id`),
-  UNIQUE KEY `audience_phone` (`training_id`,`phone`),
   CONSTRAINT `training_audience_ibfk_1` FOREIGN KEY (`training_id`) REFERENCES `training` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -591,8 +600,11 @@ CREATE TABLE `training_material` (
   `page_count` int NOT NULL,
   `sort_order` int NOT NULL DEFAULT '0',
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `preview_status` varchar(16) NOT NULL DEFAULT 'PENDING',
+  `preview_error` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `training_id` (`training_id`),
+  KEY `idx_material_preview_status` (`preview_status`,`id`),
   CONSTRAINT `training_material_ibfk_1` FOREIGN KEY (`training_id`) REFERENCES `training` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -602,6 +614,8 @@ CREATE TABLE `training_material_page` (
   `material_id` bigint NOT NULL,
   `page_number` int NOT NULL,
   `required_seconds` int NOT NULL DEFAULT '120',
+  `preview_key` varchar(512) DEFAULT NULL,
+  `preview_ready` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`material_id`,`page_number`),
   CONSTRAINT `training_material_page_ibfk_1` FOREIGN KEY (`material_id`) REFERENCES `training_material` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -658,6 +672,7 @@ CREATE TABLE `training_video` (
   `sort_order` int NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   KEY `training_id` (`training_id`),
+  KEY `idx_training_video_storage_path` (`storage_path`),
   CONSTRAINT `training_video_ibfk_1` FOREIGN KEY (`training_id`) REFERENCES `training` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -687,6 +702,42 @@ CREATE TABLE `user_question_bank_favorite` (
   CONSTRAINT `fk_favorite_user` FOREIGN KEY (`user_id`) REFERENCES `app_user` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+CREATE TABLE `assessment_candidate_guard` (
+  `task_id` bigint NOT NULL,
+  `employee_id` bigint NOT NULL,
+  PRIMARY KEY (`task_id`,`employee_id`),
+  CONSTRAINT `fk_exam_guard_task` FOREIGN KEY (`task_id`) REFERENCES `assessment_task` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `training_material_upload` (
+  `id` char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `owner_id` bigint NOT NULL,
+  `title` varchar(255) NOT NULL,
+  `material_type` varchar(10) NOT NULL,
+  `object_key` varchar(128) NOT NULL,
+  `page_count` int NOT NULL,
+  `expires_at` bigint NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `object_key` (`object_key`),
+  KEY `idx_material_upload_expiry` (`expires_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `training_video_upload` (
+  `id` char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `owner_id` bigint NOT NULL,
+  `original_name` varchar(255) NOT NULL,
+  `byte_size` bigint NOT NULL,
+  `object_key` varchar(128) NOT NULL,
+  `phase` varchar(12) NOT NULL,
+  `expires_at` bigint NOT NULL,
+  `multipart_id` varchar(512) DEFAULT NULL,
+  `part_size` int NOT NULL DEFAULT '8388608',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `object_key` (`object_key`),
+  KEY `idx_video_upload_expiry` (`expires_at`),
+  KEY `idx_video_upload_owner` (`owner_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
@@ -711,7 +762,15 @@ CREATE TABLE `user_question_bank_favorite` (
 /*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
-INSERT INTO `app_user` (`id`, `name`, `unit_name`, `province`, `city`, `district`, `address`, `phone`, `password_hash`, `role_code`, `status`, `created_at`, `updated_at`) VALUES (1,'默认企业管理员','默认演示企业',NULL,NULL,NULL,NULL,'13800000000','$2a$10$cQTudbrttVss2dmHaAK.beFCFLjHcalef6osNDdX2XDThuotMeh5e','CANDIDATE','ACTIVE','2026-11-13 12:16:11.116','2026-11-13 12:16:11.116');
+-- 初始化默认管理员（项目中管理员账号存储在 app_user，暂无单独的 SUPER_ADMIN 角色）。
+-- 先选择目标数据库；表结构须已创建。账号：13800000000，初始密码：12345678。
+-- 同手机号账号已存在时不修改账号信息或密码；首次登录后请修改密码。
+SET NAMES utf8mb4;
+INSERT INTO app_user (name, unit_name, phone, password_hash, role_code, status, created_at, updated_at)
+SELECT '默认企业管理员', '默认演示企业', '13800000000',
+       '$2a$10$cQTudbrttVss2dmHaAK.beFCFLjHcalef6osNDdX2XDThuotMeh5e',
+       'CANDIDATE', 'ACTIVE', CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3)
+WHERE NOT EXISTS (SELECT 1 FROM app_user WHERE phone = '13800000000');
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
@@ -739,4 +798,4 @@ CREATE TABLE `flyway_schema_history` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 INSERT INTO flyway_schema_history
 (installed_rank, version, description, type, script, checksum, installed_by, execution_time, success)
-VALUES (1, '50', 'Manual schema baseline', 'BASELINE', 'Manual schema baseline', NULL, CURRENT_USER(), 0, 1);
+VALUES (1, '60', 'Manual schema baseline', 'BASELINE', 'Manual schema baseline', NULL, CURRENT_USER(), 0, 1);
