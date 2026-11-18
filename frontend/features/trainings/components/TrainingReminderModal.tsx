@@ -47,7 +47,7 @@ export function TrainingReminderModal({ training, onClose }: { training: Trainin
         failed && `${failed} 人发送失败`,
         skipped && `${skipped} 人已跳过`,
       ].filter(Boolean).join("，");
-      setError(summary || "未收到发送结果，请刷新名单核对");
+      setError([summary, ...response.filter(result => result.status === "FAILED").map(result => `${result.name}：${result.message}`)].filter(Boolean).join("；") || "未收到发送结果，请刷新名单核对");
     } catch (e) { setError(e instanceof Error ? e.message : "发送失败，请重试；同一次请求不会重复发送"); }
     finally { setSending(false); }
   };

@@ -41,12 +41,13 @@ public class OverdueRosterController {
   }
 
   @PostMapping("/email")
-  public ApiResponse<List<String>> email(@RequestBody Selection selection) throws IOException {
+  public ApiResponse<List<TrainingReminderMailer.Failure>> email(@RequestBody Selection selection) throws IOException {
     var rows = selectedRows(ManagementAccess.userId(), selection);
     return ApiResponse.ok(mailer.sendOverdueRoster(selection.recipients(), DashboardLogExporter.writeOverdue(rows), rows.size()));
   }
 
-  public record NotifyResult(int sent, int missingEmail, int failed, List<String> unsentKeys) {}
+  public record NotifyResult(int sent, int missingEmail, int failed, List<String> unsentKeys, List<NotifyFailure> failures) {}
+  public record NotifyFailure(long employeeId, String name, String reason) {}
 
   @PostMapping("/notify")
   public ApiResponse<NotifyResult> notifyLearners(@RequestBody Selection selection) throws IOException {
@@ -56,20 +57,22 @@ public class OverdueRosterController {
     var emails = dashboard.learnerEmails(owner, groups.keySet());
     var unsent = new java.util.ArrayList<String>();
     int sent = 0, missing = 0, failed = 0;
+    var failures = new java.util.ArrayList<NotifyFailure>();
     for (var group : groups.entrySet()) {
       var personal = group.getValue();
       String email = emails.get(group.getKey());
       if (!TrainingReminderMailer.validEmail(email)) {
         missing++;
-      } else if (mailer.sendLearnerOverdue(email, personal)) {
-        sent++;
-        continue;
+        failures.add(new NotifyFailure(group.getKey(), String.valueOf(personal.get(0).get("name")), "学员未填写有效邮箱"));
       } else {
+        String reason = mailer.sendLearnerOverdue(email, personal);
+        if (reason == null) { sent++; continue; }
         failed++;
+        failures.add(new NotifyFailure(group.getKey(), String.valueOf(personal.get(0).get("name")), reason));
       }
       personal.forEach(row -> unsent.add(key(row)));
     }
-    return ApiResponse.ok(new NotifyResult(sent, missing, failed, unsent));
+    return ApiResponse.ok(new NotifyResult(sent, missing, failed, unsent, failures));
   }
 
   private List<Map<String,Object>> selectedRows(long owner, Selection selection) {

@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { OverdueEmailDialog } from "./OverdueEmailDialog";
 import { apiClient } from "@/lib/api/client";
-import { Checkbox } from "@douyinfe/semi-ui";
+import { Checkbox, Modal } from "@douyinfe/semi-ui";
 import { IconDownload } from "@douyinfe/semi-icons";
 import { exportDashboardRows } from "../api";
 import { useCompactViewport } from "@/lib/hooks/useCompactViewport";
@@ -84,14 +84,16 @@ export function DashboardDetails({
   const [emailOpen, setEmailOpen] = useState(false);
   const { start, end, trainingId, departmentId, category } = query;
   const filters = { start, end, trainingId, departmentId, category };
+  const [notifyFailures, setNotifyFailures] = useState<{ employeeId: number; name: string; reason: string }[]>([]);
   const [notifying, setNotifying] = useState(false);
   async function notifyLearners() {
     if (notifying || !selected.length) return;
     setNotifying(true);
     try {
-      const result = await apiClient.post<{ sent: number; missingEmail: number; failed: number; unsentKeys: string[] }>(
+      const result = await apiClient.post<{ sent: number; missingEmail: number; failed: number; unsentKeys: string[]; failures: { employeeId: number; name: string; reason: string }[] }>(
         "/management/dashboard/overdue/notify", { ...filters, records: selected }, { timeout: 0 });
       setSelected(result.unsentKeys);
+      setNotifyFailures(result.failures);
       if (!result.unsentKeys.length) Toast.success(`发送成功，已通知 ${result.sent} 名学员`);
       else Toast.warning(`已通知 ${result.sent} 人，缺少有效邮箱 ${result.missingEmail} 人，发送失败 ${result.failed} 人`);
     } catch (e) { Toast.error(e instanceof Error ? e.message : "发送失败"); }
@@ -310,6 +312,9 @@ export function DashboardDetails({
         ];
   return (
     <Card bodyStyle={{ padding: 0 }} className="min-w-0">
+      <Modal title="未发送成功的学员" visible={notifyFailures.length > 0} onCancel={() => setNotifyFailures([])} footer={<Button onClick={() => setNotifyFailures([])}>关闭</Button>}>
+        <div className="max-h-96 overflow-auto"><table className="w-full text-left text-sm"><thead><tr><th>学员</th><th>原因</th></tr></thead><tbody>{notifyFailures.map(item => <tr key={item.employeeId}><td className="py-2 pr-3">{item.name}</td><td>{item.reason}</td></tr>)}</tbody></table></div>
+      </Modal>
       <div className="flex flex-wrap items-center justify-between gap-3 p-4">
         <div>
           <span className="inline-flex items-center gap-1">

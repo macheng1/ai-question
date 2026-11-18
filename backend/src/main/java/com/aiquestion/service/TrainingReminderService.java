@@ -104,7 +104,7 @@ public class TrainingReminderService {
                 message = "邮件服务已接收";
             } catch (org.springframework.mail.MailException e) {
                 status = "FAILED";
-                message = "发送失败，请检查邮件配置后重新选择发送";
+                message = com.aiquestion.integration.MailFailureDetails.describe(e);
             }
             persistence.updateDelivery(status, message, status, id, employee, request.requestId());
             results.add(new SendResult(employee, recipient.name(), status, message));

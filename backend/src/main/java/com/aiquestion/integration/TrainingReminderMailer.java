@@ -13,6 +13,9 @@ import org.springframework.stereotype.Component;
 /** 仅负责邮件通道，资格筛选及发送记录由业务服务负责。 */
 @Component
 public class TrainingReminderMailer {
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(TrainingReminderMailer.class);
+  public record Failure(String email, String reason) {}
+
   private final ObjectProvider<JavaMailSender> senders;
   private final String host, from, publicUrl;
 
@@ -25,6 +28,20 @@ public class TrainingReminderMailer {
     this.host = host;
     this.from = from;
     this.publicUrl = publicUrl;
+  }
+
+  @jakarta.annotation.PostConstruct
+  void logConfiguration() {
+    var sender = senders.getIfAvailable();
+    log.info("mail event=initialize senderAvailable={} hostConfigured={} fromValid={} reminderConfigured={}",
+        sender != null, !host.isBlank(), validEmail(from), configured());
+    if (sender instanceof org.springframework.mail.javamail.JavaMailSenderImpl smtp) {
+      var properties = smtp.getJavaMailProperties();
+      log.info("mail event=configuration port={} auth={} starttls={} ssl={} connectTimeoutMs={} readTimeoutMs={} writeTimeoutMs={}",
+          smtp.getPort(), properties.getProperty("mail.smtp.auth"), properties.getProperty("mail.smtp.starttls.enable"),
+          properties.getProperty("mail.smtp.ssl.enable"), properties.getProperty("mail.smtp.connectiontimeout"),
+          properties.getProperty("mail.smtp.timeout"), properties.getProperty("mail.smtp.writetimeout"));
+    }
   }
 
   public static boolean validEmail(String email) {
@@ -63,7 +80,7 @@ public class TrainingReminderMailer {
   }
 
   /** 每个收件人单独发送，返回发送失败的地址，供管理端定向重试。 */
-  public List<String> sendOverdueRoster(List<String> recipients, byte[] workbook, int rows) {
+  public List<Failure> sendOverdueRoster(List<String> recipients, byte[] workbook, int rows) {
     if (recipients == null || recipients.isEmpty())
       throw new BusinessException(ErrorCode.BAD_REQUEST, "请至少选择一个收件邮箱");
     var addresses = new java.util.TreeSet<String>(String.CASE_INSENSITIVE_ORDER);
@@ -75,9 +92,10 @@ public class TrainingReminderMailer {
     var sender = senders.getIfAvailable();
     if (sender == null || host.isBlank() || !validEmail(from))
       throw new BusinessException(ErrorCode.BAD_REQUEST, "请先配置发件邮箱");
-    var failed = new java.util.ArrayList<String>();
+    var failed = new java.util.ArrayList<Failure>();
     String filename = "逾期未完成人员清单_" + java.time.LocalDate.now(java.time.ZoneId.of("Asia/Shanghai")) + ".xlsx";
     for (String address : addresses) {
+      long started = start("roster", address, rows, workbook.length);
       try {
         var message = sender.createMimeMessage();
         var helper = new org.springframework.mail.javamail.MimeMessageHelper(message, true, "UTF-8");
@@ -88,14 +106,15 @@ public class TrainingReminderMailer {
         helper.addAttachment(filename, new org.springframework.core.io.ByteArrayResource(workbook),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         sender.send(message);
+        success("roster", address, started);
       } catch (jakarta.mail.MessagingException | org.springframework.mail.MailException e) {
-        failed.add(address);
+        failed.add(new Failure(address, failure("roster", address, started, e)));
       }
     }
     return failed;
   }
 
-  public boolean sendLearnerOverdue(String email, List<java.util.Map<String,Object>> rows) {
+  public String sendLearnerOverdue(String email, List<java.util.Map<String,Object>> rows) {
     requireConfigured();
     var message = new SimpleMailMessage();
     message.setFrom(from);
@@ -109,11 +128,13 @@ public class TrainingReminderMailer {
       body.append("\n").append(publicUrl.replaceAll("/+$", "")).append("/training/").append(row.get("trainingId")).append("\n");
     }
     message.setText(body.append("\n如需继续学习或考试，请联系培训管理员。").toString());
+    long started = start("learner", email, rows.size(), 0);
     try {
       senders.getObject().send(message);
-      return true;
+      success("learner", email, started);
+      return null;
     } catch (org.springframework.mail.MailException e) {
-      return false;
+      return failure("learner", email, started, e);
     }
   }
 
@@ -147,6 +168,35 @@ public class TrainingReminderMailer {
             + "\n\n培训结束后可回看材料，不再记录学习进度或参加考试。如需继续学习或考试，请联系培训管理员。"
             + "\n\n如您已完成相关事项但状态未更新，请联系培训管理员核实。"
             + "\n\ne-learning 企业培训与考试平台");
-    senders.getObject().send(message);
+    long started = start("training", email, 1, 0);
+    try {
+      senders.getObject().send(message);
+      success("training", email, started);
+    } catch (org.springframework.mail.MailException e) {
+      failure("training", email, started, e);
+      throw e;
+    }
+  }
+
+  private long start(String action, String email, int rows, int bytes) {
+    log.info("mail event=send action={} recipient={} rows={} attachmentBytes={} phase=start", action, masked(email), rows, bytes);
+    return System.nanoTime();
+  }
+
+  private void success(String action, String email, long started) {
+    log.info("mail event=send action={} recipient={} result=accepted elapsedMs={}", action, masked(email), (System.nanoTime() - started) / 1_000_000);
+  }
+
+  private String failure(String action, String email, long started, Exception error) {
+    String reason = MailFailureDetails.describe(error);
+    log.error("mail event=send action={} recipient={} result=failed elapsedMs={} reason={} causes={} locations={}",
+        action, masked(email), (System.nanoTime() - started) / 1_000_000, reason,
+        MailFailureDetails.causes(error).stream().map(e -> e.getClass().getName()).toList(),
+        MailFailureDetails.causes(error).stream().map(e -> java.util.Arrays.stream(e.getStackTrace()).limit(8).toList()).toList());
+    return reason;
+  }
+
+  private static String masked(String email) {
+    return email == null ? "missing" : "recipient-" + Integer.toUnsignedString(email.toLowerCase(java.util.Locale.ROOT).hashCode(), 16);
   }
 }
