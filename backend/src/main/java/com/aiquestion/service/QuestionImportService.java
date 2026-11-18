@@ -36,10 +36,10 @@ public class QuestionImportService {
     }
 
     private static final String[][] EXAMPLES = {
-                {"单选题", "示例：临时离开办公电脑时，应先做什么？", "锁定屏幕", "关闭显示器", "调低亮度", "最小化窗口", "A", "锁屏后需要重新验证身份才能继续操作。", "信息安全", "易", "入职培训"},
-                {"多选题", "示例：哪些做法有助于保护工作账号？", "启用多因素认证", "多个系统共用密码", "使用独立密码", "把验证码发给同事", "AC", "独立密码和多因素认证都能降低账号被盗用的风险。", "账号安全", "中", "入职培训"},
-                {"判断题", "示例：可以把工作账号的验证码发给自称是管理员的人。", "", "", "", "", "错误", "验证码仅供本人验证身份时使用。", "账号安全", "易", "入职培训"},
-                {"问答题", "示例：收到要求输入工作账号密码的可疑邮件，应如何处理？", "", "", "", "", "先通过已知的官方渠道核实发件人身份，避免点击邮件链接或输入密码，并向信息安全人员报告。", "", "邮件安全", "中", "入职培训"}
+                {"单选题", "示例：临时离开办公电脑时，应先做什么？", "锁定屏幕", "关闭显示器", "调低亮度", "最小化窗口", "A", "锁屏后需要重新验证身份才能继续操作。", "易"},
+                {"多选题", "示例：哪些做法有助于保护工作账号？", "启用多因素认证", "多个系统共用密码", "使用独立密码", "把验证码发给同事", "AC", "独立密码和多因素认证都能降低账号被盗用的风险。", "中"},
+                {"判断题", "示例：可以把工作账号的验证码发给自称是管理员的人。", "", "", "", "", "错误", "验证码仅供本人验证身份时使用。", "易"},
+                {"问答题", "示例：收到要求输入工作账号密码的可疑邮件，应如何处理？", "", "", "", "", "先通过已知的官方渠道核实发件人身份，避免点击邮件链接或输入密码，并向信息安全人员报告。", "", "中"}
             };
 
     public byte[] wordTemplate() {
@@ -50,7 +50,7 @@ public class QuestionImportService {
     public byte[] template() {
         try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             Sheet sheet = workbook.createSheet("试题导入");
-            String[] headers = {"题型", "题干", "选项A", "选项B", "选项C", "选项D", "正确答案", "解析", "标签", "难度", "出处"};
+            String[] headers = {"题型", "题干", "选项A", "选项B", "选项C", "选项D", "正确答案", "解析", "难度"};
             Row header = sheet.createRow(0);
             CellStyle headerStyle = workbook.createCellStyle();
             headerStyle.setFillForegroundColor(IndexedColors.ORANGE.getIndex());
@@ -117,7 +117,7 @@ public class QuestionImportService {
             List<ImportQuestion> questions = new ArrayList<>();
             for (int i = headerRow + 1; i <= sheet.getLastRowNum(); i++) {
                 var row = sheet.getRow(i);
-                if (row == null || java.util.stream.IntStream.range(0, 11).allMatch(col -> blank(formatter, row, col))) continue;
+                if (row == null || java.util.stream.IntStream.range(0, 9).allMatch(col -> blank(formatter, row, col))) continue;
                 var question = new ImportQuestion("第" + (i + 1) + "行", value(formatter,row,0), value(formatter,row,1));
                 for (int j = 0; j < 4; j++) {
                     String text = value(formatter, row, j + 2);
@@ -125,9 +125,7 @@ public class QuestionImportService {
                 }
                 question.answer = formatter.formatCellValue(row.getCell(6));
                 question.analysis = value(formatter,row,7);
-                question.tags = value(formatter,row,8);
-                question.difficulty = value(formatter,row,9);
-                question.source = value(formatter,row,10);
+                question.difficulty = value(formatter, row, 8);
                 questions.add(question);
             }
             return questions;
@@ -148,10 +146,6 @@ public class QuestionImportService {
             question.options.forEach((key, text) -> options.add(new OptionRequest(key, text, keys.contains(key), key.charAt(0) - 'A')));
         }
         answer = QuestionAnswerRules.validate(type, answer, options);
-        if (question.tags.codePointCount(0, question.tags.length()) > 500)
-            throw new IllegalArgumentException("标签最多 500 个字符");
-        if (question.source.codePointCount(0, question.source.length()) > 255)
-            throw new IllegalArgumentException("出处最多 255 个字符");
         validateTextSize("题干", question.stem);
         validateTextSize("答案", answer);
         validateTextSize("解析", question.analysis);
@@ -162,10 +156,10 @@ public class QuestionImportService {
         item.setStem(question.stem);
         item.setAnswerText(answer);
         item.setAnalysis(question.analysis);
-        item.setTags(question.tags);
+        item.setTags("");
         item.setDifficulty(normalizeDifficulty(question.difficulty));
         item.setScore(BigDecimal.ONE);
-        item.setSource(question.source);
+        item.setSource("");
         item.setStatus("ENABLED");
         itemRepository.insert(item);
         for (var request : options) {

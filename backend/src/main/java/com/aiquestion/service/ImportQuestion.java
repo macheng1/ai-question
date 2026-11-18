@@ -10,9 +10,7 @@ final class ImportQuestion {
     String stem;
     String answer = "";
     String analysis = "";
-    String tags = "";
     String difficulty = "";
-    String source = "";
     String error;
     final Map<String, String> options = new LinkedHashMap<>();
 

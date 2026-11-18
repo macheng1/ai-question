@@ -10,12 +10,12 @@ import org.apache.poi.xwpf.usermodel.*;
 final class WordQuestionImport {
     private static final Pattern HEADER = Pattern.compile("^(?:([0-9]+)\\s*[.．、)）]\\s*)?[【\\[]([^】\\]]+)[】\\]]\\s*(.*)$");
     private static final Pattern OPTION = Pattern.compile("^([A-Za-z])\\s*[.．、)）]\\s*(.*)$");
-    private static final Pattern FIELD = Pattern.compile("^(正确答案|参考答案|答案|解析|难度|标签|出处)\\s*[:：]\\s*(.*)$");
+    private static final Pattern FIELD = Pattern.compile("^(正确答案|参考答案|答案|解析|难度)\\s*[:：]\\s*(.*)$");
 
     static byte[] template(String[][] examples) throws IOException {
         try (var doc = new XWPFDocument(); var out = new ByteArrayOutputStream()) {
             paragraph(doc, "试题导入模板", true, 20);
-            paragraph(doc, "请替换或删除示例题。每题以【题型】开头，选项各占一行，答案写在本题下方。问答题答案可分段，解析、标签、难度和出处可选。", false, 11);
+            paragraph(doc, "请替换或删除示例题。每题以【题型】开头，选项各占一行，答案写在本题下方。问答题答案可分段，解析和难度可选。", false, 11);
             int number = 0;
             for (String[] row : examples) {
                 var heading = paragraph(doc, (++number) + ".【" + row[0] + "】" + row[1], true, 12);
@@ -24,9 +24,7 @@ final class WordQuestionImport {
                     if (!row[2 + i].isEmpty()) paragraph(doc, (char) ('A' + i) + ". " + row[2 + i], false, 11);
                 paragraph(doc, ("问答题".equals(row[0]) ? "参考答案：" : "答案：") + row[6], false, 11);
                 if (!row[7].isEmpty()) paragraph(doc, "解析：" + row[7], false, 11);
-                paragraph(doc, "标签：" + row[8], false, 11);
-                paragraph(doc, "难度：" + row[9], false, 11);
-                paragraph(doc, "出处：" + row[10], false, 11);
+                paragraph(doc, "难度：" + row[8], false, 11);
             }
             doc.write(out);
             return out.toByteArray();
@@ -82,8 +80,6 @@ final class WordQuestionImport {
                         case "答案" -> current.answer = append(current.answer, line);
                         case "解析" -> current.analysis = append(current.analysis, line);
                         case "难度" -> current.difficulty = append(current.difficulty, line);
-                        case "标签" -> current.tags = append(current.tags, line);
-                        case "出处" -> current.source = append(current.source, line);
                         default -> current.options.merge(field, line, WordQuestionImport::append);
                     }
                 }

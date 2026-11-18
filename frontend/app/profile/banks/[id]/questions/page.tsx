@@ -7,7 +7,7 @@ import { IconArrowLeft, IconPlus, IconDownload, IconUpload } from "@douyinfe/sem
 import { useEffect, useCallback, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import "@douyinfe/semi-ui/react19-adapter";
-import { Table, Button, Input, Modal, Select, TextArea, Toast, Upload, InputNumber } from "@douyinfe/semi-ui";
+import { Table, Button, Input, Modal, Select, TextArea, Toast, Upload } from "@douyinfe/semi-ui";
 import { ProfileShell } from "@/components/layout/ProfileShell";
 import {
   createQuestion,
@@ -408,14 +408,6 @@ export default function QuestionsPage() {
               placeholder="题目解析（可选）"
             />
           )}
-          <div className="grid grid-cols-2 gap-4 ">
-            <div className="min-w-0 col-span-2 sm:col-span-1"><InputNumber
-              value={score}
-              onChange={value => setScore(String(value ?? ""))}
-
-              prefix="分值"
-            /></div>
-          </div>
         </div>
       </Modal>
       <Modal bodyStyle={{ maxHeight: "calc(100dvh - 240px)", overflowY: "auto" }} width="min(560px, calc(100vw - 24px))"
