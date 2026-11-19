@@ -5,7 +5,7 @@ import { Button, Modal, Nav, Select, Space, Toast } from "@douyinfe/semi-ui";
 import {
   IconAlertCircle, IconBook, IconCalendar, IconExit, IconFile,
   IconHistogram, IconHistory, IconLayers, IconLikeThumb,
-  IconUserGroup,
+  IconUserGroup, IconSetting, IconComment,
 } from "@douyinfe/semi-icons";
 import { useCurrentSession } from "@/features/auth/store";
 
@@ -19,6 +19,7 @@ const menuIcons = {
   "/profile/papers": IconFile,
   "/profile/assessments": IconCalendar,
   "/profile/organization": IconUserGroup,
+  "/profile/ai-assistant": IconComment,
   "/learner": IconBook,
   "/learner/records": IconHistory,
   "/learner/exams": IconCalendar,
@@ -56,21 +57,24 @@ export function ProfileSidebar() {
     window.location.href = accountType === "EMPLOYEE" ? (learnerEntry() || "/learner") : "/login";
   };
 
-  const selectedKey = menu.find((item) => isActive(item.href))?.href;
+  const aiPath = "/profile/system/ai";
+  const showSystem = accountType === "ADMIN";
+  const selectedKey = showSystem && isActive(aiPath) ? aiPath : menu.find((item) => isActive(item.href))?.href;
   return (
     <>
       <div className="hidden md:block md:w-56 md:shrink-0">
         <Nav
           style={{ width: "100%" }}
           selectedKeys={selectedKey ? [selectedKey] : []}
-          items={menu.map((item) => {
+          defaultOpenKeys={isActive(aiPath) ? ["system"] : []}
+          items={[...menu.map((item) => {
             const Icon = menuIcons[item.href as keyof typeof menuIcons];
             return {
               itemKey: item.href,
               text: item.label,
               icon: Icon ? <Icon size="large" aria-hidden="true" /> : undefined,
             };
-          })}
+          }), ...(showSystem ? [{ itemKey: "system", text: "系统管理", icon: <IconSetting size="large" />, items: [{ itemKey: aiPath, text: "AI 配置" }] }] : [])]}
           onSelect={({ itemKey }) => router.push(String(itemKey))}
           footer={
             <Button block icon={<IconExit aria-hidden="true" />} onClick={logout}>
@@ -85,7 +89,7 @@ export function ProfileSidebar() {
           className="min-w-0 flex-1"
           value={selectedKey}
           placeholder="选择功能"
-          optionList={menu.map((item) => ({ value: item.href, label: item.label }))}
+          optionList={[...menu.map((item) => ({ value: item.href, label: item.label })), ...(showSystem ? [{ value: aiPath, label: "系统管理 / AI 配置" }] : [])]}
           onChange={(value) => router.push(String(value))}
         />
         <Button icon={<IconExit aria-hidden="true" />} onClick={logout}>退出登录</Button>

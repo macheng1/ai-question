@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiquestion.ai.AiSettingsRepository">
+  <select id="configuration" resultType="com.aiquestion.ai.AiSettingsRepository$Configuration">
+    SELECT provider, base_url AS baseUrl, model_id AS model FROM admin_ai_settings WHERE owner_id=#{owner}
+  </select>
+  <select id="connection" resultType="com.aiquestion.ai.AiSettingsRepository$Connection">
+    SELECT base_url AS baseUrl, model_id AS model, encrypted_api_key AS encryptedApiKey
+    FROM admin_ai_settings WHERE owner_id=#{owner}
+  </select>
+  <update id="updateModel">
+    UPDATE admin_ai_settings SET model_id=#{model}
+    WHERE owner_id=#{owner} AND provider=#{provider} AND base_url=#{baseUrl}
+  </update>
+  <insert id="save">
+    INSERT INTO admin_ai_settings(owner_id, provider, base_url, model_id, encrypted_api_key)
+    VALUES(#{owner}, #{provider}, #{baseUrl}, #{model}, #{secret})
+    ON DUPLICATE KEY UPDATE provider=#{provider}, base_url=#{baseUrl}, model_id=#{model}, encrypted_api_key=#{secret}
+  </insert>
+</mapper>

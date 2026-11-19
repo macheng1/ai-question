@@ -266,6 +266,27 @@ class DashboardServiceTest {
     assertEquals(1, service.exportRoster(1, null, null, 2L, null, null, "COMPLETED").size());
   }
 
+  @Test
+  void consultationSeparatesFailedReviewedAndUnattemptedExams() {
+    var repo = mock(DashboardRepository.class);
+    var failed = row();
+    failed.put("assessmentId", 7L);
+    failed.put("attemptId", 10L);
+    failed.put("attemptStatus", "SUBMITTED");
+    failed.put("passed", false);
+    var pending = new HashMap<>(failed);
+    pending.put("attemptStatus", "PENDING_REVIEW");
+    var unattempted = row();
+    unattempted.put("assessmentId", 7L);
+    when(repo.rows(eq(1L), any())).thenReturn(List.of(failed, pending, unattempted, row()));
+    var service = new DashboardService(repo);
+    var failures = service.load(1, null, null, 2L, 4L, null, "learners", "LEARNED_FAILED", 1, 10);
+    assertEquals(1, failures.total());
+    assertEquals("FAILED", failures.rows().get(0).get("examStatus"));
+    assertEquals(1, service.load(1, null, null, 2L, 4L, null, "learners", "PENDING_REVIEW", 1, 10).total());
+    assertEquals(3, service.load(1, null, null, 2L, 4L, null, "learners", "UNFINISHED", 1, 10).total());
+  }
+
   private Map<String, Object> row() {
     var row = new HashMap<String, Object>();
     row.put("trainingId", 2L);

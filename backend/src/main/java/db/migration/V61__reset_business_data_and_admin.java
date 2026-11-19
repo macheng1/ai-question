@@ -13,6 +13,14 @@ public class V61__reset_business_data_and_admin extends BaseJavaMigration {
 
   @Override
   public void migrate(Context context) throws Exception {
+    String mode = context.getConfiguration().getPlaceholders().getOrDefault("v61DataMode", "reset");
+    if ("preserve".equals(mode)) {
+      org.slf4j.LoggerFactory.getLogger(getClass()).info("V61 保留现有业务数据和账号，继续后续迁移");
+      return;
+    }
+    if (!"reset".equals(mode)) {
+      throw new IllegalArgumentException("V61_DATA_MODE 仅支持 preserve 或 reset，已停止迁移");
+    }
     var connection = context.getConnection();
     boolean autoCommit = connection.getAutoCommit();
     int foreignKeyChecks;

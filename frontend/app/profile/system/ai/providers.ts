@@ -1,0 +1,15 @@
+export const providers = [
+  { id: "bailian", name: "阿里云百炼", group: "国内", url: "https://dashscope.aliyuncs.com/compatible-mode/v1", models: ["qwen-plus", "qwen-flash", "qwen-max"] },
+  { id: "deepseek", name: "DeepSeek", group: "国内", url: "https://api.deepseek.com", models: ["deepseek-flash", "deepseek-v4-pro"] },
+  { id: "zhipu", name: "智谱开放平台", group: "国内", url: "https://open.bigmodel.cn/api/paas/v4", models: ["glm-4.5-air"] },
+  { id: "moonshot", name: "月之暗面 Kimi", group: "国内", url: "https://api.moonshot.cn/v1", models: ["kimi-k2.5"] },
+  { id: "volcengine", name: "火山方舟（豆包）", group: "国内", url: "https://ark.cn-beijing.volces.com/api/v3", models: [] },
+  { id: "siliconflow", name: "硅基流动", group: "国内", url: "https://api.siliconflow.cn/v1", models: [] },
+  { id: "baidu", name: "百度智能云千帆", group: "国内", url: "https://qianfan.baidubce.com/v2", models: [] },
+  { id: "minimax", name: "MiniMax", group: "国内", url: "https://api.minimaxi.com/v1", models: [] },
+  { id: "hunyuan", name: "腾讯混元", group: "国内", url: "https://api.hunyuan.cloud.tencent.com/v1", models: [] },
+  { id: "xfyun", name: "讯飞星火", group: "国内", url: "https://spark-api-open.xf-yun.com/v1", models: [] },
+  { id: "openai", name: "OpenAI", group: "海外", url: "https://api.openai.com/v1", models: ["gpt-4.1", "gpt-4.1-mini"] },
+  { id: "gemini", name: "Google Gemini", group: "海外", url: "https://generativelanguage.googleapis.com/v1beta/openai", models: [] },
+  { id: "custom", name: "自定义兼容服务", group: "其他", url: "", models: [] },
+];

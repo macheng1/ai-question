@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiquestion.ai.ConsultationHistory">
+  <select id="list" resultType="com.aiquestion.ai.ConsultationHistory$Summary">
+    SELECT t.conversation_id AS conversationId, t.question AS title,
+           t.training_id AS trainingId, t.department_id AS departmentId
+    FROM training_consultation_turn t
+    JOIN (SELECT MIN(id) first_id, MAX(id) last_id FROM training_consultation_turn
+          WHERE owner_id = #{owner} GROUP BY conversation_id) s ON t.id = s.first_id
+    ORDER BY s.last_id DESC
+  </select>
+  <sql id="threadRows">
+    SELECT id, question, answer AS text, topic, tab_name AS tab, status_name AS status, total
+    FROM training_consultation_turn WHERE owner_id=#{owner} AND conversation_id=#{thread}
+  </sql>
+  <select id="rows" resultType="com.aiquestion.ai.ConsultationHistory$Row">
+    <include refid="threadRows"/> ORDER BY id
+  </select>
+  <select id="recentRows" resultType="com.aiquestion.ai.ConsultationHistory$Row">
+    <include refid="threadRows"/>
+    AND training_id &lt;=> #{training} AND department_id &lt;=> #{department}
+    ORDER BY id DESC LIMIT 8
+  </select>
+  <insert id="insert">
+    INSERT INTO training_consultation_turn
+    (owner_id, conversation_id, training_id, department_id, question, answer, topic, tab_name, status_name, total)
+    VALUES (#{owner}, #{thread}, #{q.trainingId}, #{q.departmentId}, #{q.question},
+            #{a.text}, #{a.topic}, #{a.tab}, #{a.status}, #{a.total})
+  </insert>
+  <insert id="lockThread">
+    INSERT INTO training_consultation_state (owner_id, conversation_id) VALUES (#{owner}, #{thread})
+    ON DUPLICATE KEY UPDATE deleted=deleted
+  </insert>
+  <select id="isDeleted" resultType="boolean">
+    SELECT deleted FROM training_consultation_state WHERE owner_id=#{owner} AND conversation_id=#{thread} FOR UPDATE
+  </select>
+  <insert id="markDeleted">
+    INSERT INTO training_consultation_state (owner_id, conversation_id, deleted) VALUES (#{owner}, #{thread}, TRUE)
+    ON DUPLICATE KEY UPDATE deleted=TRUE
+  </insert>
+  <delete id="deleteConversation">
+    DELETE FROM training_consultation_turn WHERE owner_id=#{owner} AND conversation_id=#{thread}
+  </delete>
+</mapper>

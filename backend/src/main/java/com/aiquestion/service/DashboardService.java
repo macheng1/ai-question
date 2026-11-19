@@ -93,7 +93,7 @@ public class DashboardService {
     if (page < 1 || page > 1000000 || !Set.of(10, 20, 50).contains(pageSize)) fail("分页参数无效");
     if (!Set.of("trainings", "learnerHours", "learners", "incomplete", "exams", "logs").contains(tab))
       fail("明细类型无效");
-    if (!Set.of("ALL", "COMPLETED", "NOT_STARTED", "IN_PROGRESS", "OVERDUE").contains(status))
+    if (!Set.of("ALL", "COMPLETED", "NOT_STARTED", "IN_PROGRESS", "OVERDUE", "PENDING_REVIEW", "LEARNED_FAILED", "UNFINISHED").contains(status))
       fail("状态无效");
     if ((trainingId != null && trainingId <= 0) || (departmentId != null && departmentId <= 0))
       fail("筛选参数无效");
@@ -193,9 +193,13 @@ public class DashboardService {
               .filter(
                   row ->
                       "ALL".equals(status)
-                          || ("OVERDUE".equals(status)
-                              ? Boolean.TRUE.equals(row.get("overdue"))
-                              : status.equals(row.get("status"))))
+                          || switch (status) {
+                            case "OVERDUE" -> Boolean.TRUE.equals(row.get("overdue"));
+                            case "PENDING_REVIEW" -> "PENDING_REVIEW".equals(row.get("examStatus"));
+                            case "LEARNED_FAILED" -> "COMPLETED".equals(row.get("learningStatus")) && "FAILED".equals(row.get("examStatus"));
+                            case "UNFINISHED" -> !Boolean.TRUE.equals(row.get("completed"));
+                            default -> status.equals(row.get("status"));
+                          })
               .toList();
     }
     int total = detail.size();

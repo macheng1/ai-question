@@ -4,6 +4,8 @@ services:
     container_name: aiquestion-api
     restart: unless-stopped
     environment:
+      V61_DATA_MODE: ${V61_DATA_MODE-reset}
+      AI_SETTINGS_ENCRYPTION_KEY: ${AI_SETTINGS_ENCRYPTION_KEY:-}
       TZ: Asia/Shanghai
       DB_HOST: host.docker.internal
       DB_PORT: ${DB_PORT:-3306}

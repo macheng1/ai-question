@@ -21,6 +21,16 @@ BEGIN
   START TRANSACTION;
   SET FOREIGN_KEY_CHECKS = 0;
 
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='training_consultation_turn') THEN
+    DELETE FROM `training_consultation_turn`;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='training_consultation_state') THEN
+    DELETE FROM `training_consultation_state`;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='admin_ai_settings') THEN
+    DELETE FROM `admin_ai_settings`;
+  END IF;
+
   DELETE FROM `app_user`;
   DELETE FROM `assessment_answer`;
   DELETE FROM `assessment_attempt`;

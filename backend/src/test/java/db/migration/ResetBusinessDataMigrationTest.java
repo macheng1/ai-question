@@ -19,6 +19,7 @@ class ResetBusinessDataMigrationTest {
       sql.executeUpdate("INSERT INTO site_news(title,content,published_at,created_at,updated_at) VALUES('测试','测试',NOW(),NOW(),NOW())");
       sql.execute("RENAME TABLE training_video_upload TO training_video_upload_failure_test");
       var context = mock(Context.class);
+      when(context.getConfiguration()).thenReturn(Flyway.configure());
       when(context.getConnection()).thenReturn(connection);
       assertThrows(SQLException.class, () -> new V61__reset_business_data_and_admin().migrate(context));
       assertEquals(1, count(sql, "site_news"));
@@ -26,7 +27,7 @@ class ResetBusinessDataMigrationTest {
       assertTrue(connection.getAutoCommit());
       try (var rows = sql.executeQuery("SELECT @@FOREIGN_KEY_CHECKS")) { rows.next(); assertEquals(1, rows.getInt(1)); }
       sql.execute("RENAME TABLE training_video_upload_failure_test TO training_video_upload");
-      var flyway = Flyway.configure().dataSource(url, "root", password).locations("classpath:db/migration").load();
+      var flyway = Flyway.configure().dataSource(url, "root", password).locations("classpath:db/migration").target("61").load();
       assertEquals(1, flyway.migrate().migrationsExecuted);
       assertEquals("61", flyway.info().current().getVersion().getVersion());
       assertEquals(0, count(sql, "site_news"));

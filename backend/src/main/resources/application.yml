@@ -26,6 +26,8 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+    placeholders:
+      v61DataMode: ${V61_DATA_MODE:reset}
   data:
     redis:
       host: ${REDIS_HOST:localhost}

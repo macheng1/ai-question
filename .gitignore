@@ -18,3 +18,5 @@ target/
 # Local training videos
 /data/training-videos/
 /backend/data/training-videos/
+
+/backend/data/training-video-cache/

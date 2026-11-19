@@ -48,6 +48,7 @@ public enum ErrorCode {
   VIDEO_UPLOAD_EXPIRED("VIDEO_UPLOAD_EXPIRED", "视频暂存已失效，请重新上传", HttpStatus.NOT_FOUND),
   MATERIAL_PREVIEW_PENDING("PREVIEW_PENDING", "材料预览正在生成，请稍后重试", HttpStatus.CONFLICT),
   // 系统错误
+  AI_PROVIDER_ERROR("AI502", "模型服务调用失败", HttpStatus.BAD_GATEWAY),
   SYSTEM_ERROR("500000", "系统繁忙，请稍后重试", HttpStatus.INTERNAL_SERVER_ERROR);
   private final String code;
   private final String message;

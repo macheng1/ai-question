@@ -7,6 +7,7 @@ export const accountMenus = {
     { label: "题库管理", href: "/profile/banks" },
     { label: "试卷管理", href: "/profile/papers" },
     { label: "学员管理", href: "/profile/organization" },
+    { label: "AI 助手", href: "/profile/ai-assistant" },
   ],
   EMPLOYEE: [
     { label: "我的培训", href: "/learner" },
