@@ -4,6 +4,9 @@ import com.aiquestion.common.BusinessException;
 import com.aiquestion.common.ErrorCode;
 import java.net.http.HttpClient;
 import java.time.Duration;
+import java.util.List;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
@@ -30,11 +33,15 @@ public class AiChatService {
 
     /** Callers supply the administrator ID from their authenticated business context. */
     public String chat(long owner, String instructions, String input) {
-        return chat(owner, connection(owner), instructions, input);
+        return chat(owner, instructions, List.of(new UserMessage(input)));
     }
 
-    public reactor.core.publisher.Flux<String> stream(long owner, String instructions, String input) {
-        return clientFor(owner, connection(owner)).prompt().system(instructions).user(input)
+    String chat(long owner, String instructions, List<Message> messages) {
+        return chat(owner, connection(owner), instructions, messages);
+    }
+
+    public reactor.core.publisher.Flux<String> stream(long owner, String instructions, List<Message> messages) {
+        return clientFor(owner, connection(owner)).prompt().system(instructions).messages(messages)
                 .stream().content().timeout(Duration.ofSeconds(60));
     }
 
@@ -43,7 +50,7 @@ public class AiChatService {
     public ConnectionResult testConnection(long owner) {
         var config = connection(owner);
         long start = System.nanoTime();
-        chat(owner, config, "请简短回答。", "只回复 OK");
+        chat(owner, config, "请简短回答。", List.of(new UserMessage("只回复 OK")));
         return new ConnectionResult(config.model(), Duration.ofNanos(System.nanoTime() - start).toMillis());
     }
 
@@ -55,9 +62,9 @@ public class AiChatService {
         return config;
     }
 
-    private String chat(long owner, AiSettingsRepository.Connection config, String instructions, String input) {
+    private String chat(long owner, AiSettingsRepository.Connection config, String instructions, List<Message> messages) {
         try {
-            var answer = clientFor(owner, config).prompt().system(instructions).user(input).call().content();
+            var answer = clientFor(owner, config).prompt().system(instructions).messages(messages).call().content();
             if (answer == null || answer.isBlank()) {
                 throw new BusinessException(ErrorCode.AI_PROVIDER_ERROR, "模型服务返回了空内容");
             }

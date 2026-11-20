@@ -37,7 +37,13 @@ public final class DashboardLogExporter {
   }
 
   private static byte[] write(List<Map<String, Object>> rows, boolean roster, String sheetName) throws IOException {
+    boolean overdueRoster = "逾期未完成人员清单".equals(sheetName);
     String[] headers = roster ? new String[]{"姓名", "手机号", "部门", "培训名称", "整体状态", "学习进度（%）", "有效学时（小时）", "考试状态", "逾期情况"} : HEADERS;
+    if (overdueRoster) {
+      headers = java.util.Arrays.copyOf(headers, headers.length + 2);
+      headers[headers.length - 2] = "培训截止时间";
+      headers[headers.length - 1] = "考试截止时间";
+    }
     try (var workbook = new XSSFWorkbook(); var output = new ByteArrayOutputStream()) {
       var sheet = workbook.createSheet(sheetName);
       var headerStyle = workbook.createCellStyle();
@@ -65,6 +71,11 @@ public final class DashboardLogExporter {
             hours(source.get("studiedHours")), label(source.get("examStatus")),
             overdue.isEmpty() ? "—" : overdue, time(source.get("startedAt")), time(source.get("completedAt")),
             source.getOrDefault("score", "—"), source.get("attemptCount"), minutes(source.get("durationSeconds"))};
+        if (overdueRoster) {
+          values = java.util.Arrays.copyOf(values, headers.length);
+          values[headers.length - 2] = time(source.get("trainingEnd"));
+          values[headers.length - 1] = time(source.get("examEnd"));
+        }
         var row = sheet.createRow(index++);
         for (int i = 0; i < values.length; i++) {
           var cell = row.createCell(i);

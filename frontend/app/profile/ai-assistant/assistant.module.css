@@ -115,3 +115,19 @@
 .sessionRow > button:first-child { flex: 1; min-width: 0; }
 .sessionList .deleteChat { width: 32px; height: 32px; padding: 0; display: grid; place-items: center; color: #64736f; }
 .sessionList .deleteChat:hover { color: #af3030; background: #faeaea; }
+
+.rosterActions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.rosterPane { min-width: 0; }
+@media (min-width: 1440px) {
+  .rosterPane { flex: 0 0 320px; }
+}
+@media (max-width: 900px) {
+  .chat { padding-inline: 12px; }
+  .rosterActions:has(> button:nth-child(2)) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-width: 300px;
+  }
+  .rosterActions > button { min-height: 36px; height: auto; padding: 4px; }
+  .rosterActions > button span { white-space: normal; }
+}

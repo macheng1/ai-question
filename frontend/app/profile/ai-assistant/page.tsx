@@ -10,6 +10,7 @@ import { useAuthStore } from "@/features/auth/store";
 import { ProfileShell } from "@/components/layout/ProfileShell";
 import { getDashboardOptions } from "@/features/dashboard/api";
 import type { DashboardOptions } from "@/features/dashboard/types";
+import { OverdueChatActions } from "@/features/ai/OverdueChatActions";
 import { ConsultationRoster, type RosterQuery } from "@/features/ai/ConsultationRoster";
 import { apiClient } from "@/lib/api/client";
 
@@ -217,7 +218,11 @@ export default function TrainingAssistantPage() {
               ? <span className={styles.userAvatar} aria-label="我的头像">{Array.from(user?.name?.trim() || "我")[0]}</span>
               : <span className={styles.botAvatar} aria-label="培训数据助手头像"><IconHistogram/></span>,
               renderDialogueAction: ({message}) => message?.roster && message.total > 0
-              ? <Button size="small" onClick={() => setRoster(message.roster)}>查看名单（{message.total}）</Button> : null }}/>
+              ? <div className={styles.rosterActions}>
+                  <Button size="small" onClick={() => setRoster(message.roster)}>查看名单（{message.total}）</Button>
+                  {message.roster.status === "OVERDUE" && <OverdueChatActions key={message.id}
+                    filters={{ trainingId: message.roster.trainingId, departmentId: message.roster.departmentId }}/>}
+                </div> : null }}/>
           {busy && messages.at(-1)?.role === "user" && (
             <div className={styles.typing} role="status" aria-label="助手正在回复">
               <span/><span/><span/>
@@ -238,7 +243,7 @@ export default function TrainingAssistantPage() {
             </button>)}
         </div>}
       </main>
-      {roster && <aside className="w-full xl:w-80"><ConsultationRoster key={JSON.stringify(roster)} query={roster} close={() => setRoster(undefined)}/></aside>}
+      {roster && <aside className={styles.rosterPane}><ConsultationRoster key={JSON.stringify(roster)} query={roster} close={() => setRoster(undefined)}/></aside>}
     </div>
     </div>
   </section></ProfileShell>;

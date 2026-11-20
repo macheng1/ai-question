@@ -9,6 +9,11 @@ import com.aiquestion.service.DashboardLogExporter;
 import com.aiquestion.service.DashboardService;
 import java.io.IOException;
 import java.time.LocalDate;
+import java.nio.charset.StandardCharsets;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +43,19 @@ public class OverdueRosterController {
       @RequestParam(required = false) Long departmentId, @RequestParam(required = false) String category) {
     return ApiResponse.ok(dashboard.overdueRows(ManagementAccess.userId(), start, end, trainingId, departmentId, category)
         .stream().map(OverdueRosterController::key).toList());
+  }
+
+  @GetMapping("/export")
+  public ResponseEntity<byte[]> export(@RequestParam(required = false) LocalDate start,
+      @RequestParam(required = false) LocalDate end, @RequestParam(required = false) Long trainingId,
+      @RequestParam(required = false) Long departmentId, @RequestParam(required = false) String category) throws IOException {
+    var rows = dashboard.overdueRows(ManagementAccess.userId(), start, end, trainingId, departmentId, category);
+    if (rows.isEmpty()) throw new BusinessException(ErrorCode.BAD_REQUEST, "当前范围没有逾期记录");
+    return ResponseEntity.ok()
+        .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+            .filename("逾期未完成人员清单.xlsx", StandardCharsets.UTF_8).build().toString())
+        .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+        .body(DashboardLogExporter.writeOverdue(rows));
   }
 
   @PostMapping("/email")

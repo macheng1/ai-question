@@ -56,14 +56,13 @@ public class TrainingConsultationController {
     public void stream(@Valid @RequestBody Question question, HttpServletResponse response) throws IOException {
         long owner = ManagementAccess.userId();
         var recent = history.recent(owner, question);
-        var facts = consultation.ask(owner, question, recent);
-        var chunks = consultation.explain(owner, question.question(), facts, recent);
+        var reply = consultation.respond(owner, question, recent);
         response.setContentType("application/x-ndjson;charset=UTF-8");
         response.setHeader("Cache-Control", "no-store, no-transform");
         response.setHeader("X-Accel-Buffering", "no");
         var out = response.getOutputStream();
         StringBuilder text = new StringBuilder();
-        try (var stream = chunks.toStream(1)) {
+        try (var stream = reply.chunks().toStream(1)) {
             var iterator = stream.iterator();
             while (iterator.hasNext()) {
                 String chunk = iterator.next();
@@ -79,7 +78,7 @@ public class TrainingConsultationController {
             send(out, "error", "模型未返回内容，请重试");
             return;
         }
-        var answer = new TrainingConsultation.Answer(text.toString(), facts.topic(), facts.tab(), facts.status(), facts.total());
+        var answer = reply.complete(text.toString());
         try {
             writer.save(owner, question, answer);
         } catch (com.aiquestion.common.BusinessException e) {
@@ -102,12 +101,8 @@ public class TrainingConsultationController {
     public ApiResponse<TrainingConsultation.Answer> ask(@Valid @RequestBody Question question) {
         long owner = ManagementAccess.userId();
         var recent = history.recent(owner, question);
-        var answer = consultation.ask(owner, question, recent);
-        if (answer.topic() == TrainingConsultation.Topic.RECAP) {
-            String text = consultation.explain(owner, question.question(), answer, recent)
-                    .collect(java.util.stream.Collectors.joining()).block();
-            answer = new TrainingConsultation.Answer(text, answer.topic(), null, null, 0);
-        }
+        var reply = consultation.respond(owner, question, recent);
+        var answer = reply.complete(reply.chunks().collect(java.util.stream.Collectors.joining()).block());
         writer.save(owner, question, answer);
         return ApiResponse.ok(answer);
     }

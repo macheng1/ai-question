@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button, Pagination, Sidebar, Spin } from "@douyinfe/semi-ui";
+import { Button, Modal, Pagination, Sidebar, Spin } from "@douyinfe/semi-ui";
+import { useCompactViewport } from "@/lib/hooks/useCompactViewport";
 import { showConsultationError } from "./showConsultationError";
 import { apiClient } from "@/lib/api/client";
 import type { DashboardData, DashboardFilters } from "@/features/dashboard/types";
@@ -10,6 +11,7 @@ export type RosterQuery = DashboardFilters & { tab: string; status: string };
 const statuses: Record<string,string> = { NOT_STARTED: "未开始", IN_PROGRESS: "进行中", COMPLETED: "已完成" };
 
 export function ConsultationRoster({ query, close }: { query: RosterQuery; close: () => void }) {
+  const overlay = useCompactViewport(1439);
   const [page, setPage] = useState(1);
   const [data, setData] = useState<DashboardData>();
   const [loadFailed, setLoadFailed] = useState(false);
@@ -23,9 +25,7 @@ export function ConsultationRoster({ query, close }: { query: RosterQuery; close
       .catch(e => { if (!abort.signal.aborted) { setLoadFailed(true); showConsultationError(e, "名单加载失败"); } });
     return () => abort.abort();
   }, [query, page, retry]);
-  return <Sidebar.Container visible title="学员明细" showClose onCancel={close}
-    style={{ width: "100%", minWidth: 0 }}>
-    <div className="space-y-3 p-4">
+  const content = <div className="space-y-3 p-4 [overflow-wrap:anywhere]">
       {loadFailed ? <Button onClick={() => setRetry(value => value + 1)}>重新加载</Button>
         : !data ? <Spin/> : <>
           <p>共 {data.total} 人次</p>
@@ -35,6 +35,11 @@ export function ConsultationRoster({ query, close }: { query: RosterQuery; close
           </div>)}
           {data.total > 10 && <Pagination size="small" currentPage={data.page} pageSize={10} total={data.total} onPageChange={setPage}/>}
         </>}
-    </div>
+    </div>;
+  if (overlay) return <Modal visible title="学员明细" width="min(480px, calc(100vw - 24px))"
+    bodyStyle={{ maxHeight: "65dvh", overflowY: "auto" }} onCancel={close} footer={null}>{content}</Modal>;
+  return <Sidebar.Container visible title="学员明细" showClose onCancel={close}
+    style={{ width: "100%", minWidth: 0 }}>
+    <div style={{ maxHeight: "65dvh", overflowY: "auto" }}>{content}</div>
   </Sidebar.Container>;
 }
