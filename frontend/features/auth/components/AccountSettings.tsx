@@ -6,6 +6,7 @@ import {
   Card,
   Descriptions,
   Form,
+  Modal,
   Toast,
   Typography,
 } from "@douyinfe/semi-ui";
@@ -26,6 +27,7 @@ export function AccountSettings({ employee = false }: { employee?: boolean }) {
   const [profile, setProfile] = useState<UserProfile>();
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [reloginPhone, setReloginPhone] = useState<string | null>(null);
   useEffect(() => {
     (employee ? getLearnerProfile() : getCurrentUser())
       .then(setProfile)
@@ -79,12 +81,15 @@ export function AccountSettings({ employee = false }: { employee?: boolean }) {
                   setProfile(updated);
                   if (auth.accessToken)
                     auth.setSession(updated, auth.accessToken);
-                  Toast.success("资料已保存");
+                  if (phoneUpdated)
+                    setReloginPhone(updatedPhone);
+                  else
+                    Toast.success("资料已保存");
                 } catch (e) {
                   const message = e instanceof Error ? e.message : "保存失败";
                   if (phoneUpdated) {
                     setProfile((prev) => (prev ? { ...prev, phone: updatedPhone } : prev));
-                    Toast.error(`手机号已更新，资料保存失败：${message}`);
+                    Toast.error(`手机号已更新，资料保存失败：${message}。下次登录请使用新手机号 ${updatedPhone}`);
                   } else {
                     Toast.error(message);
                   }
@@ -166,6 +171,34 @@ export function AccountSettings({ employee = false }: { employee?: boolean }) {
           </Button>
         </Form>
       </Card>}
+      <Modal
+        title="手机号已更新"
+        visible={reloginPhone !== null}
+        maskClosable
+        onCancel={() => setReloginPhone(null)}
+        width="min(440px, calc(100vw - 24px))"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button
+              onClick={() => {
+                setReloginPhone(null);
+                useAuthStore.getState().clearSession();
+                Toast.success("已退出登录");
+                window.location.href = "/login?redirect=" + encodeURIComponent(window.location.pathname);
+              }}
+            >
+              立即重新登录
+            </Button>
+            <Button theme="solid" onClick={() => setReloginPhone(null)}>
+              继续使用
+            </Button>
+          </div>
+        }
+      >
+        <Typography.Text>
+          手机号已改为 {reloginPhone}，下次登录请使用新手机号。
+        </Typography.Text>
+      </Modal>
     </div>
   );
 }
