@@ -11,6 +11,7 @@ import {
 } from "@douyinfe/semi-ui";
 import {
   changePassword,
+  changePhone,
   getCurrentUser,
   updateProfile,
   type UserProfile,
@@ -56,19 +57,37 @@ export function AccountSettings({ employee = false }: { employee?: boolean }) {
               initValues={profile}
               onSubmit={async (values) => {
                 setSaving(true);
+                const auth = useAuthStore.getState();
+                const currentPhone = String(profile.phone ?? "").trim();
+                const nextPhone = String(values.phone ?? "").trim();
+                let phoneUpdated = false;
+                let updatedPhone = currentPhone;
                 try {
+                  if (nextPhone !== currentPhone) {
+                    const changed = await changePhone({ phone: nextPhone });
+                    phoneUpdated = true;
+                    updatedPhone = changed.phone || nextPhone;
+                    setProfile((prev) => (prev ? { ...prev, phone: updatedPhone } : prev));
+                    if (auth.accessToken)
+                      auth.setSession(changed, auth.accessToken);
+                  }
                   const updated = await updateProfile({
                     name: String(values.name).trim(),
                     unitName: String(values.unitName).trim(),
                     address: String(values.address || "").trim(),
                   });
                   setProfile(updated);
-                  const auth = useAuthStore.getState();
                   if (auth.accessToken)
                     auth.setSession(updated, auth.accessToken);
                   Toast.success("资料已保存");
                 } catch (e) {
-                  Toast.error(e instanceof Error ? e.message : "保存失败");
+                  const message = e instanceof Error ? e.message : "保存失败";
+                  if (phoneUpdated) {
+                    setProfile((prev) => (prev ? { ...prev, phone: updatedPhone } : prev));
+                    Toast.error(`手机号已更新，资料保存失败：${message}`);
+                  } else {
+                    Toast.error(message);
+                  }
                 } finally {
                   setSaving(false);
                 }
@@ -79,6 +98,12 @@ export function AccountSettings({ employee = false }: { employee?: boolean }) {
                 label="姓名"
                 maxLength={80}
                 rules={[{ required: true, whitespace: true }]}
+              />
+              <Form.Input
+                field="phone"
+                label="手机号"
+                maxLength={11}
+                rules={[{ required: true }, { pattern: /^1[0-9]{10}$/, message: "请输入正确的手机号" }]}
               />
               <Form.Input
                 field="unitName"

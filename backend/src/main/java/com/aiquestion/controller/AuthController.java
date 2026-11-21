@@ -56,6 +56,9 @@ AuthController {
     public record PasswordChangeCommand(@NotBlank String currentPassword, @NotBlank @Size(min = 6, max = 64) String newPassword, @NotBlank String confirmPassword) {
     }
 
+    public record PhoneChangeCommand(@NotBlank @Pattern(regexp = "^1\\d{10}$") String phone) {
+    }
+
     @Operation(summary = "发送注册验证码")
     @PostMapping("/captcha")
     public ApiResponse<Map<String, String>> captcha(@RequestParam @Pattern(regexp = "^1\\d{10}$") String phone) {
@@ -90,6 +93,12 @@ AuthController {
     @PutMapping("/me/password")
     public ApiResponse<Void> changePassword(@RequestHeader(value = "Authorization", required = false) String authorization, @Valid @RequestBody PasswordChangeCommand command) {
         return service.changePassword(authorization, command);
+    }
+
+    @Operation(summary = "修改当前管理员手机号")
+    @PutMapping("/me/phone")
+    public ApiResponse<?> changePhone(@RequestHeader(value = "Authorization", required = false) String authorization, @Valid @RequestBody PhoneChangeCommand command) {
+        return service.changePhone(authorization, command.phone());
     }
 
     private final com.aiquestion.service.AuthService service;

@@ -17,4 +17,6 @@ public interface AuthRepository {
   int updateAdministratorProfile(@Param("name") String name, @Param("unitName") String unitName, @Param("address") String address, @Param("updatedAt") java.time.LocalDateTime updatedAt, @Param("userId") String userId);
   List<String> findActivePasswordHash(@Param("userId") String userId);
   int updateAdministratorPassword(@Param("passwordHash") String passwordHash, @Param("updatedAt") java.time.LocalDateTime updatedAt, @Param("userId") String userId);
+  List<Integer> countConflictingPhones(@Param("phone") String phone, @Param("userId") String userId);
+  int updateAdministratorPhone(@Param("phone") String phone, @Param("updatedAt") java.time.LocalDateTime updatedAt, @Param("userId") String userId);
 }
