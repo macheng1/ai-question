@@ -4,7 +4,7 @@ import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosResponse 
 import { ApiError, normalizeApiError } from "./error";
 import type { ApiResponse, DownloadOptions, UploadOptions } from "./types";
 
-const baseURL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:18080/api";
+const baseURL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api";
 const TOKEN_KEY = "aiquestion_access_token";
 
 const LEARNER_TOKEN_KEY = "aiquestion_learner_access_token";

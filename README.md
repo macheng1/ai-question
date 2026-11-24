@@ -77,7 +77,15 @@ npm run dev -- --hostname 0.0.0.0 --port 13000
 
 默认前端地址：<http://localhost:13000>
 
-前端接口地址由 `NEXT_PUBLIC_API_BASE_URL` 控制，默认值为 `http://localhost:18080/api`。
+前端接口地址由 `NEXT_PUBLIC_API_BASE_URL` 控制，默认值为 `/api`，由 Next.js 转发到后端，浏览器不直接访问内网地址。
+
+- 本地开发：`API_PROXY_ORIGIN=http://localhost:18080`（默认）。
+- 企业 Docker 镜像：构建参数 `NEXT_PUBLIC_API_BASE_URL=/api`、`API_PROXY_ORIGIN=http://10.1.12.70:18080`（Dockerfile 默认）。
+- 使用仓库 Compose 构建：代理默认指向同一容器网络的 `http://app:8080`。
+
+`API_PROXY_ORIGIN` 不带 `/api`，构建和运行时保持一致。代理规则和浏览器接口地址在构建时生成，变更后必须重新构建、部署前端镜像。流水线若显式传入旧的内网 `NEXT_PUBLIC_API_BASE_URL`，需要同步改为 `/api`，否则会覆盖 Dockerfile 默认值。
+
+WAF 只需将页面及 `/api` 请求转发到 Next.js，前端容器须能访问后端。该代理不负责对外 HTTPS 证书或握手。
 
 ### 停止基础设施
 

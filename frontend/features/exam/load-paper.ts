@@ -27,7 +27,9 @@ export async function loadExamPaper(
     const params = new URLSearchParams();
     if (options.revealAnswers) params.set("revealAnswers", "true");
     if (options.attemptId) params.set("attemptId", String(options.attemptId));
-    const baseURL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:18080/api";
+    const baseURL = typeof window === "undefined"
+      ? `${(process.env.API_PROXY_ORIGIN || "http://localhost:18080").replace(/\/+$/, "")}/api`
+      : (process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api");
     const response = await fetch(
       `${baseURL}/public/exams/${id}${params.toString() ? `?${params}` : ""}`,
       { cache: "no-store", headers: typeof window !== "undefined" && window.localStorage.getItem("aiquestion_learner_access_token")
