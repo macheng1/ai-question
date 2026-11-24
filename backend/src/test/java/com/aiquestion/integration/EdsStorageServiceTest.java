@@ -11,6 +11,32 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class EdsStorageServiceTest {
+  @Test void httpUploadCanSignAndSendNonResettableLargeStream() throws Exception {
+    byte[] bytes = new byte[898494];
+    new java.util.Random(7).nextBytes(bytes);
+    var received = new java.util.concurrent.atomic.AtomicReference<byte[]>();
+    var server = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+    server.createContext("/bucket/test.pdf", exchange -> {
+      received.set(exchange.getRequestBody().readAllBytes());
+      exchange.sendResponseHeaders(200, -1);
+      exchange.close();
+    });
+    server.start();
+    var file = new MockMultipartFile("file", "test.pdf", "application/pdf", bytes) {
+      @Override public java.io.InputStream getInputStream() {
+        return new java.io.FilterInputStream(new ByteArrayInputStream(bytes)) {
+          @Override public boolean markSupported() { return false; }
+          @Override public void reset() throws java.io.IOException { throw new java.io.IOException("not resettable"); }
+        };
+      }
+    };
+    try (var storage = new EdsStorageService(new EdsProperties(
+        "http://127.0.0.1:" + server.getAddress().getPort(), "bucket", "test-key", "test-secret", "us-east-1"))) {
+      storage.put(file, "application/pdf", "test.pdf");
+      assertArrayEquals(bytes, received.get());
+    } finally { server.stop(0); }
+  }
+
   @Test void httpsUploadAcceptsPrivateCertificateWithoutChangingGlobalSdkSettings(
       @org.junit.jupiter.api.io.TempDir java.nio.file.Path temp) throws Exception {
     var store = temp.resolve("eds.p12");

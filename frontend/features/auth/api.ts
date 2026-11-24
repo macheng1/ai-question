@@ -67,3 +67,6 @@ export function changePassword(data: {
 }) {
   return apiClient.put<void>("/auth/me/password", data);
 }
+export function changePhone(data: { phone: string }) {
+  return apiClient.put<UserProfile>("/auth/me/phone", data);
+}

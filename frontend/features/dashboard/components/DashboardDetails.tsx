@@ -6,7 +6,7 @@ import { Checkbox, Modal } from "@douyinfe/semi-ui";
 import { IconDownload } from "@douyinfe/semi-icons";
 import { exportDashboardRows } from "../api";
 import { useCompactViewport } from "@/lib/hooks/useCompactViewport";
-import { formatStudyHours } from "../format";
+import { formatStudyDuration, formatDuration } from "@/lib/duration";
 import {
   Button,
   Card,
@@ -152,9 +152,9 @@ export function DashboardDetails({
               row.completionRate == null ? "—" : `${row.completionRate}%`,
           },
           {
-            title: summaryHeader("有效学时", "合计本场学员看视频和阅读材料的有效时间，按小时显示。"),
+            title: summaryHeader("有效学时", "合计本场学员看视频和阅读材料的有效时间，按时、分、秒显示。"),
             width: 130,
-            render: (_, row) => `${formatStudyHours(row.studiedHours)} 小时`,
+            render: (_, row) => formatStudyDuration(row.studiedHours),
           },
           {
             title: summaryHeader("逾期未完成", "学习逾期未完成或考试逾期未通过，每人只计一次。待批阅不算考试逾期。"),
@@ -185,7 +185,7 @@ export function DashboardDetails({
           { title: "手机号", dataIndex: "phone", width: 180 },
           { title: summaryHeader("培训场次", "该学员在当前筛选范围内被安排的培训场数。"), dataIndex: "assigned", width: 150 },
           { title: summaryHeader("有效学时", "合计该学员在这些培训中看视频和阅读材料的有效时间。"), width: 160,
-            render: (_, row) => `${formatStudyHours(row.studiedHours)} 小时` },
+            render: (_, row) => formatStudyDuration(row.studiedHours) },
         ] : [
           { title: "姓名", dataIndex: "name", width: 110 },
           { title: "手机号", dataIndex: "phone", width: 140 },
@@ -215,7 +215,7 @@ export function DashboardDetails({
                   render: (_: unknown, row: DashboardRow) =>
                     row.durationSeconds == null
                       ? "—"
-                      : `${Math.round((row.durationSeconds / 60) * 10) / 10} 分钟`,
+                      : formatDuration(row.durationSeconds),
                 },
                 {
                   title: "交卷时间",
@@ -242,7 +242,7 @@ export function DashboardDetails({
                   width: 130,
                   render: (_: unknown, row: DashboardRow) => (
                     <Space spacing={4}>
-                      {formatStudyHours(row.studiedHours)} 小时
+                      {formatStudyDuration(row.studiedHours)}
                       {Boolean(row.missingDuration) && (
                         <Tooltip content="旧记录部分时长缺失，仅汇总已记录时长">
                           <Tag color="orange">缺失</Tag>
@@ -304,7 +304,7 @@ export function DashboardDetails({
                         render: (_: unknown, row: DashboardRow) =>
                           row.durationSeconds == null
                             ? "—"
-                            : `${Math.round((row.durationSeconds / 60) * 10) / 10} 分钟`,
+                            : formatDuration(row.durationSeconds),
                       },
                     ]
                   : []),

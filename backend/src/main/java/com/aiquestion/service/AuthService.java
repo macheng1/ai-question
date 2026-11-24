@@ -16,7 +16,9 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import static com.aiquestion.controller.AuthController.*;
 import com.aiquestion.repository.AuthRepository;
@@ -112,6 +114,22 @@ public class AuthService {
         }
         persistence.updateAdministratorPassword(encoder.encode(command.newPassword()), com.aiquestion.common.BusinessTime.now(), userId);
         return ApiResponse.ok(null);
+    }
+
+    @Transactional
+    public ApiResponse<?> changePhone(String authorization, String phone) {
+        var identity = accounts.requireAdministrator(authorization);
+        String userId = String.valueOf(identity.accountId());
+        String normalized = phone.trim();
+        if (com.aiquestion.repository.RepositoryRows.one(persistence.countConflictingPhones(normalized, userId)) > 0) {
+            throw new BusinessException(ErrorCode.USER_ALREADY_EXISTS, "手机号已被其他账号使用");
+        }
+        try {
+            persistence.updateAdministratorPhone(normalized, com.aiquestion.common.BusinessTime.now(), userId);
+        } catch (DuplicateKeyException error) {
+            throw new BusinessException(ErrorCode.USER_ALREADY_EXISTS, "手机号已被其他账号使用");
+        }
+        return me(authorization);
     }
 
     private String currentUserId(String authorization) {

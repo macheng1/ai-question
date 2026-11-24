@@ -62,7 +62,10 @@ services:
     build:
       context: ../frontend
       args:
-        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8080/api}
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-/api}
+        API_PROXY_ORIGIN: ${API_PROXY_ORIGIN:-http://app:8080}
+    environment:
+      API_PROXY_ORIGIN: ${API_PROXY_ORIGIN:-http://app:8080}
     container_name: aiquestion-web
     restart: unless-stopped
     depends_on:

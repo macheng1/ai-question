@@ -28,4 +28,10 @@
   <update id="updateAdministratorPassword">
     UPDATE app_user SET password_hash=#{passwordHash}, updated_at=#{updatedAt} WHERE id=#{userId} AND status='ACTIVE'
   </update>
+  <select id="countConflictingPhones" resultType="java.lang.Integer">
+    SELECT COUNT(*) FROM app_user WHERE phone=#{phone} AND id&lt;&gt;#{userId}
+  </select>
+  <update id="updateAdministratorPhone">
+    UPDATE app_user SET phone=#{phone}, updated_at=#{updatedAt} WHERE id=#{userId} AND status='ACTIVE'
+  </update>
 </mapper>

@@ -1,6 +1,6 @@
 "use client";
 import { StatHint } from "./StatHint";
-import { formatStudyHours } from "../format";
+import { formatStudyDuration } from "@/lib/duration";
 import { useEffect, useState } from "react";
 import {
   Banner,
@@ -172,9 +172,9 @@ export function Dashboard() {
         },
         {
           label: "有效学习时长",
-          tip: "所有学员看视频和阅读材料的有效时长之和，按小时显示。",
-          value: formatStudyHours(overview.studiedHours),
-          unit: "小时",
+          tip: "所有学员看视频和阅读材料的有效时长之和，按时、分、秒显示。",
+          value: formatStudyDuration(overview.studiedHours),
+          unit: "",
           detail: "累计有效学时",
           icon: <IconClock />,
           action: () => change({ tab: "logs", status: "ALL", page: 1 }),
@@ -388,12 +388,6 @@ export function Dashboard() {
         />
       ) : data ? (
         <>
-          {data.overview.missingDuration > 0 && (
-            <Banner
-              type="warning"
-              description={`${data.overview.missingDuration} 条学习记录存在旧学时缺失，累计学时仅包含已记录部分。`}
-            />
-          )}
           {view === "overview" ? (
             <>
               <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-6">
@@ -450,8 +444,8 @@ export function Dashboard() {
             </>
           ) : view === "trainings" ? (
             <div className="grid items-start gap-4 xl:grid-cols-2">
-              <StudyHoursChart data={data} title="培训有效学时" tip="按培训统计，合计本场所有学员看视频和阅读材料的有效时长。" onPageChange={page => change({ page })} onTraining={training} />
-              {learnerHours && <StudyHoursChart data={learnerHours} title="学员有效学时" tip="按学员统计，合计该学员在各场培训中看视频和阅读材料的有效时长。" onPageChange={setHoursPage} />}
+              <StudyHoursChart totalHours={Math.max(data.overview.studiedHours, learnerHours?.overview.studiedHours ?? 0)} data={data} title="培训有效学时" tip="按培训统计，合计本场所有学员看视频和阅读材料的有效时长。" onPageChange={page => change({ page })} onTraining={training} />
+              {learnerHours && <StudyHoursChart totalHours={Math.max(data.overview.studiedHours, learnerHours.overview.studiedHours)} data={learnerHours} title="学员有效学时" tip="按学员统计，合计该学员在各场培训中看视频和阅读材料的有效时长。" onPageChange={setHoursPage} />}
             </div>
           ) : (
             <DashboardDetails data={data} query={query} loading={loading} onChange={change} onTraining={training} />

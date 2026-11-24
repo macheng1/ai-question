@@ -6,11 +6,13 @@ import {
   Card,
   Descriptions,
   Form,
+  Modal,
   Toast,
   Typography,
 } from "@douyinfe/semi-ui";
 import {
   changePassword,
+  changePhone,
   getCurrentUser,
   updateProfile,
   type UserProfile,
@@ -25,6 +27,7 @@ export function AccountSettings({ employee = false }: { employee?: boolean }) {
   const [profile, setProfile] = useState<UserProfile>();
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [reloginPhone, setReloginPhone] = useState<string | null>(null);
   useEffect(() => {
     (employee ? getLearnerProfile() : getCurrentUser())
       .then(setProfile)
@@ -56,19 +59,40 @@ export function AccountSettings({ employee = false }: { employee?: boolean }) {
               initValues={profile}
               onSubmit={async (values) => {
                 setSaving(true);
+                const auth = useAuthStore.getState();
+                const currentPhone = String(profile.phone ?? "").trim();
+                const nextPhone = String(values.phone ?? "").trim();
+                let phoneUpdated = false;
+                let updatedPhone = currentPhone;
                 try {
+                  if (nextPhone !== currentPhone) {
+                    const changed = await changePhone({ phone: nextPhone });
+                    phoneUpdated = true;
+                    updatedPhone = changed.phone || nextPhone;
+                    setProfile((prev) => (prev ? { ...prev, phone: updatedPhone } : prev));
+                    if (auth.accessToken)
+                      auth.setSession(changed, auth.accessToken);
+                  }
                   const updated = await updateProfile({
                     name: String(values.name).trim(),
                     unitName: String(values.unitName).trim(),
                     address: String(values.address || "").trim(),
                   });
                   setProfile(updated);
-                  const auth = useAuthStore.getState();
                   if (auth.accessToken)
                     auth.setSession(updated, auth.accessToken);
-                  Toast.success("资料已保存");
+                  if (phoneUpdated)
+                    setReloginPhone(updatedPhone);
+                  else
+                    Toast.success("资料已保存");
                 } catch (e) {
-                  Toast.error(e instanceof Error ? e.message : "保存失败");
+                  const message = e instanceof Error ? e.message : "保存失败";
+                  if (phoneUpdated) {
+                    setProfile((prev) => (prev ? { ...prev, phone: updatedPhone } : prev));
+                    Toast.error(`手机号已更新，资料保存失败：${message}。下次登录请使用新手机号 ${updatedPhone}`);
+                  } else {
+                    Toast.error(message);
+                  }
                 } finally {
                   setSaving(false);
                 }
@@ -79,6 +103,12 @@ export function AccountSettings({ employee = false }: { employee?: boolean }) {
                 label="姓名"
                 maxLength={80}
                 rules={[{ required: true, whitespace: true }]}
+              />
+              <Form.Input
+                field="phone"
+                label="手机号"
+                maxLength={11}
+                rules={[{ required: true }, { pattern: /^1[0-9]{10}$/, message: "请输入正确的手机号" }]}
               />
               <Form.Input
                 field="unitName"
@@ -141,6 +171,34 @@ export function AccountSettings({ employee = false }: { employee?: boolean }) {
           </Button>
         </Form>
       </Card>}
+      <Modal
+        title="手机号已更新"
+        visible={reloginPhone !== null}
+        maskClosable
+        onCancel={() => setReloginPhone(null)}
+        width="min(440px, calc(100vw - 24px))"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button
+              onClick={() => {
+                setReloginPhone(null);
+                useAuthStore.getState().clearSession();
+                Toast.success("已退出登录");
+                window.location.href = "/login?redirect=" + encodeURIComponent(window.location.pathname);
+              }}
+            >
+              立即重新登录
+            </Button>
+            <Button theme="solid" onClick={() => setReloginPhone(null)}>
+              继续使用
+            </Button>
+          </div>
+        }
+      >
+        <Typography.Text>
+          手机号已改为 {reloginPhone}，下次登录请使用新手机号。
+        </Typography.Text>
+      </Modal>
     </div>
   );
 }

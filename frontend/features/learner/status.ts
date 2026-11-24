@@ -18,8 +18,6 @@ export const examLabels: Record<string, string> = {
 };
 export const formatTime = (value?: string) =>
   value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "—";
-export const formatDuration = (seconds: number) =>
-  `${Math.floor(seconds / 60)}分${Math.floor(seconds % 60)}秒`;
 export function isPendingReview(row: { pendingReview?: boolean; examStatus?: string; status?: string }) {
   return Boolean(row.pendingReview || row.status === "PENDING_REVIEW" || row.examStatus === "PENDING_REVIEW");
 }

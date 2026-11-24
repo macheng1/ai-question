@@ -1,4 +1,5 @@
 "use client";
+import { formatDuration } from "@/lib/duration";
 import { Typography } from "@douyinfe/semi-ui";
 import { Layout } from "@douyinfe/semi-ui";
 
@@ -155,7 +156,7 @@ export function ExamTrainingVideos({ examId, data, onBack, onContinue, starting,
   return <Layout.Content>
     <div className="h5-content">
       {src ? <VideoPlayer key={src} ref={player} src={src} width="100%" height="auto" style={{ aspectRatio: "16 / 9", borderRadius: 15, overflow: "hidden" }} autoPlay={false} clickToPlay defaultPlaybackRate={1} muted={false} playbackRateList={[{ label: "1.0x", value: 1 }]} theme="dark" volume={80} controlsList={["play", "time", "volume", "fullscreen"]} /> : !error && <div className="flex flex-col items-center justify-center gap-3 rounded-xl bg-slate-100" style={{ aspectRatio: "16 / 9" }}><Spin size="large" /><p className="text-sm text-slate-500">正在加载视频…</p></div>}
-      {!reviewTrainingId && video && <div className="h5-video-resume"><IconClock /> {video.completed ? "本节视频已完成，可再次观看" : video.positionSeconds > 0 ? `已保存到 ${Math.floor(video.positionSeconds / 60)} 分 ${Math.floor(video.positionSeconds % 60)} 秒，下次可继续观看` : (Number(examId)<0?"观看进度自动保存，退出后可继续学习":"观看进度自动保存，完成学习后进入考试")}</div>}
+      {!reviewTrainingId && video && <div className="h5-video-resume"><IconClock /> {video.completed ? "本节视频已完成，可再次观看" : video.positionSeconds > 0 ? `已保存到 ${formatDuration(video.positionSeconds)}，下次可继续观看` : (Number(examId)<0?"观看进度自动保存，退出后可继续学习":"观看进度自动保存，完成学习后进入考试")}</div>}
       <Typography.Title heading={1} className="h5-video-title !text-xl !leading-7 !mb-2">{video?.title || "培训视频学习"}</Typography.Title><p className="h5-muted">{reviewTrainingId ? "回看不计入学习时长，也不改变学习记录。" : Number(examId)<0?"请完整观看全部培训视频，进度自动保存。":"请完整观看全部培训视频。学习期间不占用考试答题时间。"}</p>
       {!reviewTrainingId && <><div className="h5-lesson-progress"><Typography.Title heading={2} className="!text-sm">课程完成进度</Typography.Title><span>{completedCount} / {videos.length} 节</span></div>
       <Progress percent={Math.round(completedCount / Math.max(1, videos.length) * 100)} stroke="#53ab8b" showInfo={false} /></>}

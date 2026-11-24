@@ -120,7 +120,16 @@ public class EdsStorageService implements ObjectStorage, com.aiquestion.storage.
         putVideoParts(client, key, metadata, input, file.getSize());
       } else {
         metadata.setContentLength(file.getSize());
-        client.putObject(new PutObjectRequest(properties.bucket(), key, input, metadata));
+        // 文件上传源可重复读取，避免 HTTP 下 AWS4 签名读完流后无法 reset。
+        var staging = java.nio.file.Files.createTempFile("eds-upload-", ".tmp");
+        try {
+          java.nio.file.Files.copy(input, staging, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+          var request = new PutObjectRequest(properties.bucket(), key, staging.toFile());
+          request.setMetadata(metadata);
+          client.putObject(request);
+        } finally {
+          java.nio.file.Files.deleteIfExists(staging);
+        }
       }
       if (video) log.info("video event=origin_upload_done provider={} key={} bytes={} elapsedMs={}", provider(), key, file.getSize(), VideoLog.elapsedMs(start));
     } catch (Exception ex) {

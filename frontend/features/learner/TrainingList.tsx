@@ -1,4 +1,5 @@
 "use client";
+import { formatDuration } from "@/lib/duration";
 import { SurveyFeedbackModal } from "./SurveyFeedbackModal";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -22,7 +23,6 @@ import {
   learnerExamStatus,
   isPendingReview,
   formatTime,
-  formatDuration,
   learningAction,
   learningHref,
 } from "./status";

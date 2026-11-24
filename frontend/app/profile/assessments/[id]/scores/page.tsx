@@ -1,4 +1,5 @@
 "use client";
+import { formatElapsedDuration } from "@/lib/duration";
 import { Typography } from "@douyinfe/semi-ui";
 import { Card } from "@douyinfe/semi-ui";
 
@@ -45,16 +46,6 @@ const textDate = (value?: string) =>
   value && Number.isFinite(Date.parse(value))
     ? new Date(value).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false })
     : "-";
-const durationText = (startedAt?: string, submittedAt?: string) => {
-  if (!startedAt || !submittedAt) return "-";
-  const seconds = Math.max(
-    0,
-    Math.floor(
-      (new Date(submittedAt).getTime() - new Date(startedAt).getTime()) / 1000,
-    ),
-  );
-  return `${Math.floor(seconds / 60)}分${seconds % 60}秒`;
-};
 const statusMeta = (record: RecordItem) => {
   if (record.status === "VOID") return { label: "作废", color: "grey" as const };
   if (record.status === "SUBMITTED") {
@@ -197,7 +188,7 @@ export default function AssessmentScoresPage() {
                       : `第 ${record.attemptNo} 次`}
                   </span>)},
 {title: "用时", render: (_value: unknown, record: (typeof records)[number]) => (<span>
-                    {durationText(record.startedAt, record.submittedAt)}
+                    {formatElapsedDuration(record.startedAt, record.submittedAt)}
                   </span>)},
 {title: "交卷时间", render: (_value: unknown, record: (typeof records)[number]) => (<span>{textDate(record.submittedAt)}</span>)},
 {title: "操作", render: (_value: unknown, record: (typeof records)[number]) => (record.status === "PENDING_REVIEW" ? <Link href={`/profile/assessments/${taskId}/grading`}>去批阅</Link> : record.status !== "IN_PROGRESS" && (

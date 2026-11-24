@@ -1,4 +1,5 @@
 "use client";
+import { formatDuration } from "@/lib/duration";
 import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -22,7 +23,6 @@ import {
 } from "@/features/learner/api";
 import {
   formatTime,
-  formatDuration,
   learningLabels,
   examLabels,
   learnerExamStatus,
