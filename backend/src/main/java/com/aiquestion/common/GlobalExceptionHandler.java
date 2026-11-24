@@ -1,6 +1,8 @@
 package com.aiquestion.common;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -36,10 +38,14 @@ public class GlobalExceptionHandler {
   }
 
   @ExceptionHandler(Exception.class)
-  @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-  public ApiResponse<Void> system(Exception ex) {
+  public ResponseEntity<ApiResponse<Void>> system(Exception ex, HttpServletResponse response) {
     log.error("请求处理失败", ex);
-    return ApiResponse.fail(ErrorCode.SYSTEM_ERROR);
+    // A started media response cannot be replaced by a JSON error document.
+    if (response.isCommitted()) return null;
+    response.reset();
+    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(ApiResponse.fail(ErrorCode.SYSTEM_ERROR));
   }
 
   @ExceptionHandler(NoResourceFoundException.class)

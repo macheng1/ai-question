@@ -1,7 +1,8 @@
 "use client";
+import { DiagnosticVideoPlayer } from "./DiagnosticVideoPlayer";
 
 import { useEffect, useRef, useState } from "react";
-import { Banner, Button, Image, InputNumber, Modal, Space, Table, Toast, Upload, VideoPlayer } from "@douyinfe/semi-ui";
+import { Banner, Button, Image, InputNumber, Modal, Space, Table, Toast, Upload } from "@douyinfe/semi-ui";
 
 import { VideoUploadStatus, type VideoUploadRow } from "./TrainingVideoUploadDialog";
 import { MaterialUploader } from "./MaterialUploader";
@@ -138,7 +139,7 @@ export function TrainingDraftMaterials({ items, onChange, disabled, onBusyChange
       {previewError && <Banner type="danger" description={previewError} />}
       {preview && !previewUrl && !previewError && <p role="status">正在加载预览…</p>}
       {preview && previewUrl && (preview.kind === "videos"
-        ? <VideoPlayer key={previewUrl} src={previewUrl} width="100%" height="min(560px, 60dvh)" style={{ display: "block", maxHeight: "calc(100dvh - 180px)", borderRadius: 8, overflow: "hidden" }}
+        ? <DiagnosticVideoPlayer key={previewUrl} src={previewUrl} width="100%" height="min(560px, 60dvh)" style={{ display: "block", maxHeight: "calc(100dvh - 180px)", borderRadius: 8, overflow: "hidden" }}
             autoPlay={false} clickToPlay muted={false} defaultPlaybackRate={1} volume={80} theme="dark"
             playbackRateList={[{ label: "1x", value: 1 }, { label: "1.5x", value: 1.5 }, { label: "2x", value: 2 }]}
             ref={element => { if (element) element.onerror = () => setPreviewError("视频无法播放，请检查文件格式或重新选择文件。"); }} />

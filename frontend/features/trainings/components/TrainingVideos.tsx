@@ -1,9 +1,10 @@
 "use client";
+import { DiagnosticVideoPlayer } from "./DiagnosticVideoPlayer";
 import type { FileItem } from "@douyinfe/semi-ui/lib/es/upload";
 import { useEffect, useState } from "react";
 import { videoPlaybackUrl } from "../video-playback";
 import { apiClient } from "@/lib/api/client";
-import { Button, Layout, Modal, Spin, Toast, Upload, VideoPlayer } from "@douyinfe/semi-ui";
+import { Button, Layout, Modal, Spin, Toast, Upload } from "@douyinfe/semi-ui";
 import { forgetExpiredUploads, prepareDraftVideo } from "../video-upload";
 type Video = { id: number; title: string };
 export function TrainingVideos({ id, readOnly = false }: { id: number; readOnly?: boolean }) {
@@ -84,7 +85,7 @@ export function TrainingVideos({ id, readOnly = false }: { id: number; readOnly?
       {preview && <div className="flex flex-col gap-3">
         {previewLoading && <div role="status" className="flex items-center gap-2 py-10"><Spin />正在加载视频…</div>}
         {previewError && <p role="alert" className="text-red-600">{previewError}</p>}
-        {previewUrl && !previewError && <VideoPlayer key={previewUrl} src={previewUrl} width="100%" height="min(560px, 60dvh)" style={{ display: "block", maxHeight: "calc(100dvh - 180px)", borderRadius: 8, overflow: "hidden" }} autoPlay={false} clickToPlay muted={false} defaultPlaybackRate={1} volume={80} theme="dark" playbackRateList={[{ label: "1x", value: 1 }, { label: "1.5x", value: 1.5 }, { label: "2x", value: 2 }]} ref={element => { if (element) { element.onerror = () => setPreviewError("视频无法播放，请重试或检查视频格式。"); } }} />}
+        {previewUrl && <DiagnosticVideoPlayer key={previewUrl} src={previewUrl} width="100%" height="min(560px, 60dvh)" style={{ display: "block", maxHeight: "calc(100dvh - 180px)", borderRadius: 8, overflow: "hidden" }} autoPlay={false} clickToPlay muted={false} defaultPlaybackRate={1} volume={80} theme="dark" playbackRateList={[{ label: "1x", value: 1 }, { label: "1.5x", value: 1.5 }, { label: "2x", value: 2 }]} ref={element => { if (element) { element.onerror = () => setPreviewError("视频无法播放，请重试或检查视频格式。"); } }} />}
         {previewError && <Button onClick={() => setPreviewAttempt(value => value + 1)}>重新加载</Button>}
       </div>}
     </Modal>
