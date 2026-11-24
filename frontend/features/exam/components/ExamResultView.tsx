@@ -1,4 +1,5 @@
 "use client";
+import { formatElapsedDuration } from "@/lib/duration";
 import { Typography } from "@douyinfe/semi-ui";
 import { Layout } from "@douyinfe/semi-ui";
 import { useEffect, useState } from "react";
@@ -15,11 +16,6 @@ export type ExamResultViewProps = {
   attemptId?: string; details?: boolean; practice?: boolean;
 };
 const dateLabel = (value?: string) => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false }) : "—";
-const durationLabel = (start?: string, end?: string) => {
-  if (!start || !end || !Number.isFinite(Date.parse(end) - Date.parse(start))) return "—";
-  const seconds = Math.max(0, Math.floor((Date.parse(end) - Date.parse(start)) / 1000));
-  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
-};
 const optionsFor = (q: ExamQuestion) => q.options?.length ? q.options : q.kind === "judge" ? [{ key: "A", text: "正确" }, { key: "B", text: "错误" }] : [];
 
 export function ExamResultView(props: ExamResultViewProps) {
@@ -46,7 +42,7 @@ export function ExamResultView(props: ExamResultViewProps) {
   const detailsUrl = withContext(`/kaoshi/${paper.id}/result/details${attemptId ? `?attemptId=${attemptId}` : ""}`);
   const stats = <div className="h5-stats h5-result-stats">
     <div><strong>{reviewing ? score : showAnswers ? correctCount : score}<small>{reviewing ? "" : showAnswers ? ` / ${paper.questions.length}` : "分"}</small></strong><span>{reviewing ? `得分 / ${paper.totalScore}` : showAnswers ? "答对题数" : "考试得分"}</span></div>
-    <div><strong>{durationLabel(startedAt, submittedAt)}</strong><span>答题用时</span></div>
+    <div><strong>{formatElapsedDuration(startedAt, submittedAt)}</strong><span>答题用时</span></div>
     <div><strong>{showAnswers ? Math.round(correctCount / Math.max(1, paper.questions.length) * 100) : paper.passScore}<small>{showAnswers ? "%" : "分"}</small></strong><span>{showAnswers ? "正确率" : "及格分"}</span></div>
   </div>;
   return <div className="result-print-root">

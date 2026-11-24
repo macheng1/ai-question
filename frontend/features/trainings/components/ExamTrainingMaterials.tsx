@@ -1,4 +1,5 @@
 "use client";
+import { formatDuration } from "@/lib/duration";
 import { useEffect, useRef, useState } from "react";
 import { Banner, Button, Image, Space, Spin, Tag, Tooltip, Toast } from "@douyinfe/semi-ui";
 import { IconMinus, IconPlus, IconExpand } from "@douyinfe/semi-icons";
@@ -106,7 +107,7 @@ export function ExamTrainingMaterials(props:Props){
  return <div className="h5-content flex flex-col gap-4 pb-10"><h1 className="text-xl font-semibold">培训材料学习</h1>
  <Space wrap>{props.data.trainings.map(t=><span key={t.id}>{t.name} <Tag>{trainingCategories.find(c=>c.value===t.category)?.label||"未分类"}</Tag> <Tag>{t.requirementType==="ELECTIVE"?"选修":"必修"}</Tag></span>)}</Space>
  <Space wrap>{materials.map(m=><Button key={m.id} theme={selected===m.id?"solid":"light"} disabled={saving||selected===m.id} onClick={()=>void navigate(()=>{setSelected(m.id);setPage(m.pages.find(p=>!p.completed)?.pageNumber??1);})}>{m.title}</Button>)}</Space><h2 className="break-words font-semibold">{material?.title}</h2>
- {props.reviewTrainingId ? <p>第 {page} / {material?.pageCount} 页 · 回看材料</p> : <><p>第 {page} / {material?.pageCount} 页 · {active?.completed?"本页已完成":liveSeconds>=(active?.requiredSeconds||1)?"正在确认阅读进度…":`本页还需阅读 ${Math.max(0,Math.ceil((active?.requiredSeconds||0)-liveSeconds))} 秒`}</p><div role="progressbar" aria-label="本页阅读进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100,Math.round(liveSeconds/(active?.requiredSeconds||1)*100))} className="h-1 overflow-hidden rounded-full bg-slate-100">
+ {props.reviewTrainingId ? <p>第 {page} / {material?.pageCount} 页 · 回看材料</p> : <><p>第 {page} / {material?.pageCount} 页 · {active?.completed?"本页已完成":liveSeconds>=(active?.requiredSeconds||1)?"正在确认阅读进度…":`本页还需阅读 ${formatDuration(Math.max(0,Math.ceil((active?.requiredSeconds||0)-liveSeconds)))}`}</p><div role="progressbar" aria-label="本页阅读进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100,Math.round(liveSeconds/(active?.requiredSeconds||1)*100))} className="h-1 overflow-hidden rounded-full bg-slate-100">
   <div key={`${selected}-${page}`} className="h-full w-full origin-left rounded-full bg-green-500" style={{transform:`scaleX(${Math.min(1,Math.max(0,liveSeconds/(active?.requiredSeconds||1)))})`,transition:paused||error?"none":"transform 100ms linear",willChange:"transform"}} />
  </div></>}
  <Space><Button disabled={!url||!!error} onClick={()=>setPreviewVisible(true)}>预览</Button><Tooltip content="缩小"><Button aria-label="缩小" icon={<IconMinus/>} disabled={zoom<=50} onClick={()=>setZoom(z=>z-25)}/></Tooltip><span>{zoom}%</span><Tooltip content="放大"><Button aria-label="放大" icon={<IconPlus/>} disabled={zoom>=200} onClick={()=>setZoom(z=>z+25)}/></Tooltip><Tooltip content="全屏阅读"><Button aria-label="全屏阅读" icon={<IconExpand/>} onClick={()=>{if(viewer.current?.requestFullscreen)void viewer.current.requestFullscreen().catch(()=>Toast.info("请使用缩放阅读"));else Toast.info("请使用缩放阅读");}}/></Tooltip></Space>

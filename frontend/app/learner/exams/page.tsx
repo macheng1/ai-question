@@ -1,4 +1,5 @@
 "use client";
+import { formatDuration } from "@/lib/duration";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Banner, Card, Table, Tag, Typography, Tabs, TabPane } from "@douyinfe/semi-ui";
@@ -73,7 +74,7 @@ export default function Exams() {
                 render: (_, row) =>
                   row.durationSeconds == null
                     ? "—"
-                    : `${Math.floor(row.durationSeconds / 60)}分${row.durationSeconds % 60}秒`,
+                    : formatDuration(row.durationSeconds),
               },
               { title: "操作", width: 110, render: (_, row) => (row.status === "SUBMITTED" || isPendingReview(row)) ? <Link href={`/kaoshi/${row.taskId}/result?attemptId=${row.id}${trainingIds[row.taskId] ? `&trainingId=${trainingIds[row.taskId]}` : ""}`}>查看结果</Link> : "—" },
             ]}

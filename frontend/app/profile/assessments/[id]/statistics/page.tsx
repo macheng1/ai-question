@@ -1,4 +1,5 @@
 "use client";
+import { formatDuration } from "@/lib/duration";
 import { Typography, Space } from "@douyinfe/semi-ui";
 import { Layout, Card } from "@douyinfe/semi-ui";
 
@@ -20,11 +21,6 @@ const dateText = (value?: string) =>
   value && Number.isFinite(Date.parse(value))
     ? new Date(value).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false })
     : "-";
-
-const durationText = (seconds?: number) => {
-  const total = Math.round(Math.max(0, Number(seconds || 0)));
-  return `${Math.floor(total / 60)}分${Math.round(total % 60)}秒`;
-};
 
 const cardToneClass: Record<string, string> = {
   blue: "text-blue-600",
@@ -72,7 +68,7 @@ export default function AssessmentStatisticsPage() {
       ["及格率", overview?.passRate == null ? "—" : `${Number(overview.passRate).toFixed(1)}%`, "green"],
       ["最高分", overview?.highestScore == null ? "—" : `${Number(overview.highestScore).toFixed(1)} 分`, "orange"],
       ["最低分", overview?.lowestScore == null ? "—" : `${Number(overview.lowestScore).toFixed(1)} 分`, "red"],
-      ["平均用时", durationText(overview?.averageDurationSeconds), "teal"],
+      ["平均用时", formatDuration(overview?.averageDurationSeconds), "teal"],
     ],
     [appliedRetake, overview],
   );

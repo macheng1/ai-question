@@ -3,9 +3,6 @@ package com.aiquestion.service;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.sql.Timestamp;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.util.HashMap;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -37,7 +34,7 @@ public final class DashboardLogExporter {
   }
 
   private static byte[] write(List<Map<String, Object>> rows, boolean roster, String sheetName) throws IOException {
-    String[] headers = roster ? new String[]{"姓名", "手机号", "部门", "培训名称", "整体状态", "学习进度（%）", "有效学时（小时）", "考试状态", "逾期情况"} : HEADERS;
+    String[] headers = roster ? new String[]{"姓名", "手机号", "部门", "培训名称", "整体状态", "学习进度（%）", "有效学时", "考试状态", "逾期情况"} : HEADERS;
     try (var workbook = new XSSFWorkbook(); var output = new ByteArrayOutputStream()) {
       var sheet = workbook.createSheet(sheetName);
       var headerStyle = workbook.createCellStyle();
@@ -50,9 +47,11 @@ public final class DashboardLogExporter {
         header.getCell(i).setCellStyle(headerStyle);
         sheet.setColumnWidth(i, (i == 3 || i == 8 ? 36 : 22) * 256);
       }
+      header.createCell(headers.length).setCellValue("有效学习秒数（可汇总）");
+      header.getCell(headers.length).setCellStyle(headerStyle);
+      sheet.setColumnWidth(headers.length, 26 * 256);
       var percentStyle = workbook.createCellStyle();
       percentStyle.setDataFormat(workbook.createDataFormat().getFormat("0%"));
-      Map<String, CellStyle> durationStyles = new HashMap<>();
       int index = 1;
       for (var source : rows) {
         boolean missing = source.get("missingDuration") instanceof Number n && n.longValue() > 0;
@@ -62,35 +61,25 @@ public final class DashboardLogExporter {
             source.get("trainingName"), label(source.get("status")), source.get("progress"),
             source.get("studiedHours"), label(source.get("examStatus")), overdue} : new Object[] {source.get("name"), source.get("phone"), source.get("departmentName"),
             source.get("trainingName"), label(source.get("status")), number(source.get("progress")) / 100,
-            hours(source.get("studiedHours")), label(source.get("examStatus")),
+            source.get("studiedHours"), label(source.get("examStatus")),
             overdue.isEmpty() ? "—" : overdue, time(source.get("startedAt")), time(source.get("completedAt")),
-            source.getOrDefault("score", "—"), source.get("attemptCount"), minutes(source.get("durationSeconds"))};
+            source.getOrDefault("score", "—"), source.get("attemptCount"), examDuration(source.get("durationSeconds"))};
+        values[6] = duration(number(source.get("studiedHours"))) + (missing ? " 缺失" : "");
         var row = sheet.createRow(index++);
+        row.createCell(headers.length).setCellValue(Math.floor(Math.max(0, number(source.get("studiedHours"))) * 3600 + 1e-7));
         for (int i = 0; i < values.length; i++) {
           var cell = row.createCell(i);
           if (!roster && i == 5) cell.setCellStyle(percentStyle);
           if (values[i] instanceof Number number) {
             cell.setCellValue(number.doubleValue());
-            if (!roster && (i == 6 || i == 13)) {
-              double value = number.doubleValue();
-              boolean tiny = i == 6 && value > 0 && value < 0.01;
-              String unit = i == 13 ? "分钟" : missing ? "小时 缺失" : "小时";
-              int scale = Math.max(0, BigDecimal.valueOf(value).stripTrailingZeros().scale());
-              String digits = scale == 0 ? "0" : "0." + "0".repeat(scale);
-              String format = tiny ? "\"<0.01 " + unit + "\"" : digits + "\" " + unit + "\"";
-              cell.setCellStyle(durationStyles.computeIfAbsent(format, pattern -> {
-                var style = workbook.createCellStyle();
-                style.setDataFormat(workbook.createDataFormat().getFormat(pattern));
-                return style;
-              }));
-            }
+
           }
           else if (values[i] != null) cell.setCellValue(values[i].toString());
           else if (!roster && i == 11) cell.setCellValue("—");
         }
       }
       sheet.createFreezePane(0, 1);
-      sheet.setAutoFilter(new CellRangeAddress(0, rows.size(), 0, headers.length - 1));
+      sheet.setAutoFilter(new CellRangeAddress(0, rows.size(), 0, headers.length));
       workbook.write(output);
       return output.toByteArray();
     }
@@ -104,14 +93,17 @@ public final class DashboardLogExporter {
     return value instanceof Number n ? n.doubleValue() : 0;
   }
 
-  private static double hours(Object value) {
-    double hours = number(value);
-    // Match the page's toFixed(2), which rounds the exact binary floating-point value.
-    return hours < 0.01 ? hours : new BigDecimal(hours).setScale(2, RoundingMode.HALF_UP).doubleValue();
+  private static String duration(double hours) {
+    if (!Double.isFinite(hours) || hours < 0) return "—";
+    long seconds = (long) Math.floor(hours * 3600 + 1e-7);
+    if (seconds == 0) return hours > 0 ? "不足1秒" : "0秒";
+    return (seconds >= 3600 ? seconds / 3600 + "小时" : "")
+        + (seconds / 60 % 60 > 0 ? seconds / 60 % 60 + "分" : "")
+        + (seconds % 60 > 0 ? seconds % 60 + "秒" : "");
   }
 
-  private static Object minutes(Object seconds) {
-    return seconds == null ? "—" : Math.round(number(seconds) / 60 * 10) / 10.0;
+  private static String examDuration(Object seconds) {
+    return seconds instanceof Number n ? duration(n.doubleValue() / 3600.0) : "—";
   }
 
   private static String time(Object value) {

@@ -1,4 +1,5 @@
 "use client";
+import { formatDuration } from "@/lib/duration";
 import { useEffect, useState } from "react";
 import { Banner, Card, Table, Tag, Typography, Button } from "@douyinfe/semi-ui";
 import {
@@ -51,7 +52,7 @@ export default function Records() {
             title: "有效学习时长",
             width: 160,
             render: (_, row) =>
-              `${Math.floor(row.studiedSeconds / 60)}分${Math.floor(row.studiedSeconds % 60)}秒`,
+              formatDuration(row.studiedSeconds),
           },
           {
             title: "材料学习状态",

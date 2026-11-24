@@ -1,4 +1,5 @@
 "use client";
+import { formatDuration } from "@/lib/duration";
 import { useEffect,useState } from "react";
 import { useParams } from "next/navigation";
 import { Banner,Button,Card,Input,Table,Tag,Tooltip,Typography } from "@douyinfe/semi-ui";
@@ -8,7 +9,7 @@ import { useCompactViewport } from "@/lib/hooks/useCompactViewport";
 import { apiClient } from "@/lib/api/client";
 type Part={id:number;title:string;pageNumber?:number;requiredSeconds?:number;studiedSeconds?:number;completed:boolean;firstStudiedAt?:string;lastStudiedAt?:string;completedAt?:string};
 type Row={id:number;name:string;phone:string;department:string;studiedSeconds:number;completed:boolean;materials:Part[]};
-const time=(v?:number|null)=>v==null?"未记录":`${Math.floor(v/60)}分${Math.floor(v%60)}秒`;
+const time=(v?:number|null)=>v==null?"未记录":formatDuration(v);
 const dateTime=(value?:string)=>{
  if(!value || !Number.isFinite(Date.parse(value)))return "—";
  return new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23"}).format(new Date(value)).replaceAll("/","-");
