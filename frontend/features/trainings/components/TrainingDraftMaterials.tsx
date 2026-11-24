@@ -88,7 +88,7 @@ export function TrainingDraftMaterials({ items, onChange, disabled, onBusyChange
       return <div key={kind} className="flex w-full min-w-0 flex-col gap-3">
         {kind === "materials" && <strong>PDF / 图片材料</strong>}
         <p className="text-sm text-slate-500">{kind === "videos"
-          ? "上传 MP4 / WebM 视频，选好后即开始上传，可继续填写培训信息。"
+          ? "上传 MP4 / WebM 视频，建议使用 720p 分辨率，以获得更流畅的播放体验。选好后即开始上传，可继续填写培训信息。"
           : "支持 PDF、PNG、JPG，单个文件不超过20MB，PDF最多200页。默认每页120秒，可统一设置或逐页调整，选好文件后即开始上传。"}</p>
         {kind === "videos" ? <>
           <ul className="divide-y divide-slate-100">{group.map((item, index) => <li key={rowKey(item)} className="flex flex-wrap items-center justify-between gap-3 py-3">

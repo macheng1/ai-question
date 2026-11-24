@@ -43,7 +43,7 @@ export function TrainingVideos({ id, readOnly = false }: { id: number; readOnly?
     setBusy(true); try { await apiClient.delete(`/management/trainings/${id}/videos/${video.id}`); await load(); Toast.success("视频已删除"); }
     catch (e) { Toast.error(e instanceof Error ? e.message : "删除失败"); } finally { setBusy(false); }
   }});
-  return <Layout.Content className="flex flex-col gap-3"><p className="text-sm">上传 MP4 / WebM 视频。上传、排序和删除立即生效。</p>
+  return <Layout.Content className="flex flex-col gap-3"><p className="text-sm">上传 MP4 / WebM 视频，建议使用 720p 分辨率，以获得更流畅的播放体验。上传、排序和删除立即生效。</p>
     {error && <p role="alert" className="text-red-600">{error}<Button theme="borderless" onClick={() => load().catch(e => setError(e.message))}>重试</Button></p>}
     <ul className="divide-y divide-slate-100">{videos.map((v, i) => <li key={v.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><span className="break-all">{i + 1}. {v.title}</span><span className="flex gap-3"><Button onClick={() => setPreview(v)}>预览</Button><Button disabled={readOnly || busy || i === 0} onClick={() => move(i, -1)}>上移</Button><Button disabled={readOnly || busy || i === videos.length - 1} onClick={() => move(i, 1)}>下移</Button><Button disabled={readOnly || busy} type="danger" onClick={() => remove(v)}>删除</Button></span></li>)}</ul>
     {!videos.length && !uploadFiles.length && !error && <p className="text-slate-500">暂无视频。</p>}
