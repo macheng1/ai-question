@@ -702,6 +702,101 @@ class MyBatisMigrationIntegrationTest {
     assertEquals(questions, jdbc.queryForList("SELECT question_id FROM assessment_attempt_question WHERE attempt_id=? ORDER BY sort_no", Long.class, attempt));
   }
 
+  @Test void departmentTransferPreservesHistoryAndAssignsOnlyUnexpiredRequiredTrainings() throws Exception {
+    long oldCourse = createTraining(null, false);
+    jdbc.update("UPDATE training SET audience_type='DEPARTMENT' WHERE id=?", oldCourse);
+    jdbc.update("INSERT INTO training_scope_target(training_id,target_id) VALUES(?,?)", oldCourse, department);
+    long video = insert("INSERT INTO training_video(training_id,title,storage_path,content_type) VALUES(?,'调岗进度视频','transfer.mp4','video/mp4')", oldCourse);
+    var entry = learning.learning(-oldCourse, "测试学员", phone);
+    long session = jdbc.queryForObject("SELECT id FROM candidate_learning_session WHERE token=?", Long.class, entry.get("token"));
+    jdbc.update("UPDATE candidate_video_progress SET position_seconds=30,studied_seconds=30,completed=FALSE WHERE session_id=? AND video_id=?", session, video);
+    var progressBefore = jdbc.queryForList("SELECT * FROM candidate_video_progress WHERE session_id=?", session);
+    var audienceBefore = jdbc.queryForMap("SELECT * FROM training_audience WHERE training_id=? AND employee_id=?", oldCourse, employee);
+    // Existing submitted result must survive the department change unchanged.
+    long exam = createExam();
+    long examCourse = createTraining(exam, false);
+    long participant = insert("INSERT INTO assessment_participant(task_id,employee_id,candidate_name,phone,status,attempt_count) VALUES(?,?,'测试学员',?,'SUBMITTED',1)", exam, employee, phone);
+    long attempt = insert("INSERT INTO assessment_attempt(task_id,participant_id,attempt_no,status,total_score,score,passed,started_at,submitted_at) VALUES(?,?,1,'SUBMITTED',100,80,TRUE,CURRENT_TIMESTAMP(3),CURRENT_TIMESTAMP(3))", exam, participant);
+    var resultBefore = jdbc.queryForMap("SELECT * FROM assessment_attempt WHERE id=?", attempt);
+    long nextDepartment = insert("INSERT INTO organization_department(created_by,name) VALUES(?,'调岗目标部门')", owner);
+    insert("INSERT INTO organization_employee(created_by,department_id,name,phone) VALUES(?,?,'目标部门学员',?)",owner,nextDepartment,"136"+String.format("%08d",SEQUENCE.incrementAndGet()));
+    List<Long> newCourses = new ArrayList<>();
+    for (int i=0;i<6;i++) {
+      var command = trainingCommand(null, i==1);
+      command.put("audience", Map.of("type","DEPARTMENT","ids",List.of(nextDepartment)));
+      long course = request(post("/management/trainings").header("Authorization",authorization),command).path("id").asLong();
+      newCourses.add(course);
+    }
+    long current=newCourses.get(0), future=newCourses.get(1), noDeadline=newCourses.get(2),
+        ended=newCourses.get(3), elective=newCourses.get(4), exactBoundary=newCourses.get(5);
+    jdbc.update("UPDATE training SET end_at=NULL WHERE id=?",noDeadline);
+    jdbc.update("UPDATE training SET end_at=DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 1 DAY) WHERE id=?",ended);
+    jdbc.update("UPDATE training SET end_at=CURRENT_TIMESTAMP(3) WHERE id=?",exactBoundary);
+    jdbc.update("UPDATE training SET requirement_type='ELECTIVE' WHERE id=?",elective);
+    // An unrelated department's required course must not be allocated either.
+    long unrelatedDepartment=insert("INSERT INTO organization_department(created_by,name) VALUES(?,'无关部门')",owner);
+    insert("INSERT INTO organization_employee(created_by,department_id,name,phone) VALUES(?,?,'无关学员',?)",owner,unrelatedDepartment,"136"+String.format("%08d",SEQUENCE.incrementAndGet()));
+    var otherCommand=trainingCommand(null,false);
+    otherCommand.put("audience",Map.of("type","DEPARTMENT","ids",List.of(unrelatedDepartment)));
+    long unrelated=request(post("/management/trainings").header("Authorization",authorization),otherCommand).path("id").asLong();
+    var transfer=Map.of("name","测试学员","phone",phone,"departmentId",nextDepartment,"status","ACTIVE");
+    request(put("/management/employees/"+employee).header("Authorization",authorization),transfer);
+    assertEquals(nextDepartment,jdbc.queryForObject("SELECT department_id FROM organization_employee WHERE id=?",Long.class,employee));
+    List<Long> expected=new ArrayList<>(List.of(oldCourse,examCourse,current,future,noDeadline)); Collections.sort(expected);
+    assertEquals(expected,jdbc.queryForList("SELECT training_id FROM training_audience WHERE employee_id=? ORDER BY training_id",Long.class,employee),
+        "Ended, boundary, elective and unrelated courses must not be added");
+    assertEquals(entry.get("token"),learning.learning(-oldCourse,"测试学员",phone).get("token"));
+    assertNotNull(learning.learning(-current,"测试学员",phone).get("token"));
+    var allAssignments=jdbc.queryForList("SELECT * FROM training_audience WHERE employee_id=? ORDER BY training_id",employee);
+    // Repeated save and a move back must neither duplicate nor reset assignments.
+    request(put("/management/employees/"+employee).header("Authorization",authorization),transfer);
+    request(put("/management/employees/"+employee).header("Authorization",authorization),
+        Map.of("name","测试学员","phone",phone,"departmentId",department,"status","ACTIVE"));
+    assertEquals(allAssignments,jdbc.queryForList("SELECT * FROM training_audience WHERE employee_id=? ORDER BY training_id",employee));
+    assertEquals(audienceBefore,jdbc.queryForMap("SELECT * FROM training_audience WHERE training_id=? AND employee_id=?",oldCourse,employee));
+    assertEquals(progressBefore,jdbc.queryForList("SELECT * FROM candidate_video_progress WHERE session_id=?",session));
+    assertEquals(resultBefore,jdbc.queryForMap("SELECT * FROM assessment_attempt WHERE id=?",attempt));
+    // Actual reporting query retains the department snapshot for each assignment.
+    try(var sql=sqlSessions.openSession()) {
+      var rows=sql.getMapper(DashboardRepository.class).rows(owner,Map.of());
+      var old=rows.stream().filter(r->((Number)r.get("trainingId")).longValue()==oldCourse).findFirst().orElseThrow();
+      assertEquals(department,((Number)old.get("departmentId")).longValue());
+      assertEquals(30.0,((Number)old.get("studiedSeconds")).doubleValue(),0.001);
+      assertEquals(0,((Number)old.get("completedUnits")).intValue());
+      var added=rows.stream().filter(r->((Number)r.get("trainingId")).longValue()==current).findFirst().orElseThrow();
+      assertEquals(nextDepartment,((Number)added.get("departmentId")).longValue());
+    }
+    assertEquals(entry.get("token"),learning.learning(-oldCourse,"测试学员",phone).get("token"));
+    assertNotNull(learning.learning(-current,"测试学员",phone).get("token"));
+  }
+
+  @Test void automaticAssignmentChecksBeijingDeadlineAgainUnderLockIncludingExactBoundary() throws Exception {
+    long course=createTraining(null,false);
+    try(var sql=sqlSessions.openSession(true); var statement=sql.getConnection().createStatement()) {
+      var repository=sql.getMapper(RequiredTrainingAssignmentRepository.class);
+      try {
+        // Freeze the database clock, then deliberately use UTC as the session timezone.
+        statement.execute("SET timestamp=1795510800");
+        statement.execute("SET time_zone='+00:00'");
+        statement.executeUpdate("UPDATE training SET end_at=DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 8 HOUR) WHERE id="+course);
+        assertTrue(repository.findMatchingTrainings(owner,department).isEmpty());
+        assertTrue(repository.lockMatchingTraining(course,owner,department).isEmpty());
+        statement.executeUpdate("UPDATE training SET end_at=DATE_ADD(DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 8 HOUR),INTERVAL 1 SECOND) WHERE id="+course);
+        assertEquals(1,repository.findMatchingTrainings(owner,department).size());
+        assertEquals(1,repository.lockMatchingTraining(course,owner,department).size());
+        // A candidate can expire after the initial scan; the locking lookup must exclude it.
+        statement.executeUpdate("UPDATE training SET end_at=DATE_SUB(DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 8 HOUR),INTERVAL 1 SECOND) WHERE id="+course);
+        assertTrue(repository.lockMatchingTraining(course,owner,department).isEmpty());
+        statement.executeUpdate("UPDATE training SET end_at=NULL WHERE id="+course);
+        assertEquals(1,repository.findMatchingTrainings(owner,department).size());
+        assertEquals(1,repository.lockMatchingTraining(course,owner,department).size());
+      } finally {
+        statement.execute("SET timestamp=0");
+        statement.execute("SET time_zone='+08:00'");
+      }
+    }
+  }
+
   @Test void departmentRestorationAssignsOnlyItsActiveEmployeesAndPreservesProgress() throws Exception {
     long training = createTraining(null, false);
     long material = material(training);
