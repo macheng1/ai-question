@@ -1,7 +1,7 @@
 "use client";
 
 import { VideoPlayer } from "@douyinfe/semi-ui";
-import { useEffect, useRef, useState, type ComponentProps } from "react";
+import { useEffect, useRef, type ComponentProps } from "react";
 
 type Snapshot = {
   event: string; elapsedMs: number; position: number; duration: number | null;
@@ -12,7 +12,6 @@ const events = ["loadstart", "loadedmetadata", "loadeddata", "canplay", "playing
 /** Administrator preview diagnostics; never log signed URLs or playback tickets. */
 export function DiagnosticVideoPlayer(props: ComponentProps<typeof VideoPlayer>) {
   const root = useRef<HTMLDivElement>(null);
-  const [records, setRecords] = useState<Snapshot[]>([]);
   useEffect(() => {
     const container = root.current;
     if (!container) return;
@@ -20,7 +19,6 @@ export function DiagnosticVideoPlayer(props: ComponentProps<typeof VideoPlayer>)
     const session = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
     let cleanup = () => {};
     let attached: HTMLVideoElement | null = null;
-    setRecords([]);
     const attach = () => {
       const video = container.querySelector("video");
       if (!video || video === attached) return;
@@ -52,7 +50,6 @@ export function DiagnosticVideoPlayer(props: ComponentProps<typeof VideoPlayer>)
           readyState: video.readyState, networkState: video.networkState, buffered,
           errorCode: video.error?.code ?? null,
         };
-        setRecords(rows => [...rows.slice(-29), snapshot]);
         const detail = { session, ...snapshot, online: navigator.onLine, width: video.videoWidth, height: video.videoHeight };
         if (["error", "stalled"].includes(event)) console.warn("[video-preview]", detail);
         else console.info("[video-preview]", detail);
@@ -86,15 +83,7 @@ export function DiagnosticVideoPlayer(props: ComponentProps<typeof VideoPlayer>)
     observer.observe(container, { childList: true, subtree: true });
     return () => { observer.disconnect(); resourceObserver?.disconnect(); cleanup(); };
   }, [props.src]);
-  const latest = records.at(-1);
   return <div ref={root}>
-    <details className="mb-3 rounded border border-slate-200 p-2 text-xs" open>
-      <summary>播放诊断 · {latest?.event ?? "等待播放器"} · 缓冲：{latest?.buffered ?? "无"}</summary>
-      <p className="my-2">每 5 秒采样，保留最近 30 条；控制台筛选 [video-preview]。错误码：1 取消、2 网络、3 解码、4 格式或来源不支持。</p>
-      <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-all">{records.map(row =>
-        `+${row.elapsedMs}ms ${row.event} 位置=${row.position}/${row.duration ?? "?"}秒 缓冲=${row.buffered} ready=${row.readyState} network=${row.networkState} 可播=${row.bufferedAhead}秒 等待=${row.stalledMs}ms error=${row.errorCode ?? "无"}`
-      ).join("\n")}</pre>
-    </details>
     <VideoPlayer {...props} />
   </div>;
 }
