@@ -532,6 +532,105 @@ class MyBatisMigrationIntegrationTest {
     assertTrue(assessmentRoster.roster(exam).stream().allMatch(row -> Boolean.TRUE.equals(row.get("submitted"))));
   }
 
+  @Test void dashboardLearnerFilterScopesCountsRowsOptionsAndExports() throws Exception {
+    long first = createTraining(null, false);
+    long otherDepartment = insert("INSERT INTO organization_department(created_by,name) VALUES(?,'Other department')", owner);
+    long other = insert("INSERT INTO organization_employee(created_by,department_id,name,phone) VALUES(?,?,'测试学员',?)",
+        owner, otherDepartment, "137" + String.format("%08d", SEQUENCE.incrementAndGet()));
+    var command = trainingCommand(null, false);
+    command.put("audience", Map.of("type", "USERS", "ids", List.of(other)));
+    long second = request(post("/management/trainings").header("Authorization", authorization), command).path("id").asLong();
+    material(first);
+    material(second);
+    learning.learning(-first, "测试学员", phone);
+    learning.learning(-second, "测试学员", jdbc.queryForObject("SELECT phone FROM organization_employee WHERE id=?", String.class, other));
+    jdbc.update("UPDATE training SET end_at=DATE_SUB(NOW(),INTERVAL 1 DAY) WHERE id IN (?,?)", first, second);
+    // A transfer changes the current department, not the historical assignment.
+    jdbc.update("UPDATE organization_employee SET department_id=? WHERE id=?", otherDepartment, employee);
+    for (String tab : List.of("trainings", "learners", "learnerHours", "incomplete", "logs")) {
+      var result = mvc.perform(get("/management/dashboard").header("Authorization", authorization)
+          .param("employeeId", Long.toString(employee)).param("tab", tab)).andExpect(status().isOk()).andReturn();
+      var data = json.readTree(result.getResponse().getContentAsString()).path("data");
+      assertEquals(1, data.path("overview").path("trainingCount").asInt());
+      assertEquals(1, data.path("overview").path("assigned").asInt());
+      assertEquals(1, data.path("overview").path("overdue").asInt());
+      assertEquals(department, data.path("departments").get(0).path("id").asLong());
+    }
+    var mismatch = mvc.perform(get("/management/dashboard").header("Authorization", authorization)
+        .param("employeeId", Long.toString(employee)).param("departmentId", Long.toString(otherDepartment)))
+        .andExpect(status().isOk()).andReturn();
+    assertEquals(0, json.readTree(mismatch.getResponse().getContentAsString()).path("data").path("overview").path("trainingCount").asInt());
+    var empty = mvc.perform(get("/management/dashboard").header("Authorization", authorization).param("employeeId", "999999999"))
+        .andExpect(status().isOk()).andReturn();
+    assertEquals(0, json.readTree(empty.getResponse().getContentAsString()).path("data").path("overview").path("assigned").asInt());
+    var options = mvc.perform(get("/management/dashboard/options").header("Authorization", authorization)).andExpect(status().isOk()).andReturn();
+    var learners = json.readTree(options.getResponse().getContentAsString()).path("data").path("learners");
+    assertEquals(2, learners.size());
+    assertEquals("Other department", learners.get(0).path("departmentName").asText());
+    var keys = mvc.perform(get("/management/dashboard/overdue/keys").header("Authorization", authorization).param("employeeId", Long.toString(employee)))
+        .andExpect(status().isOk()).andReturn();
+    assertEquals(List.of(first + "-" + employee), json.convertValue(json.readTree(keys.getResponse().getContentAsString()).path("data"), List.class));
+    var exported = mvc.perform(get("/management/dashboard/incomplete/export").header("Authorization", authorization).param("employeeId", Long.toString(employee)))
+        .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray();
+    try (var workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook(new java.io.ByteArrayInputStream(exported))) {
+      assertEquals(1, workbook.getSheetAt(0).getLastRowNum());
+    }
+    var reportBytes = mvc.perform(get("/management/dashboard/report/export").header("Authorization", authorization)
+        .param("employeeId", Long.toString(employee))).andExpect(status().isOk()).andReturn().getResponse();
+    assertEquals("application/pdf",reportBytes.getContentType());
+    assertEquals("private, no-store",reportBytes.getHeader("Cache-Control"));
+    try(var pdf=org.apache.pdfbox.Loader.loadPDF(reportBytes.getContentAsByteArray())) {
+      String text=new org.apache.pdfbox.text.PDFTextStripper().getText(pdf);
+      assertTrue(text.contains("个人培训报告"));
+      assertTrue(text.contains("当前部门：Other department"));
+      assertTrue(text.contains("100.0%"));
+      assertTrue(text.contains("共 1 场培训"));
+    }
+    // Selected records must be checked against the chosen learner; do not send to another learner.
+    mvc.perform(post("/management/dashboard/overdue/notify").header("Authorization",authorization)
+        .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of("employeeId",employee,"records",List.of(second+"-"+other)))))
+        .andExpect(status().isBadRequest());
+    verifyNoInteractions(mailer);
+    mvc.perform(get("/management/dashboard").header("Authorization",authorization).param("employeeId","-1"))
+        .andExpect(status().isBadRequest());
+    mvc.perform(get("/management/dashboard/report/export").header("Authorization",authorization).param("employeeId","999999999"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test void reportIncludesAllPagesAndEnforcesOwnerAndDateScope() throws Exception {
+    for(int i=1;i<=12;i++) {
+      var command=trainingCommand(null,false);
+      command.put("name","Report course "+i);
+      request(post("/management/trainings").header("Authorization",authorization),command);
+    }
+    var response=mvc.perform(get("/management/dashboard/report/export").header("Authorization",authorization)
+        .param("page","2").param("pageSize","10").param("status","OVERDUE"))
+        .andExpect(status().isOk()).andReturn().getResponse();
+    try(var pdf=org.apache.pdfbox.Loader.loadPDF(response.getContentAsByteArray())) {
+      String text=new org.apache.pdfbox.text.PDFTextStripper().getText(pdf);
+      assertTrue(text.contains("共 12 场培训"));
+      for(int i=1;i<=12;i++) assertTrue(text.contains("Report course "+i));
+    }
+    java.nio.file.Files.createDirectories(java.nio.file.Path.of("target/report-preview"));
+    java.nio.file.Files.write(java.nio.file.Path.of("target/report-preview/integration-enterprise.pdf"),response.getContentAsByteArray());
+    var empty=mvc.perform(get("/management/dashboard/report/export").header("Authorization",authorization)
+        .param("start","2099-01-01").param("end","2099-01-02")).andExpect(status().isOk()).andReturn().getResponse();
+    try(var pdf=org.apache.pdfbox.Loader.loadPDF(empty.getContentAsByteArray())) {
+      assertTrue(new org.apache.pdfbox.text.PDFTextStripper().getText(pdf).contains("共 0 场培训"));
+    }
+    mvc.perform(get("/management/dashboard/report/export").header("Authorization",authorization)
+        .param("start","2026-12-01").param("end","2026-01-01")).andExpect(status().isBadRequest());
+    mvc.perform(get("/management/dashboard/report/export")).andExpect(status().isUnauthorized());
+    long otherOwner=insert("INSERT INTO app_user(name,phone,password_hash,unit_name,role_code,created_at,updated_at) VALUES(?,?,'unused','Other','ADMIN',NOW(),NOW())",
+        "other-"+UUID.randomUUID(), "138"+String.format("%08d",SEQUENCE.incrementAndGet()));
+    String otherAuth="Bearer "+tokens.issue(new AccountIdentity(otherOwner,AccountType.ADMIN,otherOwner)).accessToken();
+    mvc.perform(get("/management/dashboard/report/export").header("Authorization",otherAuth).param("employeeId",Long.toString(employee)))
+        .andExpect(status().isBadRequest());
+    var isolated=mvc.perform(get("/management/dashboard").header("Authorization",otherAuth).param("employeeId",Long.toString(employee)))
+        .andExpect(status().isOk()).andReturn().getResponse();
+    assertEquals(0,json.readTree(isolated.getContentAsString()).path("data").path("overview").path("assigned").asInt());
+  }
+
   @Test void dashboardDynamicFiltersAndEmptyResultsKeepMapKeys() throws Exception {
     long training = createTraining(null, false);
     var response = mvc.perform(get("/management/dashboard").header("Authorization", authorization)

@@ -82,8 +82,8 @@ export function DashboardDetails({
   const [selected, setSelected] = useState<string[]>([]);
   const [selecting, setSelecting] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
-  const { start, end, trainingId, departmentId, category } = query;
-  const filters = { start, end, trainingId, departmentId, category };
+  const { start, end, trainingId, departmentId, employeeId, category } = query;
+  const filters = { start, end, trainingId, departmentId, employeeId, category };
   const [notifyFailures, setNotifyFailures] = useState<{ employeeId: number; name: string; reason: string }[]>([]);
   const [notifying, setNotifying] = useState(false);
   async function notifyLearners() {

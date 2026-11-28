@@ -64,7 +64,7 @@ public final class DashboardLogExporter {
             source.get("studiedHours"), label(source.get("examStatus")),
             overdue.isEmpty() ? "—" : overdue, time(source.get("startedAt")), time(source.get("completedAt")),
             source.getOrDefault("score", "—"), source.get("attemptCount"), examDuration(source.get("durationSeconds"))};
-        values[6] = duration(number(source.get("studiedHours"))) + (missing ? " 缺失" : "");
+        values[6] = DurationText.hours(number(source.get("studiedHours"))) + (missing ? " 缺失" : "");
         var row = sheet.createRow(index++);
         row.createCell(headers.length).setCellValue(Math.floor(Math.max(0, number(source.get("studiedHours"))) * 3600 + 1e-7));
         for (int i = 0; i < values.length; i++) {
@@ -93,17 +93,9 @@ public final class DashboardLogExporter {
     return value instanceof Number n ? n.doubleValue() : 0;
   }
 
-  private static String duration(double hours) {
-    if (!Double.isFinite(hours) || hours < 0) return "—";
-    long seconds = (long) Math.floor(hours * 3600 + 1e-7);
-    if (seconds == 0) return hours > 0 ? "不足1秒" : "0秒";
-    return (seconds >= 3600 ? seconds / 3600 + "小时" : "")
-        + (seconds / 60 % 60 > 0 ? seconds / 60 % 60 + "分" : "")
-        + (seconds % 60 > 0 ? seconds % 60 + "秒" : "");
-  }
 
   private static String examDuration(Object seconds) {
-    return seconds instanceof Number n ? duration(n.doubleValue() / 3600.0) : "—";
+    return seconds instanceof Number n ? DurationText.hours(n.doubleValue() / 3600.0) : "—";
   }
 
   private static String time(Object value) {

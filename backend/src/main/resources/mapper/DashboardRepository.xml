@@ -6,7 +6,12 @@
     <if test="filters.containsKey('end')">AND COALESCE(t.start_at,t.created_at)&lt;#{filters.end}</if>
     <if test="filters.containsKey('trainingId')">AND t.id=#{filters.trainingId}</if>
     <if test="filters.containsKey('category')">AND t.category=#{filters.category}</if>
-    <if test="filters.containsKey('departmentId')">AND EXISTS(SELECT 1 FROM training_audience scope WHERE scope.training_id=t.id AND scope.department_id=#{filters.departmentId})</if>
+    <if test="filters.containsKey('departmentId') or filters.containsKey('employeeId')">
+      AND EXISTS(SELECT 1 FROM training_audience scope WHERE scope.training_id=t.id
+        <if test="filters.containsKey('departmentId')">AND scope.department_id=#{filters.departmentId}</if>
+        <if test="filters.containsKey('employeeId')">AND scope.employee_id=#{filters.employeeId}</if>
+      )
+    </if>
 </sql>
   <select id="trainings" resultType="java.util.LinkedHashMap">
     SELECT t.id,t.name,t.assessment_id assessmentId FROM training t
@@ -18,6 +23,11 @@
   <select id="departmentOptions" resultType="java.util.LinkedHashMap">
     SELECT DISTINCT a.department_id id,a.department_name name FROM training_audience a
     JOIN training t ON t.id=a.training_id WHERE t.created_by=#{owner} ORDER BY a.department_name
+  </select>
+  <select id="learnerOptions" resultType="java.util.LinkedHashMap">
+    SELECT e.id,e.name,e.phone,d.name departmentName FROM organization_employee e
+    LEFT JOIN organization_department d ON d.id=e.department_id AND d.created_by=e.created_by
+    WHERE e.created_by=#{owner} ORDER BY e.name,e.id
   </select>
   <select id="rows" resultType="java.util.LinkedHashMap">
 SELECT t.id trainingId,t.name trainingName,t.assessment_id assessmentId,t.end_at trainingEnd,
@@ -42,6 +52,7 @@ LEFT JOIN candidate_learning_session s ON s.id=(SELECT MAX(x.id) FROM candidate_
 LEFT JOIN assessment_attempt aa ON aa.id=(SELECT MAX(x.id) FROM assessment_attempt x JOIN assessment_participant p ON p.id=x.participant_id WHERE p.task_id=a.id AND p.employee_id=ta.employee_id)
     <include refid="conditions"/>
     <if test="filters.containsKey('departmentId')">AND ta.department_id=#{filters.departmentId}</if>
+    <if test="filters.containsKey('employeeId')">AND ta.employee_id=#{filters.employeeId}</if>
     ORDER BY t.id DESC,ta.employee_id
   </select>
   <select id="learnerEmails" resultType="java.util.LinkedHashMap">

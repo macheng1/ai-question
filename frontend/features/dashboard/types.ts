@@ -5,6 +5,7 @@ export type DashboardStatus =
 export type DashboardFilters = {
   start?: string;
   end?: string;
+  employeeId?: number;
   trainingId?: number;
   departmentId?: number;
   category?: string;
@@ -16,6 +17,7 @@ export type DashboardQuery = DashboardFilters & {
   pageSize: number;
 };
 export type DashboardOptions = {
+  learners: { id: number; name: string; phone?: string; departmentName?: string }[];
   trainings: { id: number; name: string }[];
   departments: { id: number; name: string }[];
 };

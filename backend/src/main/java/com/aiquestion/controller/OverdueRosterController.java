@@ -26,7 +26,12 @@ public class OverdueRosterController {
   }
 
   public record Selection(LocalDate start, LocalDate end, Long trainingId, Long departmentId, String category,
-                          List<String> records, List<String> recipients) {}
+                          List<String> records, List<String> recipients, Long employeeId) {
+    public Selection(LocalDate start, LocalDate end, Long trainingId, Long departmentId, String category,
+        List<String> records, List<String> recipients) {
+      this(start, end, trainingId, departmentId, category, records, recipients, null);
+    }
+  }
 
   private static String key(Map<String, Object> row) {
     return row.get("trainingId") + "-" + row.get("employeeId");
@@ -35,8 +40,9 @@ public class OverdueRosterController {
   @GetMapping("/keys")
   public ApiResponse<List<String>> keys(@RequestParam(required = false) LocalDate start,
       @RequestParam(required = false) LocalDate end, @RequestParam(required = false) Long trainingId,
-      @RequestParam(required = false) Long departmentId, @RequestParam(required = false) String category) {
-    return ApiResponse.ok(dashboard.overdueRows(ManagementAccess.userId(), start, end, trainingId, departmentId, category)
+      @RequestParam(required = false) Long departmentId, @RequestParam(required = false) String category,
+      @RequestParam(required = false) Long employeeId) {
+    return ApiResponse.ok(dashboard.overdueRows(ManagementAccess.userId(), start, end, trainingId, departmentId, category, employeeId)
         .stream().map(OverdueRosterController::key).toList());
   }
 
@@ -80,7 +86,7 @@ public class OverdueRosterController {
       throw new BusinessException(ErrorCode.BAD_REQUEST, "请选择逾期记录");
     var selected = new HashSet<>(selection.records());
     var rows = dashboard.overdueRows(owner, selection.start(), selection.end(), selection.trainingId(),
-        selection.departmentId(), selection.category()).stream().filter(row -> selected.contains(key(row))).toList();
+        selection.departmentId(), selection.category(), selection.employeeId()).stream().filter(row -> selected.contains(key(row))).toList();
     if (rows.size() != selected.size())
       throw new BusinessException(ErrorCode.BAD_REQUEST, "所选名单已变化，请刷新后重新选择");
     return rows;

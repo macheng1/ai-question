@@ -35,14 +35,32 @@ public class DashboardController {
       @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate end,
       @RequestParam(required = false) Long trainingId,
       @RequestParam(required = false) Long departmentId,
+      @RequestParam(required = false) Long employeeId,
       @RequestParam(required = false) String category,
       @RequestParam(defaultValue = "ALL") String status) throws IOException {
-    var rows = service.exportLogs(ManagementAccess.userId(), start, end, trainingId, departmentId, category, status);
+    var rows = service.exportLogs(ManagementAccess.userId(), start, end, trainingId, departmentId, category, status, employeeId);
     return ResponseEntity.ok()
         .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
             .filename("学习日志.xlsx", StandardCharsets.UTF_8).build().toString())
         .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
         .body(DashboardLogExporter.write(rows));
+  }
+
+  @GetMapping("/report/export")
+  public ResponseEntity<byte[]> exportReport(
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate start,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate end,
+      @RequestParam(required = false) Long trainingId,
+      @RequestParam(required = false) Long departmentId,
+      @RequestParam(required = false) String category,
+      @RequestParam(required = false) Long employeeId) throws IOException {
+    var report = service.report(ManagementAccess.userId(), start, end, trainingId, departmentId, category, employeeId);
+    return ResponseEntity.ok()
+        .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+            .filename(employeeId == null ? "企业培训报告.pdf" : "个人培训报告.pdf", StandardCharsets.UTF_8).build().toString())
+        .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
+        .contentType(MediaType.APPLICATION_PDF)
+        .body(com.aiquestion.service.DashboardPdfExporter.write(report));
   }
 
   @GetMapping("/incomplete/export")
@@ -51,9 +69,10 @@ public class DashboardController {
       @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate end,
       @RequestParam(required = false) Long trainingId,
       @RequestParam(required = false) Long departmentId,
+      @RequestParam(required = false) Long employeeId,
       @RequestParam(required = false) String category,
       @RequestParam(defaultValue = "ALL") String status) throws IOException {
-    var rows = service.exportRoster(ManagementAccess.userId(), start, end, trainingId, departmentId, category, status);
+    var rows = service.exportRoster(ManagementAccess.userId(), start, end, trainingId, departmentId, category, status, employeeId);
     return ResponseEntity.ok()
         .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
             .filename("未完成人员清单.xlsx", StandardCharsets.UTF_8).build().toString())
@@ -68,6 +87,7 @@ public class DashboardController {
       @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate end,
       @RequestParam(required = false) Long trainingId,
       @RequestParam(required = false) Long departmentId,
+      @RequestParam(required = false) Long employeeId,
       @RequestParam(required = false) String category,
       @RequestParam(defaultValue = "trainings") String tab,
       @RequestParam(defaultValue = "ALL") String status,
@@ -84,6 +104,6 @@ public class DashboardController {
             tab,
             status,
             page,
-            pageSize));
+            pageSize, employeeId));
   }
 }

@@ -1,7 +1,7 @@
 "use client";
 import { StatHint } from "./StatHint";
 import { formatStudyDuration } from "@/lib/duration";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Banner,
   Button,
@@ -14,6 +14,7 @@ import {
   Tabs,
   TabPane,
   Typography,
+  Toast,
 } from "@douyinfe/semi-ui";
 import {
   IconCalendar,
@@ -24,7 +25,7 @@ import {
   IconAlertTriangle,
   IconRefresh,
 } from "@douyinfe/semi-icons";
-import { getDashboard, getDashboardOptions } from "../api";
+import { getDashboard, getDashboardOptions, exportDashboardReport } from "../api";
 import type {
   DashboardData,
   DashboardFilters,
@@ -50,6 +51,7 @@ function dateText(date: Date) {
 }
 export function Dashboard() {
   const [options, setOptions] = useState<DashboardOptions>({
+    learners: [],
     trainings: [],
     departments: [],
   });
@@ -64,6 +66,22 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [refresh, setRefresh] = useState(0);
   const [detailQuery, setDetailQuery] = useState<DashboardQuery>();
+  const [exporting, setExporting] = useState(false);
+  const exportPending = useRef(false);
+  async function downloadReport() {
+    if (exportPending.current) return;
+    exportPending.current = true;
+    setExporting(true);
+    try {
+      await exportDashboardReport(query);
+      Toast.success("PDF 报告已下载");
+    } catch (error) {
+      Toast.error(error instanceof Error ? error.message : "报告下载失败，请重试");
+    } finally {
+      exportPending.current = false;
+      setExporting(false);
+    }
+  }
   useEffect(() => {
     let active = true;
     getDashboardOptions()
@@ -85,7 +103,7 @@ export function Dashboard() {
     let active = true;
     setLoading(true);
     setError("");
-    const hoursQuery = { ...initialQuery, page: query.page, pageSize: query.pageSize };
+    const hoursQuery = { ...query, tab: "trainings" as const };
     Promise.all([
       getDashboard(view === "trainings" ? hoursQuery : query),
       view === "trainings" ? getDashboard({ ...hoursQuery, tab: "learnerHours", page: hoursPage }) : undefined,
@@ -129,7 +147,7 @@ export function Dashboard() {
     }));
   };
   const training = (id: number) => {
-    setDetailQuery({ ...(view === "trainings" ? initialQuery : query), trainingId: id, tab: "learners", status: "ALL", page: 1 });
+    setDetailQuery({ ...query, trainingId: id, tab: "learners", status: "ALL", page: 1 });
   };
   const status = (value: DashboardStatus) =>
     change({
@@ -138,6 +156,8 @@ export function Dashboard() {
       page: 1,
     });
   const overview = data?.overview;
+  const learner = options.learners?.find((item) => item.id === query.employeeId);
+  const personal = query.employeeId != null;
   const metrics = overview
     ? [
         {
@@ -188,11 +208,11 @@ export function Dashboard() {
           icon: <IconCheckList />,
         },
         {
-          label: "逾期未完成",
-          tip: "学习逾期未完成或考试逾期未通过，每人每场只计一次。待批阅不算考试逾期。",
-          value: String(overview.overdue),
-          unit: "人次",
-          detail: "培训 / 考试逾期去重",
+          label: personal ? "逾期未完成率" : "逾期未完成",
+          tip: "学习逾期未完成或考试逾期未通过，每人每场只计一次。待批阅不算考试逾期。逾期未完成率 = 逾期未完成课程数 ÷ 应完成课程数。",
+          value: personal ? (overview.assigned ? `${Math.round(overview.overdue / overview.assigned * 1000) / 10}%` : "—") : String(overview.overdue),
+          unit: personal ? "" : "人次",
+          detail: personal ? `逾期未完成 ${overview.overdue} / 应完成 ${overview.assigned}` : "培训 / 考试逾期去重",
           icon: <IconAlertTriangle />,
           action: () => status("OVERDUE"),
           warning: true,
@@ -209,6 +229,9 @@ export function Dashboard() {
           <p className="mt-2 text-sm text-slate-500">企业培训与考核数据总览</p>
         </div>
         <Space wrap>
+          <Button theme="solid" loading={exporting} disabled={loading || !data || !!error}
+            title="按上方已查询条件导出概览报告，包含全部状态和全部页"
+            onClick={downloadReport}>下载 PDF 报告</Button>
           <Typography.Text type="tertiary" size="small">
             {data
               ? `更新于 ${new Date(data.updatedAt).toLocaleTimeString("zh-CN", { hour12: false })}`
@@ -230,8 +253,8 @@ export function Dashboard() {
           ))}
         </Tabs>
       </div>
-      {view !== "trainings" && <Card>
-        <div className="grid items-end gap-4 sm:grid-cols-2 xl:grid-cols-[1.5fr_1fr_1fr_1fr_auto]">
+      <Card>
+        <div className="grid items-end gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-[1.4fr_1fr_1fr_1fr_1fr_auto]">
           <div className="min-w-0">
             <div className="mb-2 text-sm">培训时间</div>
             <DatePicker
@@ -325,6 +348,18 @@ export function Dashboard() {
               }
             />
           </div>
+          <div className="min-w-0">
+            <div className="mb-2 text-sm">学员</div>
+            <Select aria-label="学员" style={{ width: "100%" }} filter showClear
+              placeholder="输入姓名搜索学员" value={draft.employeeId}
+              optionList={(options.learners ?? []).map((item) => ({
+                value: item.id,
+                label: [item.name, item.departmentName || "未分配部门", item.phone].filter(Boolean).join(" · "),
+              }))}
+              onChange={(value) => setDraft((previous) => ({ ...previous,
+                employeeId: typeof value === "number" ? value : undefined,
+              }))} />
+          </div>
           <Space>
             <Button
               theme="solid"
@@ -359,8 +394,17 @@ export function Dashboard() {
             </Button>
           </Space>
         </div>
+      </Card>
+      {learner && <Card>
+        <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
+          <strong>{learner.name} · 个人培训概览</strong>
+          <span>当前部门：{learner.departmentName || "未分配部门"}</span>
+          {learner.phone && <span>手机号：{learner.phone}</span>}
+          {!loading && !error && overview && <span>学习中 {overview.inProgress} 场 · 未开始 {overview.notStarted} 场 · 已完成 {overview.completed} 场</span>}
+        </div>
+        <p className="mt-2 text-sm text-slate-500">下方数据按当前筛选条件统计；部门筛选和历史培训统计采用分配时的部门。</p>
       </Card>}
-      {view !== "trainings" && optionsError && (
+      {optionsError && (
         <Banner
           type="warning"
           description={`筛选选项加载失败：${optionsError}，请点击刷新重试。`}

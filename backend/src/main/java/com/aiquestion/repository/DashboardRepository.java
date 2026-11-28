@@ -11,7 +11,8 @@ public interface DashboardRepository {
   List<Map<String,Object>> trainingOptions(@Param("owner") long owner);
   List<Map<String,Object>> departmentOptions(@Param("owner") long owner);
   List<Map<String,Object>> learnerEmails(@Param("owner") long owner, @Param("ids") java.util.Set<Long> ids);
+  List<Map<String,Object>> learnerOptions(@Param("owner") long owner);
   default Map<String,Object> options(long owner) {
-    return Map.of("trainings", trainingOptions(owner), "departments", departmentOptions(owner));
+    return Map.of("trainings", trainingOptions(owner), "departments", departmentOptions(owner), "learners", learnerOptions(owner));
   }
 }

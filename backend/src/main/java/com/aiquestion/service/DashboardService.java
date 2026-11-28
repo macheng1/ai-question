@@ -45,6 +45,35 @@ public class DashboardService {
     return repository.options(owner);
   }
 
+  public record Report(Result data, List<String> scope, boolean personal) {}
+
+  @Transactional(readOnly = true)
+  public Report report(long owner, LocalDate start, LocalDate end, Long trainingId,
+      Long departmentId, String category, Long employeeId) {
+    var scope = new ArrayList<String>();
+    scope.add("培训时间：" + (start == null ? "不限开始日期" : start) + " 至 " + (end == null ? "不限结束日期" : end));
+    scope.add("培训：" + optionName(repository.trainingOptions(owner), trainingId, "全部培训"));
+    scope.add("分配时部门：" + optionName(repository.departmentOptions(owner), departmentId, "全部部门"));
+    var categories = Map.of("UNCATEGORIZED", "未分类", "ONBOARDING", "入职培训", "SAFETY", "安全培训", "POLICY", "制度培训");
+    scope.add("课程分类：" + (category == null || category.isBlank() ? "全部分类" : categories.getOrDefault(category, category)));
+    if (employeeId != null) {
+      var learners = repository.learnerOptions(owner);
+      String name = optionName(learners, employeeId, "全部学员");
+      var learner = learners.stream().filter(r -> ((Number) r.get("id")).longValue() == employeeId).findFirst().orElseThrow();
+      scope.add("学员：" + name + " · 当前部门：" + Objects.toString(learner.get("departmentName"), "未分配部门"));
+      scope.add("手机号：" + Objects.toString(learner.get("phone"), "未填写"));
+    } else scope.add("学员：全部学员");
+    var data = loadDetails(owner, start, end, trainingId, departmentId, category, "trainings", "ALL", 1, 10, false, employeeId);
+    return new Report(data, List.copyOf(scope), employeeId != null);
+  }
+
+  private static String optionName(List<Map<String,Object>> options, Long id, String fallback) {
+    if (id == null) return fallback;
+    return options.stream().filter(row -> ((Number) row.get("id")).longValue() == id)
+        .map(row -> Objects.toString(row.get("name"), "未命名"))
+        .findFirst().orElseThrow(() -> new BusinessException(ErrorCode.BAD_REQUEST, "筛选项已失效，请刷新后重新选择"));
+  }
+
   @Transactional(readOnly = true)
   public Result load(
       long owner,
@@ -57,25 +86,46 @@ public class DashboardService {
       String status,
       int page,
       int pageSize) {
-    return loadDetails(owner, start, end, trainingId, departmentId, category, tab, status, page, pageSize, true);
+    return loadDetails(owner, start, end, trainingId, departmentId, category, tab, status, page, pageSize, true, null);
   }
 
   @Transactional(readOnly = true)
   public List<Map<String, Object>> exportLogs(long owner, LocalDate start, LocalDate end,
       Long trainingId, Long departmentId, String category, String status) {
-    return loadDetails(owner, start, end, trainingId, departmentId, category, "logs", status, 1, 10, false).rows();
+    return loadDetails(owner, start, end, trainingId, departmentId, category, "logs", status, 1, 10, false, null).rows();
   }
 
   @Transactional(readOnly = true)
   public List<Map<String, Object>> exportRoster(long owner, LocalDate start, LocalDate end,
       Long trainingId, Long departmentId, String category, String status) {
-    return loadDetails(owner, start, end, trainingId, departmentId, category, "incomplete", status, 1, 10, false).rows();
+    return loadDetails(owner, start, end, trainingId, departmentId, category, "incomplete", status, 1, 10, false, null).rows();
   }
 
   @Transactional(readOnly = true)
   public List<Map<String, Object>> overdueRows(long owner, LocalDate start, LocalDate end,
       Long trainingId, Long departmentId, String category) {
-    return loadDetails(owner, start, end, trainingId, departmentId, category, "learners", "OVERDUE", 1, 10, false).rows();
+    return loadDetails(owner, start, end, trainingId, departmentId, category, "learners", "OVERDUE", 1, 10, false, null).rows();
+  }
+
+  @Transactional(readOnly = true)
+  public Result load(long owner, LocalDate start, LocalDate end, Long trainingId, Long departmentId, String category, String tab, String status, int page, int pageSize, Long employeeId) {
+    return loadDetails(owner, start, end, trainingId, departmentId, category, tab, status, page, pageSize, true, employeeId);
+  }
+
+  @Transactional(readOnly = true)
+  public List<Map<String, Object>> exportLogs(long owner, LocalDate start, LocalDate end, Long trainingId, Long departmentId, String category, String status, Long employeeId) {
+    return loadDetails(owner, start, end, trainingId, departmentId, category, "logs", status, 1, 10, false, employeeId).rows();
+  }
+
+  @Transactional(readOnly = true)
+  public List<Map<String, Object>> exportRoster(long owner, LocalDate start, LocalDate end, Long trainingId, Long departmentId, String category, String status, Long employeeId) {
+    return loadDetails(owner, start, end, trainingId, departmentId, category, "incomplete", status, 1, 10, false, employeeId).rows();
+  }
+
+  @Transactional(readOnly = true)
+  public List<Map<String, Object>> overdueRows(long owner, LocalDate start, LocalDate end,
+      Long trainingId, Long departmentId, String category, Long employeeId) {
+    return loadDetails(owner, start, end, trainingId, departmentId, category, "learners", "OVERDUE", 1, 10, false, employeeId).rows();
   }
 
   public Map<Long,String> learnerEmails(long owner, Set<Long> ids) {
@@ -88,7 +138,7 @@ public class DashboardService {
 
   private Result loadDetails(long owner, LocalDate start, LocalDate end, Long trainingId,
       Long departmentId, String category, String tab, String status, int page, int pageSize,
-      boolean paginate) {
+      boolean paginate, Long employeeId) {
     if (start != null && end != null && start.isAfter(end)) fail("开始日期不能晚于结束日期");
     if (page < 1 || page > 1000000 || !Set.of(10, 20, 50).contains(pageSize)) fail("分页参数无效");
     if (!Set.of("trainings", "learnerHours", "learners", "incomplete", "exams", "logs").contains(tab))
@@ -97,7 +147,9 @@ public class DashboardService {
       fail("状态无效");
     if ((trainingId != null && trainingId <= 0) || (departmentId != null && departmentId <= 0))
       fail("筛选参数无效");
+    if (employeeId != null && employeeId <= 0) fail("学员筛选参数无效");
     var filters = new HashMap<String, Object>();
+    if (employeeId != null) filters.put("employeeId", employeeId);
     if (start != null) filters.put("start", databaseDay(start));
     if (end != null) filters.put("end", databaseDay(end.plusDays(1)));
     if (trainingId != null) filters.put("trainingId", trainingId);
